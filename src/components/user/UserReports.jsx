@@ -64,6 +64,7 @@ export default function UserReports() {
         .from('evaluations')
         .select(`
         id,
+        evaluator_id,
         relationship_type,
         evaluation_responses (
           id,
@@ -81,6 +82,7 @@ export default function UserReports() {
         )
       `)
         .eq('status', 'completed')
+        .eq("evaluator_id",user?.id)
         .is('relationship_type', null);
 
 
@@ -93,6 +95,7 @@ export default function UserReports() {
         .from('evaluations')
         .select(`
           id,
+          evaluator_id,
           relationship_type,
           evaluation_responses (
             id,
@@ -109,7 +112,8 @@ export default function UserReports() {
             )
           )
         `)
-        .eq('status', 'completed');
+        .eq('status', 'completed')
+        .eq('evaluator_id',user?.id);
       
       if (relationship_type !== "total") {
         query2 = query2.eq("relationship_type", relationship_type);
