@@ -11,6 +11,7 @@ import { supabase } from '@/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+
 import * as Accordion from "@radix-ui/react-accordion";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ import {
   TableRow,
   TableCell,
 } from '@/components/ui/table';
+import { SelectIcon, SelectPortal } from '@radix-ui/react-select';
 
 
 
@@ -50,6 +52,7 @@ export default function UserReports() {
   const [self_table_data,setSelfTableData] =useState([]);
   const [notself_table_data,setNotSelfTableData] =useState([]);
   const [table_data,setTable_Data] = useState([]);
+  const [company,set_copmany_selected] = useState(null);
 
 
 
@@ -517,7 +520,10 @@ export default function UserReports() {
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
+      
+
       <div style={{ width: "1000px", margin: "0 auto" }}>
+        
         <Accordion.Root type="single" collapsible className="w-full  space-y-2">
           {items.map((item, index) => (
             <Accordion.Item key={index} value={`item-${index}`} className="border rounded-md">

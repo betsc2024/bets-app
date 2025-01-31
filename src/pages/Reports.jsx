@@ -10,7 +10,16 @@ import {
 import { supabase } from '@/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-
+import {
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectLabel,
+  SelectItem,
+  SelectSeparator,
+} from '@/components/ui/select';
 import * as Accordion from "@radix-ui/react-accordion";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -39,227 +48,154 @@ export default function Reports() {
   const [notselfscore, setNotSelfScore] = useState(null);
 
   //x and y axes values
+  const [data, setData] = useState([]);
   const [label, setLabel] = useState(null);
   const [selfresults, setSelfResults] = useState(null);
   const [notselfresults, setnotselfresults] = useState(null);
   const [selectedChart, setSelectedChart] = useState("table");
   const [bardata, setBarData] = useState(null);
-  const [score_type,setScore_Type] = useState("self");
-  const [radial_label,setRadial_Label] = useState(null);
-  const [radial_score,setRadial_Score] = useState(null);
-  const [self_table_data,setSelfTableData] =useState([]);
-  const [notself_table_data,setNotSelfTableData] =useState([]);
-  const [table_data,setTable_Data] = useState([]);
+  const [score_type, setScore_Type] = useState("self");
+  const [radial_label, setRadial_Label] = useState(null);
+  const [radial_score, setRadial_Score] = useState(null);
+  const [self_table_data, setSelfTableData] = useState([]);
+  const [notself_table_data, setNotSelfTableData] = useState([]);
+  const [table_data, setTable_Data] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [selectedCompany, setSelectedCompany] = useState(null)
 
 
 
 
-  const fetch_Data = async (relationship_type) => {
+
+
+
+  const fetchData = async (selectedCompany) => {
+    console.log(selectedCompany);
     try {
-      setBarData(null);  // 🔥 Reset chart state before fetching
-      setSelfScore(null);
-      setNotSelfScore(null);
-      setSelectedChart("table");
-      let query1 = supabase
-        .from('evaluations')
-        .select(`
-        id,
-        evaluator_id,
+      setBarData(null);
+      const { data, error } = await supabase
+      .from("evaluations")
+      .select(`
         relationship_type,
-        evaluation_responses (
+        evaluation_assignments ( 
           id,
-          selected_option_id,
-          attribute_statement_options (
-            weight,
-            attribute_statements (
-              id,
-              statement,
-              attributes (
-                id      
-              )
-            )
-          )
+          company_id,
+          companies (
+          id, 
+          name 
+           ) 
+        ),
+        evaluation_responses (
+          attribute_statement_options ( 
+            weight, 
+            attribute_statements ( 
+              attributes ( name ) 
+            ) 
+          ) 
         )
       `)
-        .eq('status', 'completed')
-        .is('relationship_type', null);
+      .eq("status", "completed")
+      .eq("evaluation_assignments.companies.id", selectedCompany?.id);
+
+      if (error) throw error;
+
+      console.log(data);
+      // Transform data to match expected structure
+      const formattedData = data
+        .filter(e => e.evaluation_responses?.[0]?.attribute_statement_options?.attribute_statements?.attributes?.name)
+        .map(e => ({
+          relationship_type: e.relationship_type,
+          company_name: e.evaluation_assignments?.companies?.name || "N/A",
+          attribute_name: e.evaluation_responses[0].attribute_statement_options.attribute_statements.attributes.name,
+          average_weight: e.evaluation_responses.length > 0
+            ? e.evaluation_responses.reduce((sum, res) => sum + (res.attribute_statement_options.weight || 0), 0) / e.evaluation_responses.length
+            : 0,
+          num_evaluations: e.evaluation_responses.length || 1,
+        }));
+
+      console.log(formattedData);
 
 
-
-      const { data: self_Data, error: self_Error } = await query1;
-
-      if (relationship_type != null) {
-
-        let query2 = supabase
-        .from('evaluations')
-        .select(`
-          id,
-          evaluator_id,
-          relationship_type,
-          evaluation_responses (
-            id,
-            selected_option_id,
-            attribute_statement_options (
-              weight,
-              attribute_statements (
-                id,
-                statement,
-                attributes (
-                  id  
-                )
-              )
-            )
-          )
-        `)
-        .eq('status', 'completed')
-      
-      if (relationship_type !== "total") {
-        query2 = query2.eq("relationship_type", relationship_type);
-      }
-
-        const { data: not_self_Data, error: not_self_Error } = await query2;
-
-        if (self_Error && not_self_Error) {
-          console.error(self_Error);
-          console.error(not_self_Error);
-        } else {
-          const result = self_Data.map((evaluation) => {
-            const weightValues = evaluation.evaluation_responses.flatMap(response =>
-              response.attribute_statement_options.weight
-            );
-            // Calculate the average weight for each evaluation
-            const avg_weight = weightValues.length > 0
-              ? weightValues.reduce((acc, weight) => acc + weight, 0) / weightValues.length
-              : 0;
-            const attribute_id = evaluation.evaluation_responses[0]?.attribute_statement_options?.attribute_statements?.attributes.id;
-            return {
-              attribute_id,
-              avg_weight
-            };
-          });
-
-          const result2 = not_self_Data.map((evaluation) => {
-            const weightValues = evaluation.evaluation_responses.flatMap(response =>
-              response.attribute_statement_options.weight
-            );
-            // Calculate the average weight for each evaluation
-            const avg_weight = weightValues.length > 0
-              ? weightValues.reduce((acc, weight) => acc + weight, 0) / weightValues.length
-              : 0;
-            const attribute_id = evaluation.evaluation_responses[0]?.attribute_statement_options?.attribute_statements?.attributes.id;
-            return {
-              attribute_id,
-              avg_weight
-            };
-          });
-
-          console.log(result);
-          console.log(result2);
-          setSelfScore(result);
-          setNotSelfScore(result2);
-        }
-
-      } else {
-        console.log(self_Data);
-        if (self_Error) {
-          console.error(self_Error);
-        } else {
-          const result = self_Data.map((evaluation) => {
-            const weightValues = evaluation.evaluation_responses.flatMap(response =>
-              response.attribute_statement_options.weight
-            );
-            // Calculate the average weight for each evaluation
-            const avg_weight = weightValues.length > 0
-              ? weightValues.reduce((acc, weight) => acc + weight, 0) / weightValues.length
-              : 0;
-            const attribute_id = evaluation.evaluation_responses[0]?.attribute_statement_options?.attribute_statements?.attributes.id;
-            return {
-              attribute_id,
-              avg_weight
-            };
-          });
-          console.log(result);
-          setSelfScore(result);
-        }
-      }
+      setData(formattedData);
     } catch (err) {
-      console.error(err);
-      toast.error(err);
+      setError(err.message);
+    } finally {
+      // setLoading(false);
     }
   };
+
+
+
+  const fetch_companies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("companies")
+        .select('*');
+      if (data) {
+        console.log(data);
+        setCompanies(data);
+      } else {
+        console.log(error);
+      }
+    } catch (error) {
+      console.log(error);
+      toast.error(error);
+    }
+  }
 
   useEffect(() => {
-    if (selfscore) {
-      fetch_attributes("selfscore", selfscore);
-      
-    }
-    if (notselfscore) {
-      fetch_attributes("notselfscore", notselfscore);
-    }
-  }, [selfscore, notselfscore]); 
+    fetch_companies();
+  }, []);
+
+  useEffect(()=>{
+    fetchData(selectedCompany);
+  },[selectedCompany])
+
+  const fetch_spefifc_data = (relationship_type) => {
+    if (!data) return;
+
+    const selfData = data.filter((item) => item.relationship_type === null);
+
+    const notSelfData = data.filter((item) => item.relationship_type === relationship_type);
+
+    const labels = [...new Set(data.map((item) => item.attribute_name))];
+
+    const selfResultsMap = {};
+    const notSelfResultsMap = {};
+
+
+    labels.forEach((label) => {
+
+      const selfItems = selfData.filter((item) => item.attribute_name === label);
+      const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
+
+      selfResultsMap[label] = selfItems.length
+        ? selfItems.reduce((sum, i) => sum + i.average_weight, 0) / selfItems.length
+        : 0;
+
+      notSelfResultsMap[label] = notSelfItems.length
+        ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) / notSelfItems.length
+        : 0;
+    });
+
+    setLabel(labels);
+    setSelfResults(Object.values(selfResultsMap));
+    setnotselfresults(Object.values(notSelfResultsMap));
+
+    setSelfTableData(selfData);
+    setNotSelfTableData(notSelfData);
+    // setTable_Data(data);
+
+
+    console.log(labels);
+    console.log(selfData);
+    console.log(notSelfData);
+    console.log(data);
+  }
 
 
 
-  const fetch_attributes = async (score_type, score) => {
-    try {
-      const { data: attribute_Data, error: attribute_Error } = await supabase
-        .from('attributes')
-        .select('*');
-  
-      if (attribute_Error) {
-        console.log(attribute_Error);
-        toast.error(attribute_Error);
-        return;
-      }
-  
-      let label_temp = [];
-      let res_temp = [];
-      let table_data = [];
-  
-      attribute_Data.forEach((item, index) => {
-        if (item.id) {
-          label_temp.push(item.name);
-          const foundScore = score.find(s => s.attribute_id === item.id);
-          if (foundScore) {
-            res_temp.push(Math.round(foundScore.avg_weight));
-            if(score_type == "selfscore"){
-              table_data.push({
-                id: index,
-                name: item.name,
-                avg_weight: foundScore.avg_weight
-              });
-            }else{
-              table_data.push({
-                id: index,
-                name: item.name,
-                avg_reln_weight: foundScore.avg_weight
-              });
-            }
-          } else {
-            res_temp.push(0); // Default value if no matching score
-          }
-        }
-      });
-  
-      setLabel(label_temp);
 
-      if (score_type === "selfscore") {
-        setSelfResults(res_temp);
-        setScore_Type("self");
-        setSelfTableData(table_data);
-      } else {
-        
-        setnotselfresults(res_temp);
-        setScore_Type("notself");
-        setNotSelfTableData(table_data);
-      }
-   
-
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to fetch attributes");
-    }
-  };
   const fetch_radar = async (relationship_type) => {
     try {
       let query = supabase
@@ -276,21 +212,21 @@ export default function Reports() {
           )
         `)
         .eq('status', 'completed'); // Only filtering by completed status
-  
+
       if (relationship_type && relationship_type !== 'total') {
         query = query.eq('relationship_type', relationship_type);
       } else if (relationship_type === 'total') {
         query = query;
       }
-  
+
       const { data, error } = await query;
-  
+
       if (error) {
         throw new Error('Error fetching data: ' + error.message);
       }
-  
+
       const processedData = {};
-  
+
       data.forEach((evaluation) => {
         evaluation.evaluation_responses.forEach((response) => {
           const option = response.attribute_statement_options;
@@ -304,22 +240,22 @@ export default function Reports() {
           }
         });
       });
-  
+
       const result = Object.entries(processedData).map(([statement, { totalWeight, count }]) => ({
         relationship_type,
         statement,
         average_weight: totalWeight / count,
       }));
-  
+
       // Fetch self data and max data
-      const maxData = new Array(result.length).fill(100); 
-      const selfData = result.map(item => item.average_weight); 
-  
+      const maxData = new Array(result.length).fill(100);
+      const selfData = result.map(item => item.average_weight);
+
       let relationshipData = [];
       if (relationship_type && relationship_type !== 'total') {
-        relationshipData = result.map(item => item.average_weight); 
+        relationshipData = result.map(item => item.average_weight);
       }
-  
+
       // Combine self, relationship, and max data
       const radarData = {
         labels: result.map(item => item.statement),
@@ -356,16 +292,16 @@ export default function Reports() {
           },
         ],
       };
-  
+
       setRadial_Label(result.map(item => item.statement)); // Set the statement labels
       setRadial_Score(radarData); // Set the radar chart data
-  
+
     } catch (err) {
       console.error(err);
       throw new Error("Failed to fetch radar data: " + err.message);
     }
   };
-  
+
   const options = {
     indexAxis: "x", // Ensures vertical bars (horizontal if 'y')
     elements: {
@@ -384,8 +320,9 @@ export default function Reports() {
       },
     },
   };
+
   useEffect(() => {
-    setBarData(null); 
+    setBarData(null);
 
 
     if (label && selfresults) {
@@ -424,31 +361,11 @@ export default function Reports() {
         });
       }
     }
-  }, [selfresults, notselfresults, label, score_type]); 
-  
+  }, [selfresults, notselfresults, label, score_type]);
 
 
-  useEffect(() => {
-  
-    if (self_table_data.length > 0) {
-      // Merge self and not-self scores properly
-      const mergedScores = self_table_data.map((selfScore) => {
-        const relationshipScore = notself_table_data.find(
-          (reln) => reln.id === selfScore.id
-        );
-  
-        return {
-          ...selfScore,
-          avg_reln_weight: relationshipScore ? relationshipScore.avg_reln_weight : 0,
-        };
-      });
-  
-      setTable_Data(mergedScores);
-    }
-  }, [self_table_data, notself_table_data]);
-  
 
-  
+
   const radaroptions = {
     responsive: true, // Make the chart responsive to the container's size
     plugins: {
@@ -489,16 +406,16 @@ export default function Reports() {
       key: "peer",
     },
     {
-        title: "Hr",
-        key: "hr",
-    },{
+      title: "Hr",
+      key: "hr",
+    }, {
       title: "Sub Ordinate",
       key: "subordinate",
-     },
-     {
+    },
+    {
       title: "Reporting Boss",
       key: "reporting_boss",
-     },
+    },
     {
       title: "Total",
       key: "total",
@@ -513,134 +430,187 @@ export default function Reports() {
     { id: "bar", label: "Bar Chart" },
     { id: "radial", label: "Radial Chart" },
   ];
+  useEffect(() => {
+    if (self_table_data.length > 0 || notself_table_data.length > 0) {
+      const selfScoresMap = self_table_data.reduce((acc, selfItem) => {
+        acc[selfItem.attribute_name] = {
+          ...selfItem,
+          avg_reln_weight: 0,
+        };
+        return acc;
+      }, {});
+
+      notself_table_data.forEach((notSelfItem) => {
+        const attribute = notSelfItem.attribute_name;
+
+        if (selfScoresMap[attribute]) {
+          selfScoresMap[attribute].avg_reln_weight =
+            (selfScoresMap[attribute].avg_reln_weight || 0) + notSelfItem.average_weight;
+        } else {
+          selfScoresMap[attribute] = {
+            ...notSelfItem,
+            avg_reln_weight: notSelfItem.average_weight, // Initialize from not-self data
+          };
+        }
+      });
+
+      const mergedScores = Object.values(selfScoresMap);
+
+      setTable_Data(mergedScores);
+    }
+  }, [self_table_data, notself_table_data]);
   console.log(self_table_data);
   console.log(notself_table_data);
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
-      <div style={{ width: "1000px", margin: "0 auto" }}>
-        <Accordion.Root type="single" collapsible className="w-full  space-y-2">
-          {items.map((item, index) => (
-            <Accordion.Item key={index} value={`item-${index}`} className="border rounded-md">
-              <Accordion.Header className="w-full">
-                <Accordion.Trigger
-                  className={cn(
-                    "flex items-center justify-between w-full px-4 py-3 text-left font-medium",
-                    "hover:bg-gray-100 transition-all"
-                  )}
-                  onClick={() => { fetch_Data(item.key) }}
-
-                >
-                  {item.title}
-
-                  <ChevronDown className="w-5 h-5 transition-transform data-[state=open]:rotate-180" />
-                </Accordion.Trigger>
-              </Accordion.Header>
-              <Accordion.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
-                <div className="px-4 py-2 text-gray-700">
-                  <RadioGroup.Root
-                    value={selectedChart}
-                    onValueChange={setSelectedChart}
-                    className=""
-                  >
-                    {chartOptions.map((option) => (
-                     
-                      option.id === "radial" && item.key!="total" ? <></> :<div
-                      key={option.id}
-                      className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
-                      onClick={()=>{
-                        console.log("clicking");
-                        if(option.id === "radial"){
-                          fetch_radar(item.key);
-                        }
-                      }}
-                    >
-                      <RadioGroup.Item
-                        value={option.id}
-                        id={`chart-option-${option.id}`}
-                        className="w-0.5 h-10 border border-gray-300 rounded-full flex items-center justify-center data-[state=checked]:bg-primary"
-                
-                      >
-                        <div className="w-1 h-1 bg-white rounded-full" />
-                      </RadioGroup.Item>
-                      <Label
-                        htmlFor={`chart-option-${option.id}`}
-                        className="flex-1 text-gray-700 cursor-pointer"
-                      >
-                        {option.label}
-                      </Label>
-                    </div> 
-                      
-                    ))}
-                  </RadioGroup.Root>
-
-
-                  {selectedChart === "bar" && bardata ? (
-                    <Bar data={bardata} options={options} />
-                  ) : selectedChart === "radial" && radial_score && item.key =="total"  ? (
-                    <Radar data={radial_score} options={radaroptions} className="mt-16" />
-                  ) : selectedChart === "table" ? (
-                    <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
-                    {/* Table Header */}
-                    <TableHeader className="text-white">
-                      <TableRow>
-                        <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                        <TableHead className="text-left">Attributes</TableHead>
-                        <TableHead className="text-center">Avg - Self Score</TableHead>
-                        <TableHead className="text-center">% Self Score</TableHead>
-                        {item.key !== null && (
-                          <>
-                            <TableHead className="text-center">Avg - {item.title} Score</TableHead>
-                            <TableHead className="text-center">% {item.title} Score</TableHead>
-                          </>
-                        )}
-                      </TableRow>
-                    </TableHeader>
-                  
-                    {/* Table Body */}
-                    <TableBody>
-                      {table_data.length > 0 ? (
-                        table_data.map((row, index) => (
-                          <TableRow key={row.id} className="border-b hover:bg-gray-100">
-                            <TableCell className="text-center">{index + 1}</TableCell>
-                            <TableCell>{row.name}</TableCell>
-                            <TableCell className="text-center">{row.avg_weight.toFixed(2)}</TableCell>
-                            <TableCell className="text-center">
-                              {((row.avg_weight / 100) * 100).toFixed(2)}%
-                            </TableCell>
-                  
-                            {item.key !== null && (
-                              <>
-                                <TableCell className="text-center">
-                                  {row.avg_reln_weight?.toFixed(2) || "0.00"}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  {((row.avg_reln_weight / 100) * 100).toFixed(2)}%
-                                </TableCell>
-                              </>
-                            )}
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center text-gray-500 py-4">
-                            No data available
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                  
-                  ) : null
-                  }
-
-                </div>
-              </Accordion.Content>
-            </Accordion.Item>
-          ))}
-        </Accordion.Root>
-
+      <div className='mb-4'>
+        <Select value={selectedCompany?.id} onValueChange={(value) => {
+          const company = companies.find(c => c.id === value);
+          setSelectedCompany(company);
+        }}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select a company" />
+          </SelectTrigger>
+          <SelectContent>
+            {companies.map((company) => (
+              <SelectItem key={company.id} value={company.id}>
+                {company.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+ { selectedCompany!=null  ?
+   <div style={{ width: "1000px", margin: "0 auto" }}>
+   <Accordion.Root type="single" collapsible className="w-full  space-y-2">
+     {items.map((item, index) => (
+       <Accordion.Item key={index} value={`item-${index}`} className="border rounded-md">
+         <Accordion.Header className="w-full">
+           <Accordion.Trigger
+             className={cn(
+               "flex items-center justify-between w-full px-4 py-3 text-left font-medium",
+               "hover:bg-gray-100 transition-all"
+             )}
+             onClick={() => {
+               fetch_spefifc_data(item.key)
+               setScore_Type(item.key);
+             }}
+
+           >
+             {item.title}
+
+             <ChevronDown className="w-5 h-5 transition-transform data-[state=open]:rotate-180" />
+           </Accordion.Trigger>
+         </Accordion.Header>
+         <Accordion.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
+           <div className="px-4 py-2 text-gray-700">
+             <RadioGroup.Root
+               value={selectedChart}
+               onValueChange={setSelectedChart}
+               className=""
+             >
+               {chartOptions.map((option) => (
+
+                 option.id === "radial" && item.key != "total" ? <></> : <div
+                   key={option.id}
+                   className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
+                   onClick={() => {
+                     console.log("clicking");
+                     if (option.id === "radial") {
+                       fetch_radar(item.key);
+                     }
+                   }}
+                 >
+                   <RadioGroup.Item
+                     value={option.id}
+                     id={`chart-option-${option.id}`}
+                     className="w-0.5 h-10 border border-gray-300 rounded-full flex items-center justify-center data-[state=checked]:bg-primary"
+
+                   >
+                     <div className="w-1 h-1 bg-white rounded-full" />
+                   </RadioGroup.Item>
+                   <Label
+                     htmlFor={`chart-option-${option.id}`}
+                     className="flex-1 text-gray-700 cursor-pointer"
+                   >
+                     {option.label}
+                   </Label>
+                 </div>
+
+               ))}
+             </RadioGroup.Root>
+
+
+             {selectedChart === "bar" && bardata ? (
+               <Bar data={bardata} options={options} />
+             ) : selectedChart === "radial" && radial_score && item.key == "total" ? (
+               <Radar data={radial_score} options={radaroptions} className="mt-16" />
+             ) : selectedChart === "table" ? (
+               <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
+                 {/* Table Header */}
+                 <TableHeader className="text-white">
+                   <TableRow>
+                     <TableHead className="w-12 text-center">Sr. No.</TableHead>
+                     <TableHead className="text-left">Attributes</TableHead>
+                     <TableHead className="text-center">Avg - Self Score</TableHead>
+                     <TableHead className="text-center">% Self Score</TableHead>
+                     {item.key !== null && (
+                       <>
+                         <TableHead className="text-center">Avg - {item.title} Score</TableHead>
+                         <TableHead className="text-center">% {item.title} Score</TableHead>
+                       </>
+                     )}
+                   </TableRow>
+                 </TableHeader>
+
+                 {/* Table Body */}
+                 <TableBody>
+                   {table_data.length > 0 ? (
+                     table_data.map((row, index) => (
+
+                       <TableRow key={row.id} className="border-b hover:bg-gray-100">
+                         <TableCell className="text-center">{index + 1}</TableCell>
+                         <TableCell>{row.attribute_name}</TableCell>
+                         <TableCell className="text-center">{row.average_weight.toFixed(2)}</TableCell>
+                         <TableCell className="text-center">
+                           {((row.average_weight / 100) * 100).toFixed(2)}%
+                         </TableCell>
+
+                         {item.key !== null && (
+                           <>
+                             <TableCell className="text-center">
+                               {row.avg_reln_weight?.toFixed(2) || "0.00"}
+                             </TableCell>
+                             <TableCell className="text-center">
+                               {((row.avg_reln_weight / 100) * 100).toFixed(2)}%
+                             </TableCell>
+                           </>
+                         )}
+                       </TableRow>
+                     ))
+                   ) : (
+                     <TableRow>
+                       <TableCell colSpan={6} className="text-center text-gray-500 py-4">
+                         No data available
+                       </TableCell>
+                     </TableRow>
+                   )}
+                 </TableBody>
+               </Table>
+
+             ) : null
+             }
+
+           </div>
+         </Accordion.Content>
+       </Accordion.Item>
+     ))}
+   </Accordion.Root>
+
+ </div>
+ : <p>Please Select a Company</p>}
+    
     </div>
   );
 }
