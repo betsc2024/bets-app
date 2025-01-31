@@ -22,6 +22,7 @@ import { supabase } from '@/supabase'
 import { Toaster } from 'sonner'
 import { useState } from 'react'
 import { Menu } from 'lucide-react'
+import UserReports from './components/user/UserReports'
 
 function Layout() {
   const { user } = useAuth()
@@ -74,7 +75,7 @@ function Layout() {
             } />
             <Route path="/user/reports" element={
               <UserRouteGuard>
-                <Reports />
+              <UserReports/>
               </UserRouteGuard>
             } />
             
