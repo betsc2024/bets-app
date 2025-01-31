@@ -54,54 +54,67 @@ export default function Reports() {
   const [notselfresults, setnotselfresults] = useState(null);
   const [selectedChart, setSelectedChart] = useState("table");
   const [bardata, setBarData] = useState(null);
-  const [score_type, setScore_Type] = useState("self");
+  const [score_type, setScore_Type] = useState(null);
   const [radial_label, setRadial_Label] = useState(null);
   const [radial_score, setRadial_Score] = useState(null);
   const [self_table_data, setSelfTableData] = useState([]);
   const [notself_table_data, setNotSelfTableData] = useState([]);
   const [table_data, setTable_Data] = useState([]);
   const [companies, setCompanies] = useState([]);
-  const [selectedCompany, setSelectedCompany] = useState(null)
+  const [selectedCompany, setSelectedCompany] = useState(null);
+  const [list_Demographic_atr, setlist_Demographic_atr] = useState([]);
+  const [demographicData, setDemographic_data] = useState([]);
+  const [demographicTypes, setDemographic_types] = useState([]);
 
+  const [selectedAttribute, setSelectedAttribute] = useState('');
 
+  const [demographicbardata, setdemographicbardata] = useState([]);
 
 
 
 
 
   const fetchData = async (selectedCompany) => {
-    console.log(selectedCompany);
     try {
       setBarData(null);
+      setTable_Data([]);
+
+
+
+      const id = selectedCompany?.id;
+
+      // Fetch data without deep filtering
       const { data, error } = await supabase
-      .from("evaluations")
-      .select(`
-        relationship_type,
-        evaluation_assignments ( 
-          id,
-          company_id,
-          companies (
-          id, 
-          name 
-           ) 
-        ),
-        evaluation_responses (
-          attribute_statement_options ( 
-            weight, 
-            attribute_statements ( 
-              attributes ( name ) 
+        .from("evaluations")
+        .select(`
+          relationship_type,
+          evaluation_assignments ( 
+            id,
+            company_id,
+            companies ( id, name ) 
+          ),
+          evaluation_responses (
+            attribute_statement_options ( 
+              weight, 
+              attribute_statements ( 
+                attributes ( name ) 
+              ) 
             ) 
-          ) 
-        )
-      `)
-      .eq("status", "completed")
-      .eq("evaluation_assignments.companies.id", selectedCompany?.id);
+          )
+        `)
+        .eq("status", "completed");
 
       if (error) throw error;
 
       console.log(data);
+
+      // Filter evaluations for the selected company in JS
+      const filteredData = data.filter(evaluation =>
+        evaluation.evaluation_assignments?.company_id === id
+      );
+
       // Transform data to match expected structure
-      const formattedData = data
+      const formattedData = filteredData
         .filter(e => e.evaluation_responses?.[0]?.attribute_statement_options?.attribute_statements?.attributes?.name)
         .map(e => ({
           relationship_type: e.relationship_type,
@@ -113,14 +126,87 @@ export default function Reports() {
           num_evaluations: e.evaluation_responses.length || 1,
         }));
 
-      console.log(formattedData);
-
-
       setData(formattedData);
+
+      console.log(data);
+
+
     } catch (err) {
-      setError(err.message);
+      console.log("Error fetching data:", err);
     } finally {
       // setLoading(false);
+    }
+  };
+
+
+  const processDemographicData = () => {
+    if (!data || data.length === 0) {
+      console.log("No data available");
+      return;
+    }
+
+    try {
+      let attributeMap = {};
+      let relationshipTypes = new Set();
+
+      data.forEach((item, index) => {
+        console.log("Processing item", item); // Log each item being processed
+        const relationshipType = item.relationship_type || "Self"; // Treat null as "Self"
+        console.log("Relationship Type:", relationshipType); // Log the relationship type
+        relationshipTypes.add(relationshipType);
+
+        // Process each item based on the new data structure
+        const attributeName = item.attribute_name;
+        const weight = item.average_weight || 0; // Use average_weight if available
+
+        console.log("Attribute Name:", attributeName); // Log attribute name
+
+        if (!attributeMap[attributeName]) {
+          attributeMap[attributeName] = {};
+        }
+
+        if (!attributeMap[attributeName][relationshipType]) {
+          attributeMap[attributeName][relationshipType] = { total: 0, count: 0 };
+        }
+
+        attributeMap[attributeName][relationshipType].total += weight;
+        attributeMap[attributeName][relationshipType].count += 1;
+      });
+
+      console.log("Attribute Map:", attributeMap); // Log attribute map after processing
+
+      const relationshipTypesArray = Array.from(relationshipTypes);
+      console.log("Relationship Types Array:", relationshipTypesArray); // Log relationship types
+
+      const processedData = Object.keys(attributeMap).map((attribute, index) => {
+        let row = { SrNo: index + 1, Attribute: attribute };
+
+        relationshipTypesArray.forEach((type) => {
+          row[type] = attributeMap[attribute][type]
+            ? (attributeMap[attribute][type].total / attributeMap[attribute][type].count).toFixed(1)
+            : 0;
+        });
+
+        row["Total"] = (
+          relationshipTypesArray.reduce((sum, type) => sum + parseFloat(row[type] || 0), 0) /
+          relationshipTypesArray.length
+        ).toFixed(1);
+
+        return row;
+      });
+
+      console.log("Processed Data:", processedData); // Log processed data
+      console.log(Object.keys(attributeMap)); // Log processed data
+
+
+      setDemographic_types(relationshipTypesArray);
+      setlist_Demographic_atr(Object.keys(attributeMap));
+      setDemographic_data(processedData);
+
+      console.log(list_Demographic_atr);
+
+    } catch (error) {
+      console.log("Error processing demographic data:", error);
     }
   };
 
@@ -132,7 +218,6 @@ export default function Reports() {
         .from("companies")
         .select('*');
       if (data) {
-        console.log(data);
         setCompanies(data);
       } else {
         console.log(error);
@@ -147,25 +232,28 @@ export default function Reports() {
     fetch_companies();
   }, []);
 
-  useEffect(()=>{
+  useEffect(() => {
     fetchData(selectedCompany);
-  },[selectedCompany])
+  }, [selectedCompany])
+
+
+
 
   const fetch_spefifc_data = (relationship_type) => {
     if (!data) return;
 
     const selfData = data.filter((item) => item.relationship_type === null);
 
-    const notSelfData = data.filter((item) => item.relationship_type === relationship_type);
+    const notSelfData = relationship_type === "total"
+      ? data.filter((item) => item.relationship_type !== null)
+      : data.filter((item) => item.relationship_type === relationship_type);
 
     const labels = [...new Set(data.map((item) => item.attribute_name))];
 
     const selfResultsMap = {};
     const notSelfResultsMap = {};
 
-
     labels.forEach((label) => {
-
       const selfItems = selfData.filter((item) => item.attribute_name === label);
       const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
 
@@ -185,13 +273,8 @@ export default function Reports() {
     setSelfTableData(selfData);
     setNotSelfTableData(notSelfData);
     // setTable_Data(data);
+  };
 
-
-    console.log(labels);
-    console.log(selfData);
-    console.log(notSelfData);
-    console.log(data);
-  }
 
 
 
@@ -321,12 +404,9 @@ export default function Reports() {
     },
   };
 
-  useEffect(() => {
-    setBarData(null);
-
-
+  const specific_type_bar = (relationship_type) => {
     if (label && selfresults) {
-      if (score_type === "self") {
+      if (score_type === null) {
         setBarData({
           labels: label,
           datasets: [
@@ -351,7 +431,7 @@ export default function Reports() {
               borderWidth: 1,
             },
             ...(notselfresults && notselfresults.length > 0 ? [{
-              label: "Not Self Score",
+              label: relationship_type,
               data: notselfresults,
               backgroundColor: "#e74c3c",
               borderColor: "#e74c3c",
@@ -361,8 +441,7 @@ export default function Reports() {
         });
       }
     }
-  }, [selfresults, notselfresults, label, score_type]);
-
+  }
 
 
 
@@ -456,11 +535,48 @@ export default function Reports() {
 
       const mergedScores = Object.values(selfScoresMap);
 
+      console.log(mergedScores);
       setTable_Data(mergedScores);
     }
   }, [self_table_data, notself_table_data]);
-  console.log(self_table_data);
-  console.log(notself_table_data);
+
+  const Demography_bar_data = (attribute) => {
+    console.log(attribute);
+
+    let selfresult = [];
+
+    if (demographicData) {
+      demographicData.map((item, index) => {
+        if (item.Attribute === attribute) {
+          for (let key in item) {
+            if (key !== "Attribute" && key !== "SrNo") {
+              selfresult.push(
+                item[key]
+              );
+            }
+          }
+        }
+      })
+    }
+    console.log(selfresult);
+
+    setdemographicbardata({
+      labels: demographicTypes,
+      datasets: [
+        {
+          label: "Score",
+          data: selfresult,
+          backgroundColor: "#733e93",
+          borderColor: "#733e93",
+          borderWidth: 1,
+        }
+      ],
+    })
+  }
+  useEffect(() => {
+    Demography_bar_data(selectedAttribute);
+  }, [selectedAttribute])
+
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
@@ -481,136 +597,213 @@ export default function Reports() {
           </SelectContent>
         </Select>
       </div>
- { selectedCompany!=null  ?
-   <div style={{ width: "1000px", margin: "0 auto" }}>
-   <Accordion.Root type="single" collapsible className="w-full  space-y-2">
-     {items.map((item, index) => (
-       <Accordion.Item key={index} value={`item-${index}`} className="border rounded-md">
-         <Accordion.Header className="w-full">
-           <Accordion.Trigger
-             className={cn(
-               "flex items-center justify-between w-full px-4 py-3 text-left font-medium",
-               "hover:bg-gray-100 transition-all"
-             )}
-             onClick={() => {
-               fetch_spefifc_data(item.key)
-               setScore_Type(item.key);
-             }}
+      {selectedCompany != null ?
+        <div style={{ width: "1000px", margin: "0 auto" }}>
+          <Accordion.Root type="single" collapsible className="w-full  space-y-2">
+            {items.map((item, index) => (
+              <Accordion.Item key={index} value={`item-${index}`} className="border rounded-md">
+                <Accordion.Header className="w-full">
+                  <Accordion.Trigger
+                    className={cn(
+                      "flex items-center justify-between w-full px-4 py-3 text-left font-medium",
+                      "hover:bg-gray-100 transition-all"
+                    )}
+                    onClick={() => {
+                      fetch_spefifc_data(item.key);
+                      specific_type_bar(item.key);
+                      setScore_Type(item.key);
+                      setSelectedChart(item.key);
 
-           >
-             {item.title}
+                      processDemographicData(data);
 
-             <ChevronDown className="w-5 h-5 transition-transform data-[state=open]:rotate-180" />
-           </Accordion.Trigger>
-         </Accordion.Header>
-         <Accordion.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
-           <div className="px-4 py-2 text-gray-700">
-             <RadioGroup.Root
-               value={selectedChart}
-               onValueChange={setSelectedChart}
-               className=""
-             >
-               {chartOptions.map((option) => (
+                    }}
 
-                 option.id === "radial" && item.key != "total" ? <></> : <div
-                   key={option.id}
-                   className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
-                   onClick={() => {
-                     console.log("clicking");
-                     if (option.id === "radial") {
-                       fetch_radar(item.key);
-                     }
-                   }}
-                 >
-                   <RadioGroup.Item
-                     value={option.id}
-                     id={`chart-option-${option.id}`}
-                     className="w-0.5 h-10 border border-gray-300 rounded-full flex items-center justify-center data-[state=checked]:bg-primary"
+                  >
+                    {item.title}
 
-                   >
-                     <div className="w-1 h-1 bg-white rounded-full" />
-                   </RadioGroup.Item>
-                   <Label
-                     htmlFor={`chart-option-${option.id}`}
-                     className="flex-1 text-gray-700 cursor-pointer"
-                   >
-                     {option.label}
-                   </Label>
-                 </div>
+                    <ChevronDown className="w-5 h-5 transition-transform data-[state=open]:rotate-180" />
+                  </Accordion.Trigger>
+                </Accordion.Header>
+                <Accordion.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
+                  <div className="px-4 py-2 text-gray-700">
+                    <RadioGroup.Root
+                      value={selectedChart}
+                      onValueChange={setSelectedChart}
+                      className=""
+                    >
+                      {chartOptions.map((option) => (
 
-               ))}
-             </RadioGroup.Root>
+                        option.id === "radial" && item.key != "total" ? <></> : <div
+                          key={option.id}
+                          className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
+                          onClick={() => {
+
+                            console.log("clicking");
+                            if (option.id === "bar") {
+                              specific_type_bar(item.key);
+                            }
+                            if (option.id === "radial") {
+                              fetch_radar(item.key);
+                            }
+
+                          }}
+                        >
+                          <RadioGroup.Item
+                            value={option.id}
+                            id={`chart-option-${option.id}`}
+                            className="w-0.5 h-10 border border-gray-300 rounded-full flex items-center justify-center data-[state=checked]:bg-primary"
+
+                          >
+                            <div className="w-1 h-1 bg-white rounded-full" />
+                          </RadioGroup.Item>
+                          <Label
+                            htmlFor={`chart-option-${option.id}`}
+                            className="flex-1 text-gray-700 cursor-pointer"
+                          >
+                            {option.label}
+                          </Label>
+                        </div>
+
+                      ))}
+                    </RadioGroup.Root>
 
 
-             {selectedChart === "bar" && bardata ? (
-               <Bar data={bardata} options={options} />
-             ) : selectedChart === "radial" && radial_score && item.key == "total" ? (
-               <Radar data={radial_score} options={radaroptions} className="mt-16" />
-             ) : selectedChart === "table" ? (
-               <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
-                 {/* Table Header */}
-                 <TableHeader className="text-white">
-                   <TableRow>
-                     <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                     <TableHead className="text-left">Attributes</TableHead>
-                     <TableHead className="text-center">Avg - Self Score</TableHead>
-                     <TableHead className="text-center">% Self Score</TableHead>
-                     {item.key !== null && (
-                       <>
-                         <TableHead className="text-center">Avg - {item.title} Score</TableHead>
-                         <TableHead className="text-center">% {item.title} Score</TableHead>
-                       </>
-                     )}
-                   </TableRow>
-                 </TableHeader>
+                    {selectedChart === "bar" && bardata ? (
+                      item.key === "demography" ?
 
-                 {/* Table Body */}
-                 <TableBody>
-                   {table_data.length > 0 ? (
-                     table_data.map((row, index) => (
+                        <>
+                          <Select
+                            value={selectedAttribute}
+                            placeholder="Select an attribute"
+                            onValueChange={(value) => setSelectedAttribute(value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select an attribute" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {list_Demographic_atr.map((attribute, index) => (
+                                <SelectItem key={index} value={attribute}>
+                                  {attribute}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
 
-                       <TableRow key={row.id} className="border-b hover:bg-gray-100">
-                         <TableCell className="text-center">{index + 1}</TableCell>
-                         <TableCell>{row.attribute_name}</TableCell>
-                         <TableCell className="text-center">{row.average_weight.toFixed(2)}</TableCell>
-                         <TableCell className="text-center">
-                           {((row.average_weight / 100) * 100).toFixed(2)}%
-                         </TableCell>
+                          {selectedAttribute ? <Bar data={demographicbardata} options={options} /> : <></>}
+                        </>
 
-                         {item.key !== null && (
-                           <>
-                             <TableCell className="text-center">
-                               {row.avg_reln_weight?.toFixed(2) || "0.00"}
-                             </TableCell>
-                             <TableCell className="text-center">
-                               {((row.avg_reln_weight / 100) * 100).toFixed(2)}%
-                             </TableCell>
-                           </>
-                         )}
-                       </TableRow>
-                     ))
-                   ) : (
-                     <TableRow>
-                       <TableCell colSpan={6} className="text-center text-gray-500 py-4">
-                         No data available
-                       </TableCell>
-                     </TableRow>
-                   )}
-                 </TableBody>
-               </Table>
+                        : <Bar data={bardata} options={options} />
+                    ) : selectedChart === "radial" && radial_score && item.key === "total" ? (
+                      <Radar data={radial_score} options={radaroptions} className="mt-16" />
+                    ) : selectedChart === "table" ? (
+                      item.key === "demography" ? (<>
+                        <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
+                          <TableHeader className="text-white">
+                            <TableRow>
+                              <TableHead className="w-12 text-center">Sr. No.</TableHead>
+                              <TableHead className="text-left">Attributes</TableHead>
 
-             ) : null
-             }
+                              {demographicTypes.map((type, idx) => (
+                                <TableHead key={idx} className="text-center">
+                                  {type}
+                                </TableHead>
+                              ))}
 
-           </div>
-         </Accordion.Content>
-       </Accordion.Item>
-     ))}
-   </Accordion.Root>
+                              <TableHead className="text-center">Total</TableHead>
+                            </TableRow>
+                          </TableHeader>
 
- </div>
- : <p>Please Select a Company</p>}
-    
+                          <TableBody>
+                            {demographicData.length > 0 ? (
+                              demographicData.map((row, index) => (
+                                <TableRow key={index} className="border-b hover:bg-gray-100">
+                                  <TableCell className="text-center">{row.SrNo}</TableCell>
+                                  <TableCell>{row.Attribute}</TableCell>
+
+                                  {demographicTypes.map((type, idx) => (
+                                    <TableCell key={idx} className="text-center">
+                                      {Math.round(row[type])}
+                                    </TableCell>
+                                  ))}
+
+                                  <TableCell className="text-center">{row["Total"]}</TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={demographicTypes.length + 3} className="text-center text-gray-500 py-4">
+                                  No data available
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+
+                      </>) :
+                        <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
+                          {/* Table Header */}
+                          <TableHeader className="text-white">
+                            <TableRow>
+                              <TableHead className="w-12 text-center">Sr. No.</TableHead>
+                              <TableHead className="text-left">Attributes</TableHead>
+                              <TableHead className="text-center">Avg - Self Score</TableHead>
+                              <TableHead className="text-center">% Self Score</TableHead>
+                              {item.key !== null && (
+                                <>
+                                  <TableHead className="text-center">Avg - {item.title} Score</TableHead>
+                                  <TableHead className="text-center">% {item.title} Score</TableHead>
+                                </>
+                              )}
+                            </TableRow>
+                          </TableHeader>
+
+                          {/* Table Body */}
+                          <TableBody>
+                            {table_data.length > 0 ? (
+                              table_data.map((row, index) => (
+
+                                <TableRow key={row.id} className="border-b hover:bg-gray-100">
+                                  <TableCell className="text-center">{index + 1}</TableCell>
+                                  <TableCell>{row.attribute_name}</TableCell>
+                                  <TableCell className="text-center">{row.average_weight.toFixed(2)}</TableCell>
+                                  <TableCell className="text-center">
+                                    {((row.average_weight / 100) * 100).toFixed(2)}%
+                                  </TableCell>
+
+                                  {item.key !== null && (
+                                    <>
+                                      <TableCell className="text-center">
+                                        {row.avg_reln_weight?.toFixed(2) || "0.00"}
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        {((row.avg_reln_weight / 100) * 100).toFixed(2)}%
+                                      </TableCell>
+                                    </>
+                                  )}
+                                </TableRow>
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-gray-500 py-4">
+                                  No data available
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+
+                    ) : null
+                    }
+
+                  </div>
+                </Accordion.Content>
+              </Accordion.Item>
+            ))}
+          </Accordion.Root>
+
+        </div>
+        : <p>Please Select a Company</p>}
+
     </div>
   );
 }

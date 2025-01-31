@@ -389,10 +389,7 @@ export default function UserReports() {
       },
     },
   };
-  useEffect(() => {
-    setBarData(null); 
-
-
+  const specific_type_bar = (relationship_type)=>{
     if (label && selfresults) {
       if (score_type === "self") {
         setBarData({
@@ -419,7 +416,7 @@ export default function UserReports() {
               borderWidth: 1,
             },
             ...(notselfresults && notselfresults.length > 0 ? [{
-              label: "Not Self Score",
+              label: relationship_type,
               data: notselfresults,
               backgroundColor: "#e74c3c",
               borderColor: "#e74c3c",
@@ -429,7 +426,13 @@ export default function UserReports() {
         });
       }
     }
-  }, [selfresults, notselfresults, label, score_type]); 
+  }
+  // useEffect(() => {
+  //   setBarData(null); 
+
+
+  
+  // }, [selfresults, notselfresults, label, score_type]); 
   
 
 
@@ -533,7 +536,9 @@ export default function UserReports() {
                     "flex items-center justify-between w-full px-4 py-3 text-left font-medium",
                     "hover:bg-gray-100 transition-all"
                   )}
-                  onClick={() => { fetch_Data(item.key) }}
+                  onClick={() => { fetch_Data(item.key)
+                    specific_type_bar(item.key);
+                   }}
 
                 >
                   {item.title}
@@ -555,6 +560,9 @@ export default function UserReports() {
                       className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
                       onClick={()=>{
                         console.log("clicking");
+                        if(option.id === "bar"){
+                          specific_type_bar(item.key);
+                        }
                         if(option.id === "radial"){
                           fetch_radar(item.key);
                         }
