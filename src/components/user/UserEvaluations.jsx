@@ -306,7 +306,7 @@ const UserEvaluations = () => {
           </div>
         )}
       </div>
-
+        
       <Dialog 
         open={!!selectedEvaluation} 
         onOpenChange={(open) => !open && setSelectedEvaluation(null)}
@@ -314,7 +314,8 @@ const UserEvaluations = () => {
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-2xl">
-            { selectedEvaluation?.is_self_evaluator ? selectedEvaluation?.evaluation_assignments?.evaluation_name + ": Self Evaluation" : selectedEvaluation?.evaluation_assignments?.evaluation_name + ": Evaluate " +selectedEvaluation?.evaluation_assignments?.users?.full_name + " as " + user.user_metadata?.full_name }              
+            { selectedEvaluation?.status === 'completed' ? toast.warning("Already Evaluated") : <></>}
+            {selectedEvaluation?.is_self_evaluator ? selectedEvaluation?.evaluation_assignments?.evaluation_name + ": Self Evaluation" : selectedEvaluation?.evaluation_assignments?.evaluation_name + ": Evaluate " +selectedEvaluation?.evaluation_assignments?.users?.full_name + " as " + user.user_metadata?.full_name }              
             </DialogTitle>
             <DialogDescription className="text-gray-600">
               Evaluating: {selectedEvaluation?.evaluation_assignments?.user_to_evaluate?.full_name}
