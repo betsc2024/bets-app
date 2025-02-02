@@ -394,8 +394,8 @@ export default function UserReports() {
 
       const result = radial_score;
 
-
-      
+      console.log(result);
+            
       const maxData = new Array(result.length).fill(100); 
       const selfData = result.map(item => item.average_weight); 
       
