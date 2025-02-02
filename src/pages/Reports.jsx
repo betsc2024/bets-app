@@ -295,7 +295,10 @@ export default function Reports() {
     setNotSelfTableData(notSelfData);
     // setTable_Data(data);
   };
-
+  
+    useEffect(()=>{
+      
+    })
 
 
 
@@ -398,7 +401,8 @@ export default function Reports() {
 
       const result = radial_score;
 
-
+      console.log(result);
+      console.log(selfresults);
 
       const maxData = new Array(result.length).fill(100);
       const selfData = result.map(item => item.average_weight);
