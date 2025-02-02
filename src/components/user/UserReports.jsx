@@ -64,7 +64,7 @@ export default function UserReports() {
   const [table_data,setTable_Data] = useState([]);
   const [company,set_copmany_selected] = useState(null);
 
-  const [selectedAttribute,setSelectedAttribute] = useState(null);
+  const [selectedAttribute,setSelectedAttribute] = useState('');
 
 
 
@@ -236,7 +236,7 @@ export default function UserReports() {
         .select('*');
   
       if (attribute_Error) {
-        console.log(attribute_Error);
+        // console.log(attribute_Error);
         toast.error(attribute_Error);
         return;
       }
@@ -289,7 +289,6 @@ export default function UserReports() {
   };
   const fetch_radar = async (relationship_type) => {
     if(!selectedAttribute) {
-
       return;
     }
     try {
@@ -326,7 +325,7 @@ export default function UserReports() {
 
       const data = filterByAttributeName(query_Data,selectedAttribute);
 
-      console.log(data);
+      // console.log(data);
   
       if (error) {
         throw new Error('Error fetching data: ' + error.message);
@@ -337,7 +336,7 @@ export default function UserReports() {
   
       data.forEach((evaluation) => {
         evaluation.evaluation_responses.forEach((response) => {
-          console.log(response);
+          // console.log(response);
 
           const option = response.attribute_statement_options;
 
@@ -365,6 +364,7 @@ export default function UserReports() {
   
     } catch (err) {
       console.error(err);
+      toast.error(err);
       throw new Error("Failed to fetch radar data: " + err.message);
     }
   };
@@ -372,13 +372,13 @@ export default function UserReports() {
   useEffect(()=>{
 
     if(radial_result ){
-      console.log("calc");
-      console.log(selectedAttribute);
-      console.log(radial_result);
+      // console.log("calc");
+      // console.log(selectedAttribute);
+      // console.log(radial_result);
     
       setRadial_Label(radial_result.map(item => item.statement)); // Set the statement labels
       setRadial_Score(radial_result);
-      console.log(radial_result )
+      // console.log(radial_result )
     }
   },[selectedAttribute,radial_result])
 
@@ -442,7 +442,7 @@ const radarData = {
   ],
 };
 
-console.log(radarData);
+// console.log(radarData);
 
 setRadial_data(radarData); // Set the radar chart data
     }
@@ -529,6 +529,11 @@ setRadial_data(radarData); // Set the radar chart data
       });
   
       setTable_Data(mergedScores);
+
+      console.log(self_table_data);
+      console.log(notself_table_data);
+      console.log(table_data);
+
     }
   }, [self_table_data, notself_table_data]);
   
@@ -562,29 +567,36 @@ setRadial_data(radarData); // Set the radar chart data
   };
   const items = [
     {
+      id:1,
       title: "Self",
       key: null,
     },
     {
+      id:2,
       title: "Top Boss",
       key: "top_boss",
     },
     {
+      id:3,
       title: "Peer",
       key: "peer",
     },
     {
-        title: "Hr",
-        key: "hr",
-    },{
+      id:4,
+      title: "Hr",
+      key: "hr",
+    }, {
+      id:5,
       title: "Sub Ordinate",
       key: "subordinate",
-     },
-     {
+    },
+    {
+      id:6,
       title: "Reporting Boss",
       key: "reporting_boss",
-     },
+    },
     {
+      id:7,
       title: "Total",
       key: "total",
     },
@@ -604,8 +616,8 @@ setRadial_data(radarData); // Set the radar chart data
       <div style={{ width: "1000px", margin: "0 auto" }}>
         
         <Accordion.Root type="single" collapsible className="w-full  space-y-2">
-          {items.map((item, index) => (
-            <Accordion.Item key={index} value={`item-${index}`} className="border rounded-md">
+          {items.map((item) => (
+            <Accordion.Item key={item.id} value={item.id} className="border rounded-md">
               <Accordion.Header className="w-full">
                 <Accordion.Trigger
                   className={cn(
@@ -633,7 +645,7 @@ setRadial_data(radarData); // Set the radar chart data
                       key={option.id}
                       className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
                       onClick={()=>{
-                        console.log("clicking");
+                        // console.log("clicking");
                         if(option.id === "bar"){
                           specific_type_bar(item.key);
                         }
@@ -669,7 +681,7 @@ setRadial_data(radarData); // Set the radar chart data
                      <Select
                     value={selectedAttribute}
                     placeholder="Select an attribute"
-                    onValueChange={(value) => {setSelectedAttribute(value); console.log(value)} }
+                    onValueChange={(value) => {setSelectedAttribute(value); } }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select an attribute" />
@@ -705,7 +717,7 @@ setRadial_data(radarData); // Set the radar chart data
                     {/* Table Body */}
                     <TableBody>
                       {table_data.length > 0 ? (
-                        table_data.map((row, index) => (
+                        table_data.map((row,index) => (
                           <TableRow key={row.id} className="border-b hover:bg-gray-100">
                             <TableCell className="text-center">{index + 1}</TableCell>
                             <TableCell>{row.name}</TableCell>
