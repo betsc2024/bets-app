@@ -27,8 +27,16 @@ import {
   TableRow,
   TableCell,
 } from '@/components/ui/table';
-import { SelectIcon, SelectPortal } from '@radix-ui/react-select';
-
+import {
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectLabel,
+  SelectItem,
+  SelectSeparator,
+} from '@/components/ui/select';
 
 
 
@@ -49,10 +57,14 @@ export default function UserReports() {
   const [score_type,setScore_Type] = useState("self");
   const [radial_label,setRadial_Label] = useState(null);
   const [radial_score,setRadial_Score] = useState(null);
+  const [radial_data,setRadial_data] = useState(null);
+  const [radial_result,set_Radial_Result] = useState(null);
   const [self_table_data,setSelfTableData] =useState([]);
   const [notself_table_data,setNotSelfTableData] =useState([]);
   const [table_data,setTable_Data] = useState([]);
   const [company,set_copmany_selected] = useState(null);
+
+  const [selectedAttribute,setSelectedAttribute] = useState(null);
 
 
 
@@ -235,9 +247,9 @@ export default function UserReports() {
   
       attribute_Data.forEach((item, index) => {
         if (item.id) {
-          label_temp.push(item.name);
           const foundScore = score.find(s => s.attribute_id === item.id);
           if (foundScore) {
+            label_temp.push(item.name);
             res_temp.push(Math.round(foundScore.avg_weight));
             if(score_type == "selfscore"){
               table_data.push({
@@ -252,9 +264,7 @@ export default function UserReports() {
                 avg_reln_weight: foundScore.avg_weight
               });
             }
-          } else {
-            res_temp.push(0); // Default value if no matching score
-          }
+          } 
         }
       });
   
@@ -278,6 +288,10 @@ export default function UserReports() {
     }
   };
   const fetch_radar = async (relationship_type) => {
+    if(!selectedAttribute) {
+
+      return;
+    }
     try {
       let query = supabase
         .from('evaluations')
@@ -287,30 +301,47 @@ export default function UserReports() {
             attribute_statement_options (
               weight,
               attribute_statements (
-                statement
+                statement,
+                attributes(
+                name
+                )       
               )
             )
           )
         `)
-        .eq('status', 'completed'); // Only filtering by completed status
-  
-      if (relationship_type && relationship_type !== 'total') {
-        query = query.eq('relationship_type', relationship_type);
-      } else if (relationship_type === 'total') {
-        query = query;
-      }
-  
-      const { data, error } = await query;
+        .eq('status', 'completed') // Only filtering by completed status
+
+      const { data:query_Data, error } = await query;
+
+      const filterByAttributeName = (data, attributeName) => {
+        return data
+          .map(item => ({
+            ...item,
+            evaluation_responses: item.evaluation_responses.filter(response => 
+              response.attribute_statement_options.attribute_statements.attributes.name === attributeName
+            )
+          }))
+          .filter(item => item.evaluation_responses.length > 0);
+      };
+
+      const data = filterByAttributeName(query_Data,selectedAttribute);
+
+      console.log(data);
   
       if (error) {
         throw new Error('Error fetching data: ' + error.message);
       }
+
   
       const processedData = {};
   
       data.forEach((evaluation) => {
         evaluation.evaluation_responses.forEach((response) => {
+          console.log(response);
+
           const option = response.attribute_statement_options;
+
+          
           if (option && option.attribute_statements) {
             const statement = option.attribute_statements.statement;
             if (!processedData[statement]) {
@@ -327,61 +358,101 @@ export default function UserReports() {
         statement,
         average_weight: totalWeight / count,
       }));
+      
+    
+      set_Radial_Result(result);
   
-      // Fetch self data and max data
-      const maxData = new Array(result.length).fill(100); 
-      const selfData = result.map(item => item.average_weight); 
-  
-      let relationshipData = [];
-      if (relationship_type && relationship_type !== 'total') {
-        relationshipData = result.map(item => item.average_weight); 
-      }
-  
-      // Combine self, relationship, and max data
-      const radarData = {
-        labels: result.map(item => item.statement),
-        datasets: [
-          {
-            label: 'Self',
-            data: selfData,
-            backgroundColor: 'rgba(255, 99, 132, 0.2)',
-            borderColor: 'rgba(255, 99, 132, 1)',
-            pointBackgroundColor: 'rgba(255, 99, 132, 1)',
-            pointBorderColor: '#fff',
-            pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgba(255, 99, 132, 1)',
-          },
-          {
-            label: 'Relationship',
-            data: relationshipData,
-            backgroundColor: 'rgba(54, 162, 235, 0.2)',
-            borderColor: 'rgba(54, 162, 235, 1)',
-            pointBackgroundColor: 'rgba(54, 162, 235, 1)',
-            pointBorderColor: '#fff',
-            pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgba(54, 162, 235, 1)',
-          },
-          {
-            label: 'Max Score (100)',
-            data: maxData,
-            backgroundColor: 'rgba(255, 206, 86, 0.2)',
-            borderColor: 'rgba(255, 206, 86, 1)',
-            pointBackgroundColor: 'rgba(255, 206, 86, 1)',
-            pointBorderColor: '#fff',
-            pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgba(255, 206, 86, 1)',
-          },
-        ],
-      };
-  
-      setRadial_Label(result.map(item => item.statement)); // Set the statement labels
-      setRadial_Score(radarData); // Set the radar chart data
   
     } catch (err) {
       console.error(err);
       throw new Error("Failed to fetch radar data: " + err.message);
     }
   };
+
+  useEffect(()=>{
+
+    if(radial_result ){
+      console.log("calc");
+      console.log(selectedAttribute);
+      console.log(radial_result);
+    
+      setRadial_Label(radial_result.map(item => item.statement)); // Set the statement labels
+      setRadial_Score(radial_result);
+      console.log(radial_result )
+    }
+  },[selectedAttribute,radial_result])
+
+  useEffect(()=>{
+    fetch_radar("total");
+  },[selectedAttribute]);
+
+  useEffect(()=>{
+
+          // Fetch self data and max data
+
+    if(radial_score && radial_label ){
+
+      const result = radial_score;
+
+
+      
+      const maxData = new Array(result.length).fill(100); 
+      const selfData = result.map(item => item.average_weight); 
+      
+      let relationshipData = [];
+      relationshipData = result.map(item => item.average_weight); 
+      
+  
+      // Combine self, relationship, and max data
+      
+
+const radarData = {
+  labels: radial_label,
+   datasets: [
+    {
+      label: 'Self',
+      data: selfData,
+      backgroundColor: 'rgba(255, 99, 132, 0.2)',
+      borderColor: 'rgba(255, 99, 132, 1)',
+      pointBackgroundColor: 'rgba(255, 99, 132, 1)',
+      pointBorderColor: '#fff',
+      pointHoverBackgroundColor: '#fff',
+      pointHoverBorderColor: 'rgba(255, 99, 132, 1)',
+    },
+    {
+      label: 'Relationship',
+      data: relationshipData,
+      backgroundColor: 'rgba(54, 162, 235, 0.2)',
+      borderColor: 'rgba(54, 162, 235, 1)',
+      pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+      pointBorderColor: '#fff',
+      pointHoverBackgroundColor: '#fff',
+      pointHoverBorderColor: 'rgba(54, 162, 235, 1)',
+    },
+    {
+      label: 'Max Score (100)',
+      data: maxData,
+      backgroundColor: 'rgba(255, 206, 86, 0.2)',
+      borderColor: 'rgba(255, 206, 86, 1)',
+      pointBackgroundColor: 'rgba(255, 206, 86, 1)',
+      pointBorderColor: '#fff',
+      pointHoverBackgroundColor: '#fff',
+      pointHoverBorderColor: 'rgba(255, 206, 86, 1)',
+    },
+  ],
+};
+
+console.log(radarData);
+
+setRadial_data(radarData); // Set the radar chart data
+    }
+  },[selectedAttribute,radial_label,radial_score])
+
+  const handleAccordionClick = (relationship_type) => {
+    fetch_Data(relationship_type);
+    specific_type_bar(relationship_type);
+  };
+
   
   const options = {
     indexAxis: "x", // Ensures vertical bars (horizontal if 'y')
@@ -439,13 +510,7 @@ export default function UserReports() {
       }
     }
   }
-  // useEffect(() => {
-  //   setBarData(null); 
 
-
-  
-  // }, [selfresults, notselfresults, label, score_type]); 
-  
 
 
   useEffect(() => {
@@ -522,7 +587,6 @@ export default function UserReports() {
     {
       title: "Total",
       key: "total",
-      content: "Yes, Radix UI is open-source and free to use.",
     },
   ];
   const chartOptions = [
@@ -548,9 +612,7 @@ export default function UserReports() {
                     "flex items-center justify-between w-full px-4 py-3 text-left font-medium",
                     "hover:bg-gray-100 transition-all"
                   )}
-                  onClick={() => { fetch_Data(item.key)
-                    specific_type_bar(item.key);
-                   }}
+                  onClick={() => {handleAccordionClick(item.key) }}
 
                 >
                   {item.title}
@@ -602,8 +664,26 @@ export default function UserReports() {
 
                   {selectedChart === "bar" && bardata ? (
                     <Bar data={bardata} options={options} />
-                  ) : selectedChart === "radial" && radial_score && item.key =="total"  ? (
-                    <Radar data={radial_score} options={radaroptions} className="mt-16" />
+                  ) : selectedChart === "radial" && item.key ==="total" ? (
+                    <div>
+                     <Select
+                    value={selectedAttribute}
+                    placeholder="Select an attribute"
+                    onValueChange={(value) => {setSelectedAttribute(value); console.log(value)} }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an attribute" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {label.map((attribute, index) => (
+                        <SelectItem key={index} value={attribute}>
+                          {attribute}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select> 
+                 {  radial_data ? <Radar data={radial_data} options={radaroptions} className="mt-16" /> : <></>  }
+                    </div>
                   ) : selectedChart === "table" ? (
                     <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
                     {/* Table Header */}
