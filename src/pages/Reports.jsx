@@ -25,6 +25,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { Label } from "@radix-ui/react-label";
+import { Button } from '@/components/ui/button';
 
 import {
   Table,
@@ -67,8 +68,8 @@ export default function Reports() {
   const [demographicTypes, setDemographic_types] = useState([]);
 
   const [selectedAttribute, setSelectedAttribute] = useState('');
-
   const [demographicbardata, setdemographicbardata] = useState([]);
+
 
 
 
@@ -150,16 +151,13 @@ export default function Reports() {
       let relationshipTypes = new Set();
 
       data.forEach((item, index) => {
-        console.log("Processing item", item); // Log each item being processed
         const relationshipType = item.relationship_type || "Self"; // Treat null as "Self"
-        console.log("Relationship Type:", relationshipType); // Log the relationship type
         relationshipTypes.add(relationshipType);
 
         // Process each item based on the new data structure
         const attributeName = item.attribute_name;
         const weight = item.average_weight || 0; // Use average_weight if available
 
-        console.log("Attribute Name:", attributeName); // Log attribute name
 
         if (!attributeMap[attributeName]) {
           attributeMap[attributeName] = {};
@@ -173,10 +171,8 @@ export default function Reports() {
         attributeMap[attributeName][relationshipType].count += 1;
       });
 
-      console.log("Attribute Map:", attributeMap); // Log attribute map after processing
 
       const relationshipTypesArray = Array.from(relationshipTypes);
-      console.log("Relationship Types Array:", relationshipTypesArray); // Log relationship types
 
       const processedData = Object.keys(attributeMap).map((attribute, index) => {
         let row = { SrNo: index + 1, Attribute: attribute };
@@ -195,15 +191,13 @@ export default function Reports() {
         return row;
       });
 
-      console.log("Processed Data:", processedData); // Log processed data
-      console.log(Object.keys(attributeMap)); // Log processed data
 
 
       setDemographic_types(relationshipTypesArray);
       setlist_Demographic_atr(Object.keys(attributeMap));
       setDemographic_data(processedData);
 
-      console.log(list_Demographic_atr);
+   
 
     } catch (error) {
       console.log("Error processing demographic data:", error);
@@ -234,6 +228,7 @@ export default function Reports() {
 
   useEffect(() => {
     fetchData(selectedCompany);
+    fetch_spefifc_data(score_type);
   }, [selectedCompany])
 
 
@@ -535,13 +530,50 @@ export default function Reports() {
 
       const mergedScores = Object.values(selfScoresMap);
 
-      console.log(mergedScores);
+     
       setTable_Data(mergedScores);
     }
   }, [self_table_data, notself_table_data]);
 
+  const deleteEvaluationResponses = async (companyId) => {
+    try {
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('evaluation_assignments')
+        .select('id')
+        .eq('company_id', companyId);
+  
+      if (assignmentError) throw assignmentError;
+      if (!assignments.length) return console.log('No matching evaluations found.');
+  
+      const assignmentIds = assignments.map(a => a.id);
+  
+      const { data: evaluations, error: evaluationError } = await supabase
+        .from('evaluations')
+        .select('id')
+        .in('evaluation_assignment_id', assignmentIds);
+  
+      if (evaluationError) throw evaluationError;
+      if (!evaluations.length) return console.log('No evaluations found.');
+  
+      const evaluationIds = evaluations.map(e => e.id);
+  
+      const { error: deleteError } = await supabase
+        .from('evaluation_responses')
+        .delete()
+        .in('evaluation_id', evaluationIds);
+  
+      if (deleteError) throw deleteError;
+  
+      console.log('Evaluation responses deleted successfully.');
+      toast.message('Data deleted successfully');
+      setTable_Data(null);
+      setBarData(null);
+    } catch (error) {
+      toast.error(error);
+      console.error('Error deleting evaluation responses:', error.message);
+    }
+  };
   const Demography_bar_data = (attribute) => {
-    console.log(attribute);
 
     let selfresult = [];
 
@@ -559,19 +591,20 @@ export default function Reports() {
       })
     }
     console.log(selfresult);
-
+    const colors = ["#733e93", "#FF5733", "#33FF57", "#3357FF", "#FF33A1", "#F4A261", "#2A9D8F"];
+    
     setdemographicbardata({
       labels: demographicTypes,
       datasets: [
         {
           label: "Score",
           data: selfresult,
-          backgroundColor: "#733e93",
-          borderColor: "#733e93",
+          backgroundColor: selfresult.map((_, index) => colors[index % colors.length]), 
+          borderColor: selfresult.map((_, index) => colors[index % colors.length]),
           borderWidth: 1,
-        }
+        },
       ],
-    })
+    });
   }
   useEffect(() => {
     Demography_bar_data(selectedAttribute);
@@ -580,7 +613,8 @@ export default function Reports() {
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
-      <div className='mb-4'>
+      <div className=' mb-4 flex flex-row '>
+      <div  >
         <Select value={selectedCompany?.id} onValueChange={(value) => {
           const company = companies.find(c => c.id === value);
           setSelectedCompany(company);
@@ -596,6 +630,13 @@ export default function Reports() {
             ))}
           </SelectContent>
         </Select>
+      </div>
+        {selectedCompany ? <Button 
+            className="w-48 ml-3 bg-primary hover:bg-red-600 text-primary-foreground font-semibold  }"         onClick = {()=>{deleteEvaluationResponses(selectedCompany?.id)}}             >
+
+Delete Report
+        </Button>:<></>}
+        
       </div>
       {selectedCompany != null ?
         <div style={{ width: "1000px", margin: "0 auto" }}>
