@@ -107,29 +107,43 @@ export default function Reports() {
 
       if (error) throw error;
 
-      console.log(data);
+      // console.log(data);
 
       // Filter evaluations for the selected company in JS
       const filteredData = data.filter(evaluation =>
         evaluation.evaluation_assignments?.company_id === id
       );
 
+      // console.log(filteredData);
       // Transform data to match expected structure
-      const formattedData = filteredData
-        .filter(e => e.evaluation_responses?.[0]?.attribute_statement_options?.attribute_statements?.attributes?.name)
-        .map(e => ({
+      const formattedData = filteredData.map(e => {
+        const attributeMap = {};
+      
+        e.evaluation_responses.forEach(res => {
+          const attributeName = res.attribute_statement_options.attribute_statements.attributes.name;
+          const weight = res.attribute_statement_options.weight || 0;
+      
+          if (!attributeMap[attributeName]) {
+            attributeMap[attributeName] = { totalWeight: 0, count: 0 };
+          }
+      
+          attributeMap[attributeName].totalWeight += weight;
+          attributeMap[attributeName].count += 1;
+        });
+      
+        return Object.entries(attributeMap).map(([attribute_name, { totalWeight, count }]) => ({
           relationship_type: e.relationship_type,
           company_name: e.evaluation_assignments?.companies?.name || "N/A",
-          attribute_name: e.evaluation_responses[0].attribute_statement_options.attribute_statements.attributes.name,
-          average_weight: e.evaluation_responses.length > 0
-            ? e.evaluation_responses.reduce((sum, res) => sum + (res.attribute_statement_options.weight || 0), 0) / e.evaluation_responses.length
-            : 0,
-          num_evaluations: e.evaluation_responses.length || 1,
+          attribute_name,
+          average_weight: count > 0 ? totalWeight / count : 0,
+          num_evaluations: count,
         }));
+      }).flat();
+      
 
       setData(formattedData);
 
-      console.log(data);
+      // console.log(data);
 
 
     } catch (err) {
@@ -237,13 +251,19 @@ export default function Reports() {
   const fetch_spefifc_data = (relationship_type) => {
     if (!data) return;
 
+    // console.log(data);
+  
     const selfData = data.filter((item) => item.relationship_type === null);
 
     const notSelfData = relationship_type === "total"
       ? data.filter((item) => item.relationship_type !== null)
       : data.filter((item) => item.relationship_type === relationship_type);
 
-    const labels = [...new Set(data.map((item) => item.attribute_name))];
+    // console.log(selfData);
+    // console.log(notSelfData);
+
+  
+      const labels = [...new Set(data.map((item) => item.attribute_name))];
 
     const selfResultsMap = {};
     const notSelfResultsMap = {};
@@ -260,6 +280,9 @@ export default function Reports() {
         ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) / notSelfItems.length
         : 0;
     });
+
+    // console.log(selfData);
+    // console.log(notSelfData);
 
     setLabel(labels);
     setSelfResults(Object.values(selfResultsMap));
@@ -590,7 +613,7 @@ export default function Reports() {
         }
       })
     }
-    console.log(selfresult);
+    // console.log(selfresult);
     const colors = ["#733e93", "#FF5733", "#33FF57", "#3357FF", "#FF33A1", "#F4A261", "#2A9D8F"];
     
     setdemographicbardata({

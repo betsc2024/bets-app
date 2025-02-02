@@ -131,8 +131,8 @@ export default function UserReports() {
           console.error(self_Error);
           console.error(not_self_Error);
         } else {
-          console.log(self_Data);
-          console.log(not_self_Data);
+          // console.log(self_Data);
+          // console.log(not_self_Data);
       
           const calculateAverageWeight = (data) => {
             const attributeMap = {};
@@ -160,32 +160,42 @@ export default function UserReports() {
           const result = calculateAverageWeight(self_Data);
           const result2 = calculateAverageWeight(not_self_Data);
 
-          console.log(result);
-          console.log(result2);
+
+          // console.log(result);
+          // console.log(result2);
           setSelfScore(result);
           setNotSelfScore(result2);
         }
 
       } else {
-        console.log(self_Data);
+        // console.log(self_Data);
         if (self_Error) {
           console.error(self_Error);
         } else {
-          const result = self_Data.map((evaluation) => {
-            const weightValues = evaluation.evaluation_responses.flatMap(response =>
-              response.attribute_statement_options.weight
-            );
-            // Calculate the average weight for each evaluation
-            const avg_weight = weightValues.length > 0
-              ? weightValues.reduce((acc, weight) => acc + weight, 0) / weightValues.length
-              : 0;
-            const attribute_id = evaluation.evaluation_responses[0]?.attribute_statement_options?.attribute_statements?.attributes.id;
-            return {
-              attribute_id,
-              avg_weight
-            };
-          });
-          console.log(result);
+          const calculateAverageWeight = (data) => {
+            const attributeMap = {};
+            
+            data.forEach(evaluation => {
+                evaluation.evaluation_responses.forEach(response => {
+                    const { weight, attribute_statements } = response.attribute_statement_options;
+                    const { id, name } = attribute_statements.attributes;
+                    
+                    if (!attributeMap[id]) {
+                        attributeMap[id] = { name, totalWeight: 0, count: 0 };
+                    }
+                    
+                    attributeMap[id].totalWeight += weight;
+                    attributeMap[id].count += 1;
+                });
+            });
+            
+            return Object.keys(attributeMap).map(id => ({
+                attribute_id: id,
+                name: attributeMap[id].name,
+                avg_weight: attributeMap[id].totalWeight / attributeMap[id].count
+            }));
+        };
+        const result = calculateAverageWeight(self_Data);
           setSelfScore(result);
         }
       }
@@ -520,8 +530,8 @@ export default function UserReports() {
     { id: "bar", label: "Bar Chart" },
     { id: "radial", label: "Radial Chart" },
   ];
-  console.log(self_table_data);
-  console.log(notself_table_data);
+  // console.log(self_table_data);
+  // console.log(notself_table_data);
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
