@@ -724,7 +724,7 @@ export default function Reports() {
         <div style={{ width: "1000px", margin: "0 auto" }}>
           <Accordion.Root type="single" collapsible className="w-full  space-y-2">
             {items.map((item,index) => (
-              <Accordion.Item key={item.id}  value={`item-${item.id}`} className="border rounded-md">
+              <Accordion.Item key={item.id}  value={item.id} className="border rounded-md">
                 <Accordion.Header className="w-full">
                   <Accordion.Trigger
                     className={cn(
@@ -805,8 +805,8 @@ export default function Reports() {
                               <SelectValue placeholder="Select an attribute" />
                             </SelectTrigger>
                             <SelectContent>
-                              {list_Demographic_atr.map((attribute) => (
-                                <SelectItem key={attribute} value={attribute}>
+                              {list_Demographic_atr.map((attribute,index) => (
+                                <SelectItem key={index} value={attribute}>
                                   {attribute}
                                 </SelectItem>
                               ))}
@@ -828,8 +828,8 @@ export default function Reports() {
                             <SelectValue placeholder="Select an attribute" />
                           </SelectTrigger>
                           <SelectContent>
-                            {label.map((attribute) => (
-                              <SelectItem key={attribute} value={attribute}>
+                            {label.map((attribute,index) => (
+                              <SelectItem key={index} value={attribute}>
                                 {attribute}
                               </SelectItem>
                             ))}

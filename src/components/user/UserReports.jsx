@@ -600,11 +600,6 @@ setRadial_data(radarData); // Set the radar chart data
       title: "Total",
       key: "total",
     },
-    {
-      id:8,
-      title: "Demography",
-      key: "demography",
-    },
   ];
   const chartOptions = [
     { id: "table", label: "Table" },
