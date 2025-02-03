@@ -58,6 +58,8 @@ export default function Reports() {
   const [radial_score, setRadial_Score] = useState(null);
   const [radial_data, setRadial_data] = useState(null);
   const [radial_result, set_Radial_Result] = useState(null);
+  const [radial_self_data,setRadialSelfData] = useState(null);
+  
 
   const [self_table_data, setSelfTableData] = useState([]);
   const [notself_table_data, setNotSelfTableData] = useState([]);
@@ -344,7 +346,36 @@ export default function Reports() {
 
       const data = filterByAttributeName(query_Data, selectedAttribute);
 
+      const fetch_self_Data = (query_Data)=>{
+        const filteredData = query_Data.filter(item => item.relationship_type === null);
 
+    const processedData = {};
+
+    filteredData.forEach((evaluation) => {
+      evaluation.evaluation_responses.forEach((response) => {
+        const option = response.attribute_statement_options;
+        if (option && option.attribute_statements) {
+          const statement = option.attribute_statements.statement;
+          if (!processedData[statement]) {
+            processedData[statement] = { totalWeight: 0, count: 0 };
+          }
+          processedData[statement].totalWeight += option.weight;
+          processedData[statement].count += 1;
+        }
+      });
+    });
+
+    const result = Object.entries(processedData).map(([statement, { totalWeight, count }]) => ({
+      statement,
+      average_weight: totalWeight / count,
+    }));
+
+  
+    return result;
+      }
+     const temp_self_Data =  fetch_self_Data(data);
+      setRadialSelfData(temp_self_Data);
+      
       const processedData = {};
 
       data.forEach((evaluation) => {
@@ -397,7 +428,7 @@ export default function Reports() {
 
     // Fetch self data and max data
 
-    if (radial_score && radial_label) {
+    if (radial_score && radial_label&& radial_self_data) {
 
       const result = radial_score;
 
@@ -405,7 +436,7 @@ export default function Reports() {
       console.log(selfresults);
 
       const maxData = new Array(result.length).fill(100);
-      const selfData = result.map(item => item.average_weight);
+      const selfData = radial_self_data.map(item => item.average_weight);
 
       let relationshipData = [];
       relationshipData = result.map(item => item.average_weight);
@@ -454,7 +485,7 @@ export default function Reports() {
 
       setRadial_data(radarData); // Set the radar chart data
     }
-  }, [selectedAttribute, radial_label, radial_score])
+  }, [selectedAttribute, radial_label, radial_score,radial_self_data])
 
 
 
