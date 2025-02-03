@@ -55,10 +55,14 @@ export default function UserReports() {
   const [selectedChart, setSelectedChart] = useState("table");
   const [bardata, setBarData] = useState(null);
   const [score_type,setScore_Type] = useState("self");
+
   const [radial_label,setRadial_Label] = useState(null);
   const [radial_score,setRadial_Score] = useState(null);
   const [radial_data,setRadial_data] = useState(null);
+  const [radial_self_data,setRadialSelfData] = useState(null);
   const [radial_result,set_Radial_Result] = useState(null);
+  
+  
   const [self_table_data,setSelfTableData] =useState([]);
   const [notself_table_data,setNotSelfTableData] =useState([]);
   const [table_data,setTable_Data] = useState([]);
@@ -312,6 +316,8 @@ export default function UserReports() {
 
       const { data:query_Data, error } = await query;
 
+      console.log(query_Data);
+
       const filterByAttributeName = (data, attributeName) => {
         return data
           .map(item => ({
@@ -324,8 +330,38 @@ export default function UserReports() {
       };
 
       const data = filterByAttributeName(query_Data,selectedAttribute);
+      console.log(data);
 
-      // console.log(data);
+      const fetch_self_Data = (query_Data)=>{
+        const filteredData = query_Data.filter(item => item.relationship_type === null);
+
+    const processedData = {};
+
+    filteredData.forEach((evaluation) => {
+      evaluation.evaluation_responses.forEach((response) => {
+        const option = response.attribute_statement_options;
+        if (option && option.attribute_statements) {
+          const statement = option.attribute_statements.statement;
+          if (!processedData[statement]) {
+            processedData[statement] = { totalWeight: 0, count: 0 };
+          }
+          processedData[statement].totalWeight += option.weight;
+          processedData[statement].count += 1;
+        }
+      });
+    });
+
+    const result = Object.entries(processedData).map(([statement, { totalWeight, count }]) => ({
+      statement,
+      average_weight: totalWeight / count,
+    }));
+
+  
+    return result;
+      }
+     const temp_self_Data =  fetch_self_Data(data);
+      setRadialSelfData(temp_self_Data);
+      
   
       if (error) {
         throw new Error('Error fetching data: ' + error.message);
@@ -358,7 +394,7 @@ export default function UserReports() {
         average_weight: totalWeight / count,
       }));
       
-    
+      console.log(result);
       set_Radial_Result(result);
   
   
@@ -390,14 +426,15 @@ export default function UserReports() {
 
           // Fetch self data and max data
 
-    if(radial_score && radial_label ){
+    if(radial_score && radial_label && radial_self_data){
 
       const result = radial_score;
 
       console.log(result);
             
       const maxData = new Array(result.length).fill(100); 
-      const selfData = result.map(item => item.average_weight); 
+
+      const selfData = radial_self_data.map(item => item.average_weight); 
       
       let relationshipData = [];
       relationshipData = result.map(item => item.average_weight); 
@@ -446,7 +483,7 @@ const radarData = {
 
 setRadial_data(radarData); // Set the radar chart data
     }
-  },[selectedAttribute,radial_label,radial_score])
+  },[selectedAttribute,radial_label,radial_score,radial_self_data])
 
   const handleAccordionClick = (relationship_type) => {
     fetch_Data(relationship_type);
