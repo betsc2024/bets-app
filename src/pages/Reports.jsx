@@ -36,6 +36,7 @@ import {
   TableRow,
   TableCell,
 } from '@/components/ui/table';
+import classNames from 'classnames';
 
 
 
@@ -730,14 +731,31 @@ export default function Reports() {
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
-      <div className=' mb-4 flex flex-row '>
-        <div  >
-          <Select value={selectedCompany?.id} onValueChange={(value) => {
+      <div className=' mb-4 flex flex-row justify-items-end align-baseline '>
+        <div className='flex flex-col' >
+          <Label className='mb-3'> Select a Company: </Label>
+          <Select className='mb-3' value={selectedCompany?.id} onValueChange={(value) => {
             const company = companies.find(c => c.id === value);
             setSelectedCompany(company);
           }}>
             <SelectTrigger>
               <SelectValue placeholder="Select a company" />
+            </SelectTrigger>
+            <SelectContent>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Label className='mt-3 mb-3'> Select an Employee </Label>
+          <Select  value={selectedCompany?.id} onValueChange={(value) => {
+            const company = companies.find(c => c.id === value);
+            setSelectedCompany(company);
+          }}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a Employee" />
             </SelectTrigger>
             <SelectContent>
               {companies.map((company) => (
@@ -979,7 +997,7 @@ export default function Reports() {
           </Accordion.Root>
 
         </div>
-        : <p>Please Select a Company</p>}
+        : <></>}
 
     </div>
   );
