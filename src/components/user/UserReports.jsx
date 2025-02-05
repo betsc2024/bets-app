@@ -84,28 +84,30 @@ export default function UserReports() {
         .select(`
         id,
         evaluator_id,
+        status,
         relationship_type,
+        evaluation_assignments (
+            user_to_evaluate_id
+        ),
         evaluation_responses (
-          id,
-          selected_option_id,
-          attribute_statement_options (
-            weight,
-            attribute_statements (
-              id,
-              statement,
-              attributes (
-                id,
-                name      
-              )
-            )
+        id,
+        selected_option_id,
+        attribute_statement_options (
+        weight,
+        attribute_statements (
+        id,
+        statement,
+        attributes (
+        id,
+        name      
+           )
           )
+         )
         )
       `)
+      .eq('evaluation_assignments.user_to_evaluate_id',user?.id)
         .eq('status', 'completed')
-        .eq("evaluator_id",user?.id)
         .is('relationship_type', null);
-
-
 
       const { data: self_Data, error: self_Error } = await query1;
 
@@ -116,7 +118,11 @@ export default function UserReports() {
         .select(`
           id,
           evaluator_id,
+          status,
           relationship_type,
+          evaluation_assignments (
+             user_to_evaluate_id
+          ),
           evaluation_responses (
             id,
             selected_option_id,
@@ -133,30 +139,42 @@ export default function UserReports() {
             )
           )
         `)
-        .eq('status', 'completed')
-        .eq('evaluator_id',user?.id);
+        .eq("evaluation_assignments.user_to_evaluate_id",user?.id)
+        .eq('status', 'completed');
       
       if (relationship_type !== "total") {
         query2 = query2.eq("relationship_type", relationship_type);
       }
 
-        const { data: not_self_Data, error: not_self_Error } = await query2;
+        const { data: total_Data, error: total_Error } = await query2;
 
+      console.log(self_Data);
+      console.log(total_Data);
+    
 
-        if (self_Error && not_self_Error) {
+        if (self_Error && total_Error) {
           console.error(self_Error);
-          console.error(not_self_Error);
+          console.error(total_Error);
         } else {
-          // console.log(self_Data);
-          // console.log(not_self_Data);
-      
-          const calculateAverageWeight = (data) => {
+            const calculateAverageWeight = (data) => {
             const attributeMap = {};
-            
+            const statementMap = {};
+
+            let firstsname="" ;
             data.forEach(evaluation => {
                 evaluation.evaluation_responses.forEach(response => {
                     const { weight, attribute_statements } = response.attribute_statement_options;
                     const { id, name } = attribute_statements.attributes;
+                    
+                    const sname = attribute_statements.statement;
+
+                    if(!firstsname){
+                      firstsname = sname;
+                    }
+
+                    if(!statementMap[sname]){
+                      statementMap[sname] = {sname,count: 0};
+                    }
                     
                     if (!attributeMap[id]) {
                         attributeMap[id] = { name, totalWeight: 0, count: 0 };
@@ -164,21 +182,32 @@ export default function UserReports() {
                     
                     attributeMap[id].totalWeight += weight;
                     attributeMap[id].count += 1;
+
+                    statementMap[sname].count += 1;
+                   
                 });
             });
-            
+            // console.log(attributeMap);
+            // console.log(statementMap);
+            let count_statement = 1;
+            if(firstsname!=""){
+              count_statement = statementMap[firstsname].count;
+           }
             return Object.keys(attributeMap).map(id => ({
                 attribute_id: id,
                 name: attributeMap[id].name,
-                avg_weight: attributeMap[id].totalWeight / attributeMap[id].count
+                avg_weight: attributeMap[id].totalWeight / attributeMap[id].count,
+                avg_score_perc: (attributeMap[id].totalWeight / attributeMap[id].count)/count_statement
             }));
         };
           const result = calculateAverageWeight(self_Data);
-          const result2 = calculateAverageWeight(not_self_Data);
+          const result2 = calculateAverageWeight(total_Data);
 
 
           // console.log(result);
           // console.log(result2);
+
+
           setSelfScore(result);
           setNotSelfScore(result2);
         }
@@ -190,25 +219,49 @@ export default function UserReports() {
         } else {
           const calculateAverageWeight = (data) => {
             const attributeMap = {};
+            const statementMap = {};
+
+            let firstsname="" ;
+            
             
             data.forEach(evaluation => {
                 evaluation.evaluation_responses.forEach(response => {
                     const { weight, attribute_statements } = response.attribute_statement_options;
                     const { id, name } = attribute_statements.attributes;
+                    const sname = attribute_statements.statement;
+
                     
                     if (!attributeMap[id]) {
                         attributeMap[id] = { name, totalWeight: 0, count: 0 };
                     }
+
+                    if(!firstsname){
+                      firstsname = sname;
+                    }
+                    if(!statementMap[sname]){
+                      statementMap[sname] = {sname,count: 0};
+                    }
                     
                     attributeMap[id].totalWeight += weight;
                     attributeMap[id].count += 1;
+
+
+                    statementMap[sname].count += 1;
+                   
                 });
             });
             
+            let count_statement = 1;
+            if(firstsname!=""){
+               count_statement = statementMap[firstsname].count;
+            }
+
             return Object.keys(attributeMap).map(id => ({
                 attribute_id: id,
                 name: attributeMap[id].name,
-                avg_weight: attributeMap[id].totalWeight / attributeMap[id].count
+                avg_weight: attributeMap[id].totalWeight / attributeMap[id].count,
+                avg_score_perc: (attributeMap[id].totalWeight / attributeMap[id].count)/count_statement
+
             }));
         };
         const result = calculateAverageWeight(self_Data);
@@ -259,13 +312,15 @@ export default function UserReports() {
               table_data.push({
                 id: index,
                 name: item.name,
-                avg_weight: foundScore.avg_weight
+                avg_weight: foundScore.avg_weight,
+                avg_perc:foundScore.avg_score_perc
               });
             }else{
               table_data.push({
                 id: index,
                 name: item.name,
-                avg_reln_weight: foundScore.avg_weight
+                avg_reln_weight: foundScore.avg_weight,
+                avg_reln_perc:foundScore.avg_score_perc
               });
             }
           } 
@@ -300,6 +355,9 @@ export default function UserReports() {
         .from('evaluations')
         .select(`
           relationship_type,
+          evaluation_assignments (
+             user_to_evaluate_id
+          ),
           evaluation_responses (
             attribute_statement_options (
               weight,
@@ -313,10 +371,13 @@ export default function UserReports() {
           )
         `)
         .eq('status', 'completed') // Only filtering by completed status
+        .eq("evaluation_assignments.user_to_evaluate_id",user?.id);
+
+          
 
       const { data:query_Data, error } = await query;
 
-      console.log(query_Data);
+      // console.log(query_Data);
 
       const filterByAttributeName = (data, attributeName) => {
         return data
@@ -330,7 +391,7 @@ export default function UserReports() {
       };
 
       const data = filterByAttributeName(query_Data,selectedAttribute);
-      console.log(data);
+      // console.log(data);
 
       const fetch_self_Data = (query_Data)=>{
         const filteredData = query_Data.filter(item => item.relationship_type === null);
@@ -360,6 +421,8 @@ export default function UserReports() {
     return result;
       }
      const temp_self_Data =  fetch_self_Data(data);
+      // console.log(temp_self_Data);
+
       setRadialSelfData(temp_self_Data);
       
   
@@ -394,7 +457,7 @@ export default function UserReports() {
         average_weight: totalWeight / count,
       }));
       
-      console.log(result);
+      // console.log(result);
       set_Radial_Result(result);
   
   
@@ -430,7 +493,7 @@ export default function UserReports() {
 
       const result = radial_score;
 
-      console.log(result);
+      // console.log(result);
             
       const maxData = new Array(result.length).fill(100); 
 
@@ -562,14 +625,15 @@ setRadial_data(radarData); // Set the radar chart data
         return {
           ...selfScore,
           avg_reln_weight: relationshipScore ? relationshipScore.avg_reln_weight : 0,
+          avg_reln_perc: relationshipScore ? relationshipScore.avg_reln_perc : 0,
         };
       });
   
       setTable_Data(mergedScores);
 
-      console.log(self_table_data);
-      console.log(notself_table_data);
-      console.log(table_data);
+      // console.log(self_table_data);
+      // console.log(notself_table_data);
+      // console.log(table_data);
 
     }
   }, [self_table_data, notself_table_data]);
@@ -760,7 +824,7 @@ setRadial_data(radarData); // Set the radar chart data
                             <TableCell>{row.name}</TableCell>
                             <TableCell className="text-center">{row.avg_weight.toFixed(2)}</TableCell>
                             <TableCell className="text-center">
-                              {((row.avg_weight / 100) * 100).toFixed(2)}%
+                              {row.avg_perc.toFixed(2)}%
                             </TableCell>
                   
                             {item.key !== null && (
@@ -769,7 +833,7 @@ setRadial_data(radarData); // Set the radar chart data
                                   {row.avg_reln_weight?.toFixed(2) || "0.00"}
                                 </TableCell>
                                 <TableCell className="text-center">
-                                  {((row.avg_reln_weight / 100) * 100).toFixed(2)}%
+                                  {row.avg_reln_perc.toFixed(2)}%
                                 </TableCell>
                               </>
                             )}
