@@ -76,12 +76,18 @@ export default function Reports() {
 
   const [selectedAttribute, setSelectedAttribute] = useState('');
 
+  const [users,setUsers] = useState([]);
+  const [selectedUser,setSelectedUser] = useState(null);
+  const [relation_count_map,setRelationCountMap] = useState([]);
+  // const [relation_count_map_o,setRelationCountMap_o] = useState({});
 
 
 
 
 
-  const fetchData = async (selectedCompany) => {
+
+
+  const fetchData = async (selectedCompany ,selectedUser) => {
     try {
       setBarData(null);
       setTable_Data([]);
@@ -89,6 +95,7 @@ export default function Reports() {
 
 
       const id = selectedCompany?.id;
+      const user_id = selectedUser?.id;
 
       // Fetch data without deep filtering
       const { data, error } = await supabase
@@ -97,6 +104,7 @@ export default function Reports() {
           relationship_type,
           evaluation_assignments ( 
             id,
+            user_to_evaluate_id,
             company_id,
             companies ( id, name ) 
           ),
@@ -104,6 +112,7 @@ export default function Reports() {
             attribute_statement_options ( 
               weight, 
               attribute_statements ( 
+                statement,
                 attributes ( name ) 
               ) 
             ) 
@@ -117,8 +126,30 @@ export default function Reports() {
 
       // Filter evaluations for the selected company in JS
       const filteredData = data.filter(evaluation =>
-        evaluation.evaluation_assignments?.company_id === id
-      );
+        evaluation.evaluation_assignments?.company_id === id && 
+        evaluation.evaluation_assignments?.user_to_evaluate_id === user_id
+      )
+      const relation_count_map_temp = {};
+
+      filteredData.map((item)=>{
+        const id = item.relationship_type;
+        if(!relation_count_map_temp[id]){
+            relation_count_map_temp[id] = 1;
+          }
+          relation_count_map_temp[id] +=1;
+      })
+
+      const relationCountArray = Object.entries(relation_count_map_temp).map(([relationship_type, count], index) => ({
+        SrNo: index + 1,
+        RelationshipType: relationship_type === "null" ? "self" : relationship_type, // Handling null case
+        Count: count
+      }));  
+  
+
+      console.log(relation_count_map_temp);
+      setRelationCountMap(relationCountArray);
+      console.log(filteredData);
+
 
       // console.log(filteredData);
       // Transform data to match expected structure
@@ -128,21 +159,28 @@ export default function Reports() {
         e.evaluation_responses.forEach(res => {
           const attributeName = res.attribute_statement_options.attribute_statements.attributes.name;
           const weight = res.attribute_statement_options.weight || 0;
+  
 
           if (!attributeMap[attributeName]) {
             attributeMap[attributeName] = { totalWeight: 0, count: 0 };
           }
+       
+          
 
           attributeMap[attributeName].totalWeight += weight;
           attributeMap[attributeName].count += 1;
+
+
         });
+
+      
 
         return Object.entries(attributeMap).map(([attribute_name, { totalWeight, count }]) => ({
           relationship_type: e.relationship_type,
           company_name: e.evaluation_assignments?.companies?.name || "N/A",
           attribute_name,
           average_weight: count > 0 ? totalWeight / count : 0,
-          num_evaluations: count,
+          average_score_percentage: (totalWeight / count)/relation_count_map_temp[e.relationship_type] ,
         }));
       }).flat();
 
@@ -241,15 +279,46 @@ export default function Reports() {
       toast.error(error);
     }
   }
+  const fetch_user = async () => {
+    if(selectedCompany ){
+
+      console.log(selectedCompany);
+      try {
+        const { data, error } = await supabase
+          .from("users")
+          .select('*')
+          .eq('company_id',selectedCompany?.id);
+        if (data) {
+          setUsers(data);
+          
+          console.log(data);
+  
+        } else {
+          console.log(error);
+        }
+      } catch (error) {
+        console.log(error);
+        toast.error(error);
+      }
+    }else{
+      console.log("Error in Fetching Company");
+    }
+  }
 
   useEffect(() => {
     fetch_companies();
   }, []);
 
   useEffect(() => {
-    fetchData(selectedCompany);
+    fetch_user();
+    fetchData(selectedCompany,selectedUser);
     fetch_spefifc_data(score_type);
-  }, [selectedCompany])
+  }, [selectedCompany,selectedUser])
+
+ 
+
+
+
 
 
 
@@ -299,19 +368,27 @@ export default function Reports() {
     // setTable_Data(data);
   };
   
-    useEffect(()=>{
-      
-    })
+
 
 
 
 
   const fetch_radar = async (relationship_type) => {
+    
     try {
+      
+       const id = selectedCompany?.id;
+       const user_id = selectedUser?.id;
+
       let query = supabase
         .from('evaluations')
         .select(`
           relationship_type,
+              evaluation_assignments ( 
+            id,
+            user_to_evaluate_id,
+            company_id
+            ),
           evaluation_responses (
             attribute_statement_options (
               weight,
@@ -327,8 +404,19 @@ export default function Reports() {
         .eq('status', 'completed'); // Only filtering by completed status
 
 
-      const { data: query_Data, error } = await query;
 
+      const { data: query_info, error } = await query;
+
+          console.log(query_info);
+          console.log(id);
+          console.log(user_id);
+
+      const  query_Data = query_info.filter(evaluation =>
+        evaluation.evaluation_assignments?.company_id === id && 
+        evaluation.evaluation_assignments?.user_to_evaluate_id === user_id
+      )
+    
+      console.log(query_Data);
 
       if (error) {
         throw new Error('Error fetching data: ' + error.message);
@@ -346,6 +434,7 @@ export default function Reports() {
       };
 
       const data = filterByAttributeName(query_Data, selectedAttribute);
+      console.log(data);
 
       const fetch_self_Data = (query_Data)=>{
         const filteredData = query_Data.filter(item => item.relationship_type === null);
@@ -731,7 +820,7 @@ export default function Reports() {
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
-      <div className=' mb-4 flex flex-row justify-items-end align-baseline '>
+      <div className=' mb-4 flex flex-row justify-items-end items-end '>
         <div className='flex flex-col' >
           <Label className='mb-3'> Select a Company: </Label>
           <Select className='mb-3' value={selectedCompany?.id} onValueChange={(value) => {
@@ -750,30 +839,59 @@ export default function Reports() {
             </SelectContent>
           </Select>
           <Label className='mt-3 mb-3'> Select an Employee </Label>
-          <Select  value={selectedCompany?.id} onValueChange={(value) => {
-            const company = companies.find(c => c.id === value);
-            setSelectedCompany(company);
+          <Select  value={selectedUser?.id} onValueChange={(value) => {
+            const user = users.find(c => c.id === value);
+            setSelectedUser(user);
           }}>
             <SelectTrigger>
               <SelectValue placeholder="Select a Employee" />
             </SelectTrigger>
             <SelectContent>
-              {companies.map((company) => (
-                <SelectItem key={company.id} value={company.id}>
-                  {company.name}
+              {users.map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.full_name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
-        {selectedCompany ? <Button
+        {selectedCompany && selectedUser ? <Button
           className="w-48 ml-3 bg-primary hover:bg-red-600 text-primary-foreground font-semibold  }" onClick={() => { deleteEvaluationResponses(selectedCompany?.id) }}             >
 
           Delete Report
-        </Button> : <></>}
-
+        </Button> : <></> }
       </div>
-      {selectedCompany != null ?
+        {
+          selectedCompany && selectedUser ? 
+      <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
+  <TableHeader className="text-white">
+    <TableRow>
+      <TableHead className="w-12 text-center">Sr. No.</TableHead>
+      <TableHead className="text-left">Relationship Type</TableHead>
+      <TableHead className="text-center">Count</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    { relation_count_map.length > 0 ? (
+      relation_count_map.map((row, index) => (
+        <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
+          <TableCell className="text-center">{row.SrNo}</TableCell>
+          <TableCell className="text-left">{row.RelationshipType}</TableCell>
+          <TableCell className="text-center">{row.Count}</TableCell>
+        </TableRow>
+      ))
+    ) : (
+      <TableRow>
+        <TableCell colSpan={3} className="text-center py-2">
+          No data available
+        </TableCell>
+      </TableRow>
+    )}
+  </TableBody>
+</Table> : <></>
+      } 
+                      
+      { (selectedCompany != null && selectedUser !=null) ?
         <div style={{ width: "1000px", margin: "0 auto" }}>
           <Accordion.Root type="single" collapsible className="w-full  space-y-2">
             {items.map((item,index) => (
@@ -962,7 +1080,7 @@ export default function Reports() {
                                   <TableCell>{row.attribute_name}</TableCell>
                                   <TableCell className="text-center">{row.average_weight.toFixed(2)}</TableCell>
                                   <TableCell className="text-center">
-                                    {((row.average_weight / 100) * 100).toFixed(2)}%
+                                    {row.average_score_percentage.toFixed(2)}%
                                   </TableCell>
 
                                   {item.key !== null && (
@@ -997,7 +1115,7 @@ export default function Reports() {
           </Accordion.Root>
 
         </div>
-        : <></>}
+        : <> Please Select a Company and User</>}
 
     </div>
   );

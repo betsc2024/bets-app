@@ -83,10 +83,10 @@ export default function UserReports() {
         .from('evaluations')
         .select(`
         id,
-        evaluator_id,
         status,
         relationship_type,
         evaluation_assignments (
+            id,
             user_to_evaluate_id
         ),
         evaluation_responses (
@@ -117,10 +117,10 @@ export default function UserReports() {
         .from('evaluations')
         .select(`
           id,
-          evaluator_id,
           status,
           relationship_type,
           evaluation_assignments (
+            id,
              user_to_evaluate_id
           ),
           evaluation_responses (
@@ -140,7 +140,8 @@ export default function UserReports() {
           )
         `)
         .eq("evaluation_assignments.user_to_evaluate_id",user?.id)
-        .eq('status', 'completed');
+        .eq('status', 'completed')
+        .not('evaluation_assignments', 'is', null); // Ensure evaluation_assignments exists
       
       if (relationship_type !== "total") {
         query2 = query2.eq("relationship_type", relationship_type);
@@ -150,6 +151,7 @@ export default function UserReports() {
 
       console.log(self_Data);
       console.log(total_Data);
+
     
 
         if (self_Error && total_Error) {
