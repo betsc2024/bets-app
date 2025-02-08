@@ -23,14 +23,30 @@ const UserEvaluations = () => {
   const [responses, setResponses] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
-
+  const {userCompany,setUserCompany} = useState(null);
   // console.log(user.user_metadata?.full_name); Debugging
 
   useEffect(() => {
     if (user?.id) {
       fetchEvaluations();
+      company();
     }
   }, [user]);
+
+  const company = async ()=>{
+    try{
+       const {data,error} = await supabase.from("companies").select(`id,name `).eq('id', user.user_metadata?.company_id);
+       console.log(data);
+       if(data){
+         setUserCompany(data);
+       }else{
+        console.log(error);
+       }
+
+    }catch(e){
+      console.log(e);
+    }
+  }
 
   const fetchEvaluations = async () => {
     try {
@@ -250,7 +266,7 @@ const UserEvaluations = () => {
 
   return (
     <div className="container mx-auto p-4 md:p-6">
-      <h1 className="text-3xl font-bold text-purple-800 mb-8">My Evaluations</h1>
+      <h3 className="text-xl font-bold text-purple-800 mb-8">{user.user_metadata?.full_name}-{userCompany?.name}</h3>
 
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {evaluations.map((evaluation) => {

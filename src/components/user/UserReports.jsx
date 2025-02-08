@@ -7,6 +7,7 @@ import {
   LineElement,
   Filler
 } from "chart.js";
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { supabase } from '@/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -40,7 +41,7 @@ import {
 
 
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, RadialLinearScale, PointElement, LineElement, Filler);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, RadialLinearScale, PointElement, LineElement, Filler,ChartDataLabels);
 
 export default function UserReports() {
 
@@ -145,6 +146,8 @@ export default function UserReports() {
       
       if (relationship_type !== "total") {
         query2 = query2.eq("relationship_type", relationship_type);
+      }else{
+        query2 = query2.neq("relationship_type", null);       
       }
 
         const { data: total_Data, error: total_Error } = await query2;
@@ -198,8 +201,8 @@ export default function UserReports() {
             return Object.keys(attributeMap).map(id => ({
                 attribute_id: id,
                 name: attributeMap[id].name,
-                avg_weight: attributeMap[id].totalWeight / attributeMap[id].count,
-                avg_score_perc: (attributeMap[id].totalWeight / attributeMap[id].count)/count_statement
+                avg_weight: attributeMap[id].totalWeight  / (attributeMap[id].count/count_statement),
+                avg_score_perc: (attributeMap[id].totalWeight / attributeMap[id].count)
             }));
         };
           const result = calculateAverageWeight(self_Data);
@@ -277,6 +280,9 @@ export default function UserReports() {
   };
 
   useEffect(() => {
+        console.log(selfscore);
+        console.log(notselfscore)
+
     if (selfscore) {
       fetch_attributes("selfscore", selfscore);
       
@@ -309,20 +315,20 @@ export default function UserReports() {
           const foundScore = score.find(s => s.attribute_id === item.id);
           if (foundScore) {
             label_temp.push(item.name);
-            res_temp.push(Math.round(foundScore.avg_weight));
+            res_temp.push(Math.round(foundScore.avg_score_perc));
             if(score_type == "selfscore"){
               table_data.push({
                 id: index,
                 name: item.name,
                 avg_weight: foundScore.avg_weight,
-                avg_perc:foundScore.avg_score_perc
+                avg_perc: foundScore.avg_score_perc
               });
             }else{
               table_data.push({
                 id: index,
                 name: item.name,
                 avg_reln_weight: foundScore.avg_weight,
-                avg_reln_perc:foundScore.avg_score_perc
+                avg_reln_perc: foundScore.avg_score_perc
               });
             }
           } 
@@ -405,12 +411,14 @@ export default function UserReports() {
         const option = response.attribute_statement_options;
         if (option && option.attribute_statements) {
           const statement = option.attribute_statements.statement;
-          if (!processedData[statement]) {
-            processedData[statement] = { totalWeight: 0, count: 0 };
+            if (!processedData[statement]) {
+              processedData[statement] = { totalWeight: 0, count: 0 };
+            }
+            processedData[statement].totalWeight += option.weight;
+            processedData[statement].count += 1;
           }
-          processedData[statement].totalWeight += option.weight;
-          processedData[statement].count += 1;
-        }
+
+    
       });
     });
 
@@ -434,8 +442,10 @@ export default function UserReports() {
 
   
       const processedData = {};
+      const filterData2 = data.filter(item => item.relationship_type !== null);
+
   
-      data.forEach((evaluation) => {
+      filterData2.forEach((evaluation) => {
         evaluation.evaluation_responses.forEach((response) => {
           // console.log(response);
 
@@ -555,25 +565,48 @@ setRadial_data(radarData); // Set the radar chart data
     specific_type_bar(relationship_type);
   };
 
+const options = {
+  indexAxis: "x", // Vertical bars
+  responsive: true,
+  elements: {
+    bar: {
+      borderWidth: 2,
+    },
+  },
+  plugins: {
+    legend: {
+      position: "top",
+      
+    },
+    title: {
+      display: true,
+      text: "Report",
+    },
+  },
+  // datalabels: {
+  //   anchor: "end",
+  //   align: "top",
+  //   color: "white", // White text on bars
+  // },
+  scales: {
+    x: {
+      beginAtZero: true,
+     
+      ticks: {
+        
+        // callback: function (value, index) {
+        //   return selfresults[index] || ""; // Ensures the correct values appear
+        // },
+      },
+    },
+    y: {
+      beginAtZero: true,
+    },
+  },
+};
+
   
-  const options = {
-    indexAxis: "x", // Ensures vertical bars (horizontal if 'y')
-    elements: {
-      bar: {
-        borderWidth: 2,
-      },
-    },
-    responsive: true,
-    plugins: {
-      legend: {
-        position: "top",
-      },
-      title: {
-        display: true,
-        text: "Report",
-      },
-    },
-  };
+  
   const specific_type_bar = (relationship_type)=>{
     if (label && selfresults) {
       if (score_type === "self") {
@@ -617,6 +650,8 @@ setRadial_data(radarData); // Set the radar chart data
 
   useEffect(() => {
   
+   
+
     if (self_table_data.length > 0) {
       // Merge self and not-self scores properly
       const mergedScores = self_table_data.map((selfScore) => {
@@ -778,7 +813,7 @@ setRadial_data(radarData); // Set the radar chart data
 
 
                   {selectedChart === "bar" && bardata ? (
-                    <Bar data={bardata} options={options} />
+                    <Bar data={bardata} options={options} plugins={[ChartDataLabels]} />
                   ) : selectedChart === "radial" && item.key ==="total" ? (
                     <div>
                      <Select
