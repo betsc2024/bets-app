@@ -157,8 +157,9 @@ export default function Reports() {
         const id = item.relationship_type;
         if(!relation_count_map_temp[id]){
             relation_count_map_temp[id] = 1;
+          }else{
+            relation_count_map_temp[id] +=1;
           }
-          relation_count_map_temp[id] +=1;
       })
 
       const relationCountArray = Object.entries(relation_count_map_temp).map(([relationship_type, count], index) => ({
@@ -818,6 +819,13 @@ export default function Reports() {
           .in('evaluation_id', evaluationIds);
   
         if (deleteError) throw deleteError;
+
+        const {error : updateEvalError} = await supabase.from('evaluations').update({
+          status : 'pending'
+        }).not('id','is' , null)
+        setRelationCountMap([]);
+
+        if(updateEvalError) throw updateEvalError;
   
         console.log('Evaluation responses deleted successfully.');
         toast.message('Data deleted successfully');
