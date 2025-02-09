@@ -10,6 +10,8 @@ import {
 import { supabase } from '@/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+
 
 import html2canvas from "html2canvas";
 
@@ -44,7 +46,7 @@ import classNames from 'classnames';
 
 
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, RadialLinearScale, PointElement, LineElement, Filler);
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, RadialLinearScale, PointElement, LineElement, Filler,ChartDataLabels);
 
 export default function Reports() {
 
