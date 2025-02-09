@@ -615,7 +615,8 @@ export default function Reports() {
     responsive: true,
     plugins: {
       legend: {
-        position: "top",
+         position: "bottom",
+        align:"end"
       },
       title: {
         display: true,
@@ -636,6 +637,8 @@ export default function Reports() {
 
         },
       },
+
+      
     },
   };
 

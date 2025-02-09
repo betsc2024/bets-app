@@ -593,14 +593,16 @@ export default function UserReports() {
         borderWidth: 2,
       },
     },
+    layout: {
+      padding: {
+        top: 50, // Adds extra space to avoid overlap
+      },
+    },
     responsive: true,
     plugins: {
       legend: {
-        position: "top",
-      },
-      title: {
-        display: true,
-        text: "Report",
+        position: "bottom",
+        align:"end"
       },
       datalabels: {
         anchor: "end", // Positions label on top of bars
@@ -616,6 +618,8 @@ export default function UserReports() {
           max: 100
         },
       },
+
+      
     },
   };
 
