@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState,useRef } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { Radar } from 'react-chartjs-2';
 import {
@@ -10,6 +10,9 @@ import {
 import { supabase } from '@/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+
+import html2canvas from "html2canvas";
+
 import {
   Select,
   SelectGroup,
@@ -82,6 +85,23 @@ export default function Reports() {
   // const [relation_count_map_o,setRelationCountMap_o] = useState({});
 
 
+  const chartRef = useRef(null);
+
+  const copyToClipboard = async () => {
+    console.log('copyToClipboard');
+    if (chartRef.current) {
+      console.log("Click");
+      const canvas = await html2canvas(chartRef.current);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const item = new ClipboardItem({ "image/png": blob });
+          navigator.clipboard.write([item]).then(() => {
+            alert("Chart copied to clipboard!");
+          });
+        }
+      });
+    }
+  };
 
 
 
@@ -468,7 +488,10 @@ export default function Reports() {
       
       const processedData = {};
 
-      data.forEach((evaluation) => {
+      const filterData = data.filter(item => item.relationship_type !== null);
+
+
+      filterData.forEach((evaluation) => {
         evaluation.evaluation_responses.forEach((response) => {
           const option = response.attribute_statement_options;
           if (option && option.attribute_statements) {
@@ -580,7 +603,7 @@ export default function Reports() {
 
 
   const options = {
-    indexAxis: "x", // Ensures vertical bars (horizontal if 'y')
+    indexAxis: "x", // Ensures vertical bars
     elements: {
       bar: {
         borderWidth: 2,
@@ -594,6 +617,21 @@ export default function Reports() {
       title: {
         display: true,
         text: "Report",
+      },
+      datalabels: {
+        anchor: "end", // Positions label on top of bars
+        align: "top",
+        offset: 5, // Adds margin above the bar
+        font: {
+          weight: "bold",
+        },
+      },
+      scales: {
+        y: {
+        beginAtZero: true,       
+        max:100
+        
+        },
       },
     },
   };
@@ -662,6 +700,8 @@ export default function Reports() {
             size: 12, // Customize font size
           },
         },
+        suggestedMin: 0, // Set the minimum value
+      suggestedMax: 100, // Set the maximum value
       },
     },
   };
@@ -744,37 +784,44 @@ export default function Reports() {
 
   const deleteEvaluationResponses = async (companyId) => {
     try {
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('evaluation_assignments')
-        .select('id')
-        .eq('company_id', companyId);
+        let ans = prompt("Are you sure you want to delete?(Yes/No)");
 
-      if (assignmentError) throw assignmentError;
-      if (!assignments.length) return console.log('No matching evaluations found.');
-
-      const assignmentIds = assignments.map(a => a.id);
-
-      const { data: evaluations, error: evaluationError } = await supabase
-        .from('evaluations')
-        .select('id')
-        .in('evaluation_assignment_id', assignmentIds);
-
-      if (evaluationError) throw evaluationError;
-      if (!evaluations.length) return console.log('No evaluations found.');
-
-      const evaluationIds = evaluations.map(e => e.id);
-
-      const { error: deleteError } = await supabase
-        .from('evaluation_responses')
-        .delete()
-        .in('evaluation_id', evaluationIds);
-
-      if (deleteError) throw deleteError;
-
-      console.log('Evaluation responses deleted successfully.');
-      toast.message('Data deleted successfully');
-      setTable_Data(null);
-      setBarData(null);
+      if(ans === "yes" || ans === "Yes"){
+        const { data: assignments, error: assignmentError } = await supabase
+          .from('evaluation_assignments')
+          .select(`
+            id,
+            user_to_evaluate_id
+            `)
+          .eq('user_to_evaluate_id', selectedUser?.id);
+  
+        if (assignmentError) throw assignmentError;
+        if (!assignments.length) return console.log('No matching evaluations found.');
+  
+        const assignmentIds = assignments.map(a => a.id);
+  
+        const { data: evaluations, error: evaluationError } = await supabase
+          .from('evaluations')
+          .select('id')
+          .in('evaluation_assignment_id', assignmentIds);
+  
+        if (evaluationError) throw evaluationError;
+        if (!evaluations.length) return console.log('No evaluations found.');
+  
+        const evaluationIds = evaluations.map(e => e.id);
+  
+        const { error: deleteError } = await supabase
+          .from('evaluation_responses')
+          .delete()
+          .in('evaluation_id', evaluationIds);
+  
+        if (deleteError) throw deleteError;
+  
+        console.log('Evaluation responses deleted successfully.');
+        toast.message('Data deleted successfully');
+        setTable_Data([]);
+        setBarData(null);
+      }
     } catch (error) {
       toast.error(error);
       console.error('Error deleting evaluation responses:', error.message);
@@ -984,10 +1031,28 @@ export default function Reports() {
                             </SelectContent>
                           </Select>
 
-                          {selectedAttribute ? <Bar data={demographicbardata} options={options} /> : <></>}
+                          {selectedAttribute ?
+                          
+                          <div>
+                          <div ref={chartRef}>
+                            <Bar data={demographicData} options={options} plugins={[ChartDataLabels]} />
+                          </div>
+                          <button onClick={copyToClipboard} className="mt-4">
+                            Copy Chart to Clipboard
+                          </button>
+                        </div>
+                          
+                          : <></>}
                         </>
 
-                        : <Bar data={bardata} options={options} />
+                        : <div>
+                        <div ref={chartRef}>
+                          <Bar data={bardata} options={options} plugins={[ChartDataLabels]} />
+                        </div>
+                        <button onClick={copyToClipboard} className="mt-4">
+                          Copy Chart to Clipboard
+                        </button>
+                      </div>
                     ) : selectedChart === "radial" && radial_score && item.key === "total" ? (
                       <div>
                         <Select
@@ -1006,7 +1071,16 @@ export default function Reports() {
                             ))}
                           </SelectContent>
                         </Select>
-                        {radial_data ? <Radar data={radial_data} options={radaroptions} className="mt-16" /> : <></>}
+                        {radial_data ? 
+                     <div>
+                                             <div ref={chartRef}>
+                                               <Radar data={radial_data} options={radaroptions} className="mt-16" />
+                                             </div>
+                                             <button onClick={copyToClipboard} className="mt-4">
+                                               Copy Chart to Clipboard
+                                             </button>
+                                           </div>
+                        : <></>}
                       </div>
                     ) : selectedChart === "table" ? (
                       item.key === "demography" ? (<>
