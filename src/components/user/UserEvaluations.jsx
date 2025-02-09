@@ -23,7 +23,8 @@ const UserEvaluations = () => {
   const [responses, setResponses] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useAuth();
-  const {userCompany,setUserCompany} = useState(null);
+  const [userCompany,setUserCompany] = useState("");
+  const [c,setEvalCount] = useState(null);
   // console.log(user.user_metadata?.full_name); Debugging
 
   useEffect(() => {
@@ -33,26 +34,35 @@ const UserEvaluations = () => {
     }
   }, [user]);
 
-  const company = async ()=>{
-    try{
-       const {data,error} = await supabase.from("companies").select(`id,name `).eq('id', user.user_metadata?.company_id);
-       console.log(data);
-       if(data){
-         setUserCompany(data);
-       }else{
-        console.log(error);
-       }
 
-    }catch(e){
-      console.log(e);
+
+
+
+
+  const company = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("companies")
+        .select("id, name")
+        .eq("id", user.user_metadata?.company_id);
+  
+  
+      if (data && data.length > 0) {
+        console.log("Company Name:", data[0].name);
+        setUserCompany(data[0].name);
+      } else {
+        console.log(error || "No company found");
+      }
+    } catch (e) {
+      console.log("Error fetching company:", e);
     }
-  }
+  };
 
   const fetchEvaluations = async () => {
     try {
       setLoading(true);
       setError(null);
-    
+      let temp_Data = {};
       console.log('Fetching evaluations for user:', user?.id);
       const { data, error } = await supabase
         .from('evaluations')
@@ -78,6 +88,15 @@ const UserEvaluations = () => {
       if (error) throw error;
       
       console.log('Fetched evaluations:', data);
+      if(data){
+        data.map((item)=>{
+          if(!temp_Data[item.status]){
+            temp_Data[item.status] = 1;
+          }
+          temp_Data[item.status]++;
+        })
+        setEvalCount(temp_Data);
+      }
       setEvaluations(data || []);
     } catch (error) {
       console.error('Error fetching evaluations:', error);
@@ -266,7 +285,7 @@ const UserEvaluations = () => {
 
   return (
     <div className="container mx-auto p-4 md:p-6">
-      <h3 className="text-xl font-bold text-purple-800 mb-8">{user.user_metadata?.full_name}-{userCompany?.name}</h3>
+      <h3 className="text-xl font-bold text-purple-800 mb-8">{ userCompany !== "" ? user.user_metadata?.full_name +" - "+ userCompany : ""}</h3>
 
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {evaluations.map((evaluation) => {

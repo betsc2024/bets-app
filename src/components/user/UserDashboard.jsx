@@ -2,16 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const UserDashboard = () => {
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    finished: 0,
-  });
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
-
+  const [evalCount,setEvalCount] = useState(null);
   useEffect(() => {
     fetchUserData();
   }, []);
@@ -35,37 +32,46 @@ const UserDashboard = () => {
     }
   };
 
-  const fetchUserStats = async (userId, companyId) => {
+  const fetchUserStats = async () => {
     try {
-      // Get evaluations where the user is either the evaluator or being evaluated
-      const { data: evaluations, error } = await supabase
+      setLoading(true);
+      let temp_Data = {};
+      console.log('Fetching evaluations for user:', user?.id);
+      const { data, error } = await supabase
         .from('evaluations')
         .select(`
-          id,
-          status,
-          evaluation_assignment_id,
-          evaluation_assignments!inner (
-            company_id
-          )
-        `)
-        .eq('evaluation_assignments.company_id', companyId)
-        .or(`evaluator_id.eq.${userId},user_to_evaluate_id.eq.${userId}`);
+  id,
+    status,
+    evaluator_id,
+    is_self_evaluator,
+    relationship_type,
+    started_at,
+    completed_at,
+    evaluation_assignments (
+      id,
+      evaluation_name,
+      users!evaluation_assignments_user_to_evaluate_id_fkey (
+        id,
+        full_name
+      )
+    )
+  `)
+  .eq('evaluator_id', user?.id)
 
       if (error) throw error;
-
-      const stats = evaluations.reduce((acc, curr) => {
-        acc.total++;
-        if (curr.status === 'completed') {
-          acc.finished++;
-        } else {
-          acc.pending++;
-        }
-        return acc;
-      }, { total: 0, pending: 0, finished: 0 });
-
-      setStats(stats);
+      
+      console.log('Fetched evaluations:', data);
+      if(data){
+        data.map((item)=>{
+          if(!temp_Data[item.status]){
+            temp_Data[item.status] = 1;
+          }
+          temp_Data[item.status]++;
+        })
+        setEvalCount(temp_Data);
+      }
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error('Error fetching evaluations:', error);
     } finally {
       setLoading(false);
     }
@@ -80,13 +86,14 @@ const UserDashboard = () => {
   }
 
   return (
+   evalCount && 
     <div className="grid gap-4 md:grid-cols-3">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Total Evaluations</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{stats.total}</div>
+          <div className="text-2xl font-bold">{evalCount['completed'] + evalCount['pending']}</div>
         </CardContent>
       </Card>
       <Card>
@@ -94,7 +101,7 @@ const UserDashboard = () => {
           <CardTitle className="text-sm font-medium">Pending</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
+          <div className="text-2xl font-bold text-yellow-600">{evalCount['pending']}</div>
         </CardContent>
       </Card>
       <Card>
@@ -102,7 +109,7 @@ const UserDashboard = () => {
           <CardTitle className="text-sm font-medium">Completed</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-green-600">{stats.finished}</div>
+          <div className="text-2xl font-bold text-green-600">{evalCount['completed']}</div>
         </CardContent>
       </Card>
     </div>
