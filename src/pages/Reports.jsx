@@ -157,8 +157,9 @@ export default function Reports() {
         const id = item.relationship_type;
         if(!relation_count_map_temp[id]){
             relation_count_map_temp[id] = 1;
+          }else{
+            relation_count_map_temp[id] +=1;
           }
-          relation_count_map_temp[id] +=1;
       })
 
       const relationCountArray = Object.entries(relation_count_map_temp).map(([relationship_type, count], index) => ({
