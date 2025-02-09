@@ -819,6 +819,13 @@ export default function Reports() {
           .in('evaluation_id', evaluationIds);
   
         if (deleteError) throw deleteError;
+
+        const {error : updateEvalError} = await supabase.from('evaluations').update({
+          status : 'pending'
+        }).not('id','is' , null)
+        setRelationCountMap([]);
+
+        if(updateEvalError) throw updateEvalError;
   
         console.log('Evaluation responses deleted successfully.');
         toast.message('Data deleted successfully');
