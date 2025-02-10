@@ -49,11 +49,11 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend,
 export default function UserReports() {
 
   const { user } = useAuth();
-  const [selfscore, setSelfScore] = useState(null);
-  const [notselfscore, setNotSelfScore] = useState(null);
+  const [selfscore, setSelfScore] = useState([]);
+  const [notselfscore, setNotSelfScore] = useState([]);
 
   //x and y axes values
-  const [label, setLabel] = useState(null);
+  const [label, setLabel] = useState([]);
   const [selfresults, setSelfResults] = useState(null);
   const [notselfresults, setnotselfresults] = useState(null);
   const [selectedChart, setSelectedChart] = useState("table");
@@ -98,8 +98,8 @@ export default function UserReports() {
   const fetch_Data = async (relationship_type) => {
     try {
       setBarData(null);  // 🔥 Reset chart state before fetching
-      setSelfScore(null);
-      setNotSelfScore(null);
+      setSelfScore([]);
+      setNotSelfScore([]);
       setSelectedChart("table");
       let query1 = supabase
         .from('evaluations')
@@ -304,11 +304,10 @@ export default function UserReports() {
     console.log(selfscore);
     console.log(notselfscore)
 
-    if (selfscore) {
+    if (selfscore.length > 0 && selfscore) {
       fetch_attributes("selfscore", selfscore);
-
     }
-    if (notselfscore) {
+    if (notselfscore.length > 0 && notselfscore) {
       fetch_attributes("notselfscore", notselfscore);
     }
   }, [selfscore, notselfscore]);
@@ -357,6 +356,7 @@ export default function UserReports() {
       });
 
       setLabel(label_temp);
+      console.log(label_temp);
 
       if (score_type === "selfscore") {
         setSelfResults(res_temp);
@@ -376,6 +376,7 @@ export default function UserReports() {
     }
   };
   const fetch_radar = async (relationship_type) => {
+
     if (!selectedAttribute) {
       return;
     }
@@ -512,17 +513,21 @@ export default function UserReports() {
       setRadial_Score(radial_result);
       // console.log(radial_result )
     }
-  }, [selectedAttribute, radial_result])
+    if(radial_self_data){
+      setRadial_Label(radial_self_data.map(item => item.statement)); // Set the statement labels
+    }
+  }, [selectedAttribute, radial_result,radial_self_data])
 
   useEffect(() => {
     fetch_radar("total");
   }, [selectedAttribute]);
 
+
+
   useEffect(() => {
 
     // Fetch self data and max data
-
-    if (radial_score && radial_label && radial_self_data) {
+    if ( radial_score && radial_label && radial_self_data) {
 
       const result = radial_score;
 
@@ -537,6 +542,10 @@ export default function UserReports() {
 
 
       // Combine self, relationship, and max data
+
+      console.log(selfData);
+      console.log(relationshipData);
+      console.log(maxData);
 
 
       const radarData = {
@@ -805,9 +814,6 @@ export default function UserReports() {
                           // console.log("clicking");
                           if (option.id === "bar") {
                             specific_type_bar(item.key);
-                          }
-                          if (option.id === "radial") {
-                            fetch_radar(item.key);
                           }
                         }}
                       >
