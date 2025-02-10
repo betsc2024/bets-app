@@ -187,12 +187,14 @@ export default function Reports() {
 
           if (!attributeMap[attributeName]) {
             attributeMap[attributeName] = { totalWeight: 0, count: 0 };
+          }else{
+
+            attributeMap[attributeName].totalWeight += weight;
+            attributeMap[attributeName].count += 1;
+  
+  
           }
 
-
-
-          attributeMap[attributeName].totalWeight += weight;
-          attributeMap[attributeName].count += 1;
 
 
         });
@@ -208,6 +210,7 @@ export default function Reports() {
         }));
       }).flat();
 
+      console.log(formattedData);
 
       setData(formattedData);
 
@@ -349,49 +352,79 @@ export default function Reports() {
 
   const fetch_spefifc_data = (relationship_type) => {
     if (!data) return;
-
-    // console.log(data);
-
+  
+    // Separate self and not-self data
     const selfData = data.filter((item) => item.relationship_type === null);
-
-    const notSelfData = relationship_type === "total"
-      ? data.filter((item) => item.relationship_type !== null)
-      : data.filter((item) => item.relationship_type === relationship_type);
-
-    // console.log(selfData);
-    // console.log(notSelfData);
-
-
+  
+    const notSelfData =
+      relationship_type === "total"
+        ? data.filter((item) => item.relationship_type !== null)
+        : data.filter((item) => item.relationship_type === relationship_type);
+  
+    console.log("Original Self Data:", selfData);
+    console.log("Original Not Self Data:", notSelfData);
+  
+    // Get unique labels
     const labels = [...new Set(data.map((item) => item.attribute_name))];
-
+  
+    // Compute averages for self and not-self
     const selfResultsMap = {};
     const notSelfResultsMap = {};
-
-    labels.forEach((label) => {
+  
+    const aggregatedSelfData = labels.map((label) => {
       const selfItems = selfData.filter((item) => item.attribute_name === label);
-      const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
-
-      selfResultsMap[label] = selfItems.length
+      const avgSelfWeight = selfItems.length
         ? selfItems.reduce((sum, i) => sum + i.average_weight, 0) / selfItems.length
         : 0;
-
-      notSelfResultsMap[label] = notSelfItems.length
+      const avgSelfScore = selfItems.length
+        ? selfItems.reduce((sum, i) => sum + i.average_score_percentage, 0) / selfItems.length
+        : 0;
+  
+      selfResultsMap[label] = avgSelfWeight;
+  
+      return {
+        company_name: selfItems[0]?.company_name || "Unknown",
+        attribute_name: label,
+        average_weight: avgSelfWeight,
+        average_score_percentage: avgSelfScore,
+      };
+    });
+  
+    const aggregatedNotSelfData = labels.map((label) => {
+      const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
+      const avgNotSelfWeight = notSelfItems.length
         ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) / notSelfItems.length
         : 0;
+      const avgNotSelfScore = notSelfItems.length
+        ? notSelfItems.reduce((sum, i) => sum + i.average_score_percentage, 0) / notSelfItems.length
+        : 0;
+  
+      notSelfResultsMap[label] = avgNotSelfWeight;
+  
+      return {
+        company_name: notSelfItems[0]?.company_name || "Unknown",
+        attribute_name: label,
+        average_weight: avgNotSelfWeight,
+        average_score_percentage: avgNotSelfScore,
+      };
     });
+  
+    // Merge self and not-self aggregated data
 
-    // console.log(selfData);
-    // console.log(notSelfData);
-
+  
+    // Set data for charts and tables
     setLabel(labels);
     setSelfResults(Object.values(selfResultsMap));
     setnotselfresults(Object.values(notSelfResultsMap));
-
-    setSelfTableData(selfData);
-    setNotSelfTableData(notSelfData);
-    // setTable_Data(data);
+  
+    setSelfTableData(aggregatedSelfData);
+    setNotSelfTableData(aggregatedNotSelfData);
+  
+    console.log("Final Self Data:", aggregatedSelfData);
+    console.log("Final Not Self Data:", aggregatedNotSelfData);
+    
   };
-
+  
 
 
 
@@ -563,10 +596,10 @@ export default function Reports() {
 
 
       // Combine self, relationship, and max data
-      console.log(selfData);
-      console.log(relationshipData);
-      console.log(maxData);
-      console.log(radial_label);
+      // console.log(selfData);
+      // console.log(relationshipData);
+      // console.log(maxData);
+      // console.log(radial_label);
 
 
       const radarData = {
@@ -692,45 +725,44 @@ export default function Reports() {
 
 
   const radaroptions = {
-    responsive: true, // Make the chart responsive to the container's size
     plugins: {
       legend: {
-        position: 'bottom', // Position the legend at the bottom
+        position: 'bottom',
       },
       title: {
         display: true,
-        text: 'Self', // Set the chart title
-        position: 'bottom'
+        text: 'Self',
+        position: 'bottom',
       },
     },
     scales: {
       r: {
         grid: {
-          color: 'rgba(0, 0, 0, 0.1)', // Customize grid line color
+          color: 'rgba(0, 0, 0, 0.1)',
         },
         pointLabels: {
-          color: 'black', // Customize point label color
+          color: 'black',
           font: {
-            size: 12, // Customize font size
+            size: 12,
           },
-        },
-        callback: function(label) {
-          let words = label.split(" ");
-          let formattedLabel = [];
-          
-          for (let i = 0; i < words.length; i += 3) {
-            formattedLabel.push(words.slice(i, i + 3).join(" "));
+          callback: function(label) {
+            let words = label.split(" ");
+            let formattedLabel = [];
+            
+            for (let i = 0; i < words.length; i += 3) {
+              formattedLabel.push(words.slice(i, i + 3).join(" "));
+            }
+  
+            return formattedLabel; // Returns array for multi-line label
           }
-
-          return formattedLabel; // Returns array for multi-line label
-        }
-
-      },
-        suggestedMin: 0, // Set the minimum value
-        suggestedMax: 100, // Set the maximum value
+  
+        },
+        suggestedMin: 0,
+        suggestedMax: 100,
       },
     },
   };
+  
   const items = [
     {
       id: 1,
@@ -777,37 +809,35 @@ export default function Reports() {
     { id: "bar", label: "Bar Chart" },
     { id: "radial", label: "Radial Chart" },
   ];
+ 
   useEffect(() => {
-    if (self_table_data.length > 0 || notself_table_data.length > 0) {
-      const selfScoresMap = self_table_data.reduce((acc, selfItem) => {
-        acc[selfItem.attribute_name] = {
-          ...selfItem,
-          avg_reln_weight: 0,
+    console.log(self_table_data);
+    console.log(notself_table_data);
+  
+    if (self_table_data.length > 0) {
+      // Merge self and not-self scores properly
+      const mergedScores = self_table_data.map((selfScore) => {
+        // Find matching relationship-based data using attribute_name & company_name
+        const relationshipScore = notself_table_data.find(
+          (reln) =>
+            reln.attribute_name === selfScore.attribute_name &&
+            reln.company_name === selfScore.company_name
+        );
+  
+        return {
+          company_name: selfScore.company_name,
+          attribute_name: selfScore.attribute_name,
+          average_weight: selfScore.average_weight, // Self weight
+          average_score_percentage: selfScore.average_score_percentage, // Self percentage
+          avg_reln_weight: relationshipScore ? relationshipScore.average_weight : 0, // Relationship weight
+          avg_reln_perc: relationshipScore ? relationshipScore.average_score_percentage : 0, // Relationship percentage
         };
-        return acc;
-      }, {});
-
-      notself_table_data.forEach((notSelfItem) => {
-        const attribute = notSelfItem.attribute_name;
-
-        if (selfScoresMap[attribute]) {
-          selfScoresMap[attribute].avg_reln_weight =
-            (selfScoresMap[attribute].avg_reln_weight || 0) + notSelfItem.average_weight;
-        } else {
-          selfScoresMap[attribute] = {
-            ...notSelfItem,
-            avg_reln_weight: notSelfItem.average_weight, // Initialize from not-self data
-          };
-        }
       });
-
-      const mergedScores = Object.values(selfScoresMap);
-
-
+  
+      console.log(mergedScores);
       setTable_Data(mergedScores);
     }
   }, [self_table_data, notself_table_data]);
-
   const deleteEvaluationResponses = async (companyId) => {
     try {
       let ans = prompt("Are you sure you want to delete?(Yes/No)");
@@ -1211,7 +1241,7 @@ export default function Reports() {
                                         {row.avg_reln_weight?.toFixed(2) || "0.00"}
                                       </TableCell>
                                       <TableCell className="text-center">
-                                        {((row.avg_reln_weight / 100) * 100).toFixed(2)}%
+                                        {(row.avg_reln_perc )}%
                                       </TableCell>
                                     </>
                                   )}
