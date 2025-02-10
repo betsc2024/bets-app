@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 
 
+
 import html2canvas from "html2canvas";
 
 import {
@@ -60,7 +61,7 @@ export default function Reports() {
   const [bardata, setBarData] = useState(null);
   const [score_type, setScore_Type] = useState(null);
 
-  const [radial_label, setRadial_Label] = useState(null);
+  const [radial_label, setRadial_Label] = useState([]);
   const [radial_score, setRadial_Score] = useState(null);
   const [radial_data, setRadial_data] = useState(null);
   const [radial_result, set_Radial_Result] = useState(null);
@@ -534,7 +535,10 @@ export default function Reports() {
       setRadial_Score(radial_result);
       // console.log(radial_result)
     }
-  }, [selectedAttribute, radial_result])
+    if(radial_self_data){
+      setRadial_Label(radial_self_data.map(item => item.statement)); // Set the statement labels
+    }
+  }, [selectedAttribute, radial_result,radial_self_data])
 
   useEffect(() => {
     fetch_radar("total");
@@ -559,6 +563,10 @@ export default function Reports() {
 
 
       // Combine self, relationship, and max data
+      console.log(selfData);
+      console.log(relationshipData);
+      console.log(maxData);
+      console.log(radial_label);
 
 
       const radarData = {
@@ -575,7 +583,7 @@ export default function Reports() {
             pointHoverBorderColor: 'rgba(255, 99, 132, 1)',
           },
           {
-            label: 'Relationship',
+            label: 'Total',
             data: relationshipData,
             backgroundColor: 'rgba(54, 162, 235, 0.2)',
             borderColor: 'rgba(54, 162, 235, 1)',

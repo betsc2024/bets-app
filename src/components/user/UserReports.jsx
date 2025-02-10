@@ -8,6 +8,7 @@ import {
   Filler
 } from "chart.js";
 import ChartDataLabels from 'chartjs-plugin-datalabels';
+
 import { supabase } from '@/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -562,7 +563,7 @@ export default function UserReports() {
             pointHoverBorderColor: 'rgba(255, 99, 132, 1)',
           },
           {
-            label: 'Relationship',
+            label: 'Total',
             data: relationshipData,
             backgroundColor: 'rgba(54, 162, 235, 0.2)',
             borderColor: 'rgba(54, 162, 235, 1)',
@@ -730,6 +731,8 @@ export default function UserReports() {
         suggestedMax: 100,
       },
     },
+      
+      
   };
   const items = [
     {
@@ -867,7 +870,7 @@ export default function UserReports() {
                       {radial_data ?
                         <div>
                           <div ref={chartRef}>
-                            <Radar data={radial_data} options={radaroptions} className="mt-16" />
+                            <Radar data={radial_data} options={radaroptions}  className="mt-16" />
                           </div>
                           <button onClick={copyToClipboard} className="mt-4">
                             Copy Chart to Clipboard
