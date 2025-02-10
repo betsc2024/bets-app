@@ -692,30 +692,60 @@ export default function Reports() {
 
 
   const radaroptions = {
-    responsive: true, // Make the chart responsive to the container's size
+    responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'bottom', // Position the legend at the bottom
+        position: 'bottom',
+        labels: {
+          padding: 20
+        }
       },
       title: {
         display: true,
-        text: 'Self', // Set the chart title
-        position: 'bottom'
+        text: 'Self',
+        position: 'bottom',
+        padding: 20
       },
     },
     scales: {
       r: {
         grid: {
-          color: 'rgba(0, 0, 0, 0.1)', // Customize grid line color
+          color: 'rgba(0, 0, 0, 0.1)',
         },
         pointLabels: {
-          color: 'black', // Customize point label color
+          color: 'black',
           font: {
-            size: 12, // Customize font size
+            size: 12,
           },
+          callback: function(value) {
+            const maxLineLength = 30;
+            if (value.length > maxLineLength) {
+              let words = value.split(' ');
+              let lines = [];
+              let currentLine = '';
+              
+              words.forEach(word => {
+                if (currentLine.length + word.length <= maxLineLength) {
+                  currentLine += (currentLine ? ' ' : '') + word;
+                } else {
+                  lines.push(currentLine);
+                  currentLine = word;
+                }
+              });
+              if (currentLine) {
+                lines.push(currentLine);
+              }
+              return lines;
+            }
+            return value;
+          }
         },
-        suggestedMin: 0, // Set the minimum value
-        suggestedMax: 100, // Set the maximum value
+        suggestedMin: 0,
+        suggestedMax: 100,
+        ticks: {
+          stepSize: 20
+        }
       },
     },
   };
@@ -1108,11 +1138,21 @@ export default function Reports() {
                           </SelectContent>
                         </Select>
                         {radial_data ?
-                          <div>
-                            <div ref={chartRef}>
-                              <Radar data={radial_data} options={radaroptions} className="mt-16" />
+                          <div className="flex flex-col items-center overflow-auto" style={{ 
+                            minHeight: '500px',
+                            height: 'calc(100vh - 300px)', 
+                            maxHeight: '800px',
+                            width: '100%', 
+                            padding: '20px',
+                            position: 'relative'
+                          }}>
+                            <div className="w-full h-full relative" ref={chartRef}>
+                              <Radar data={radial_data} options={radaroptions} />
                             </div>
-                            <button onClick={copyToClipboard} className="mt-4">
+                            <button 
+                              onClick={copyToClipboard} 
+                              className="mt-4 px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+                            >
                               Copy Chart to Clipboard
                             </button>
                           </div>
