@@ -549,6 +549,7 @@ export default function UserReports() {
       console.log(maxData);
 
 
+
       const radarData = {
         labels: radial_label,
         datasets: [
@@ -705,35 +706,44 @@ export default function UserReports() {
 
 
   const radaroptions = {
-    responsive: true, // Make the chart responsive to the container's size
     plugins: {
       legend: {
-        position: 'bottom', // Position the legend at the bottom
+        position: 'bottom',
       },
       title: {
         display: true,
-        text: 'Self', // Set the chart title
-        position: 'bottom'
+        text: 'Self',
+        position: 'bottom',
       },
     },
     scales: {
       r: {
         grid: {
-          color: 'rgba(0, 0, 0, 0.1)', // Customize grid line color
+          color: 'rgba(0, 0, 0, 0.1)',
         },
         pointLabels: {
-          color: 'black', // Customize point label color
+          color: 'black',
           font: {
-            size: 12, // Customize font size
+            size: 12,
           },
+          callback: function(label) {
+            let words = label.split(" ");
+            let formattedLabel = [];
+            
+            for (let i = 0; i < words.length; i += 3) {
+              formattedLabel.push(words.slice(i, i + 3).join(" "));
+            }
+  
+            return formattedLabel; // Returns array for multi-line label
+          }
+  
         },
         suggestedMin: 0,
         suggestedMax: 100,
       },
     },
-      
-      
   };
+  
   const items = [
     {
       id: 1,
@@ -778,11 +788,11 @@ export default function UserReports() {
   // console.log(self_table_data);
   // console.log(notself_table_data);
   return (
-    <div className="p-6">
+    <div className="p-6 w-full">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
 
 
-      <div style={{ width: "1000px", margin: "0 auto" }}>
+      <div style={{ width: '70Vw', margin: "0 auto" }}>
 
         <Accordion.Root type="single" collapsible className="w-full  space-y-2">
           {items.map((item) => (
@@ -869,9 +879,11 @@ export default function UserReports() {
                       </Select>
                       {radial_data ?
                         <div>
-                          <div ref={chartRef}>
-                            <Radar data={radial_data} options={radaroptions}  className="mt-16" />
-                          </div>
+                     <div >
+{/* Set this wider than 500px to allow scrolling */}
+    <Radar data={radial_data} options={radaroptions}  />
+
+</div>
                           <button onClick={copyToClipboard} className="mt-4">
                             Copy Chart to Clipboard
                           </button>
