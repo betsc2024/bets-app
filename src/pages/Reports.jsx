@@ -714,6 +714,18 @@ export default function Reports() {
             size: 12, // Customize font size
           },
         },
+        callback: function(label) {
+          let words = label.split(" ");
+          let formattedLabel = [];
+          
+          for (let i = 0; i < words.length; i += 3) {
+            formattedLabel.push(words.slice(i, i + 3).join(" "));
+          }
+
+          return formattedLabel; // Returns array for multi-line label
+        }
+
+      },
         suggestedMin: 0, // Set the minimum value
         suggestedMax: 100, // Set the maximum value
       },
