@@ -162,6 +162,7 @@ export default function Reports() {
           relation_count_map_temp[id] += 1;
         }
       })
+       
 
       const relationCountArray = Object.entries(relation_count_map_temp).map(([relationship_type, count], index) => ({
         SrNo: index + 1,
@@ -390,24 +391,55 @@ export default function Reports() {
     });
   
     const aggregatedNotSelfData = labels.map((label) => {
-      const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
-      console.log(notSelfItems);
+      if(relationship_type==="total" && relation_count_map){
+        const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
+        console.log(notSelfItems);
 
-      const avgNotSelfWeight = notSelfItems.length
-        ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) 
-        : 0;
-      const avgNotSelfScore = notSelfItems.length
-        ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_score_percentage), 0) 
-        : 0;
+        let total_c = 0;
+        console.log(relation_count_map);
+        relation_count_map.map((item)=>{
+          if(item.RelationshipType!=="self")
+          total_c += item.Count;
+        })
+        console.log(total_c);
   
-      notSelfResultsMap[label] = avgNotSelfScore;
+        const avgNotSelfWeight = notSelfItems.length
+          ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) 
+          : 0;
+        let avgNotSelfScore = notSelfItems.length
+          ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_weight), 0) 
+          : 0;
+          avgNotSelfScore = avgNotSelfScore/total_c;
+
+    
+        notSelfResultsMap[label] = avgNotSelfScore;
+        return {
+          company_name: notSelfItems[0]?.company_name || "Unknown",
+          attribute_name: label,
+          average_weight: avgNotSelfWeight,
+          average_score_percentage: avgNotSelfScore,
+        };
+      }else{
+        const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
+        console.log(notSelfItems);
   
-      return {
-        company_name: notSelfItems[0]?.company_name || "Unknown",
-        attribute_name: label,
-        average_weight: avgNotSelfWeight,
-        average_score_percentage: avgNotSelfScore,
-      };
+        const avgNotSelfWeight = notSelfItems.length
+          ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) 
+          : 0;
+        const avgNotSelfScore = notSelfItems.length
+          ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_score_percentage), 0) 
+          : 0;
+    
+        notSelfResultsMap[label] = avgNotSelfScore;
+    
+        return {
+          company_name: notSelfItems[0]?.company_name || "Unknown",
+          attribute_name: label,
+          average_weight: avgNotSelfWeight,
+          average_score_percentage: avgNotSelfScore,
+        };
+      }
+
     });
   
     // Merge self and not-self aggregated data
