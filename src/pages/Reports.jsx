@@ -80,6 +80,8 @@ export default function Reports() {
   const [demographicTypes, setDemographic_types] = useState([]);
   const [demographicbardata, setdemographicbardata] = useState([]);
 
+  const [total, setTotal] = useState([]);
+
   const [selectedAttribute, setSelectedAttribute] = useState('');
 
   const [users, setUsers] = useState([]);
@@ -162,7 +164,7 @@ export default function Reports() {
           relation_count_map_temp[id] += 1;
         }
       })
-       
+
 
       const relationCountArray = Object.entries(relation_count_map_temp).map(([relationship_type, count], index) => ({
         SrNo: index + 1,
@@ -190,10 +192,10 @@ export default function Reports() {
             attributeMap[attributeName] = { totalWeight: 0, count: 0 };
           }
 
-            attributeMap[attributeName].totalWeight += weight;
-            attributeMap[attributeName].count += 1;  
-          
-          });
+          attributeMap[attributeName].totalWeight += weight;
+          attributeMap[attributeName].count += 1;
+
+        });
         console.log(attributeMap);
 
 
@@ -264,11 +266,11 @@ export default function Reports() {
             ? (attributeMap[attribute][type].total / attributeMap[attribute][type].count).toFixed(1)
             : 0;
         });
+        if (total.length > 0 && total) {
+          console.log(total);
+          row["Total"] = total[index].average_score_percentage;
+        }
 
-        row["Total"] = (
-          relationshipTypesArray.reduce((sum, type) => sum + parseFloat(row[type] || 0), 0) /
-          relationshipTypesArray.length
-        ).toFixed(1);
 
         return row;
       });
@@ -315,7 +317,6 @@ export default function Reports() {
         if (data) {
           setUsers(data);
 
-          // console.log(data);
 
         } else {
           console.log(error);
@@ -349,39 +350,39 @@ export default function Reports() {
 
   const fetch_spefifc_data = (relationship_type) => {
     if (!data) return;
-  
-    console.log(data);
+
+    // console.log(data);
     // Separate self and not-self data
     const selfData = data.filter((item) => item.relationship_type === null);
-  
+
     const notSelfData =
       relationship_type === "total"
         ? data.filter((item) => item.relationship_type !== null)
         : data.filter((item) => item.relationship_type === relationship_type);
-  
-    console.log("Original Self Data:", selfData);
-    console.log("Original Not Self Data:", notSelfData);
-  
+
+    // console.log("Original Self Data:", selfData);
+    // console.log("Original Not Self Data:", notSelfData);
+
     // Get unique labels
     const labels = [...new Set(data.map((item) => item.attribute_name))];
-  
+
     // Compute averages for self and not-self
     const selfResultsMap = {};
     const notSelfResultsMap = {};
-  
+
     const aggregatedSelfData = labels.map((label) => {
       const selfItems = selfData.filter((item) => item.attribute_name === label);
-      console.log(selfItems);
+      // console.log(selfItems);
 
       const avgSelfWeight = selfItems.length
-        ? selfItems.reduce((sum, i) => sum + i.average_weight, 0) 
+        ? selfItems.reduce((sum, i) => sum + i.average_weight, 0)
         : 0;
       const avgSelfScore = selfItems.length
-        ? selfItems.reduce((sum, i) => sum + i.average_score_percentage, 0) 
+        ? selfItems.reduce((sum, i) => sum + i.average_score_percentage, 0)
         : 0;
-  
+
       selfResultsMap[label] = avgSelfScore;
-  
+
       return {
         company_name: selfItems[0]?.company_name || "Unknown",
         attribute_name: label,
@@ -389,49 +390,55 @@ export default function Reports() {
         average_score_percentage: avgSelfScore,
       };
     });
-  
+
     const aggregatedNotSelfData = labels.map((label) => {
-      if(relationship_type==="total" && relation_count_map){
+      if (relationship_type === "total" && relation_count_map) {
         const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
-        console.log(notSelfItems);
+        // console.log(notSelfItems);
 
         let total_c = 0;
-        console.log(relation_count_map);
-        relation_count_map.map((item)=>{
-          if(item.RelationshipType!=="self")
-          total_c += item.Count;
+        // console.log(relation_count_map);
+        relation_count_map.map((item) => {
+          if (item.RelationshipType !== "self")
+            total_c += item.Count;
         })
-        console.log(total_c);
-  
+        // console.log(total_c);
+
         const avgNotSelfWeight = notSelfItems.length
-          ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) 
+          ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0)
           : 0;
         let avgNotSelfScore = notSelfItems.length
-          ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_weight), 0) 
+          ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_weight), 0)
           : 0;
-          avgNotSelfScore = avgNotSelfScore/total_c;
+        avgNotSelfScore = avgNotSelfScore / total_c;
 
-    
+
         notSelfResultsMap[label] = avgNotSelfScore;
+
+        // console.log(notSelfItems);
         return {
           company_name: notSelfItems[0]?.company_name || "Unknown",
           attribute_name: label,
           average_weight: avgNotSelfWeight,
           average_score_percentage: avgNotSelfScore,
         };
-      }else{
+
+
+
+
+      } else {
         const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
-        console.log(notSelfItems);
-  
+        // console.log(notSelfItems);
+
         const avgNotSelfWeight = notSelfItems.length
-          ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) 
+          ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0)
           : 0;
         const avgNotSelfScore = notSelfItems.length
-          ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_score_percentage), 0) 
+          ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_score_percentage), 0)
           : 0;
-    
+
         notSelfResultsMap[label] = avgNotSelfScore;
-    
+
         return {
           company_name: notSelfItems[0]?.company_name || "Unknown",
           attribute_name: label,
@@ -441,7 +448,10 @@ export default function Reports() {
       }
 
     });
-  
+    if(relationship_type ==="total"){
+      setTotal(aggregatedNotSelfData);
+    }
+
     // Merge self and not-self aggregated data
 
 
@@ -449,15 +459,15 @@ export default function Reports() {
     setLabel(labels);
     setSelfResults(Object.values(selfResultsMap));
     setnotselfresults(Object.values(notSelfResultsMap));
-  
+
     setSelfTableData(aggregatedSelfData);
     setNotSelfTableData(aggregatedNotSelfData);
-  
+
     // console.log("Final Self Data:", aggregatedSelfData);
     // console.log("Final Not Self Data:", aggregatedNotSelfData);
-    
+
   };
-  
+
 
 
 
@@ -497,16 +507,16 @@ export default function Reports() {
 
       const { data: query_info, error } = await query;
 
-      console.log(query_info);
-      console.log(id);
-      console.log(user_id);
+      // console.log(query_info);
+      // console.log(id);
+      // console.log(user_id);
 
       const query_Data = query_info.filter(evaluation =>
         evaluation.evaluation_assignments?.company_id === id &&
         evaluation.evaluation_assignments?.user_to_evaluate_id === user_id
       )
 
-      console.log(query_Data);
+      // console.log(query_Data);
 
       if (error) {
         throw new Error('Error fetching data: ' + error.message);
@@ -524,7 +534,7 @@ export default function Reports() {
       };
 
       const data = filterByAttributeName(query_Data, selectedAttribute);
-      console.log(data);
+      // console.log(data);
 
       const fetch_self_Data = (query_Data) => {
         const filteredData = query_Data.filter(item => item.relationship_type === null);
@@ -601,10 +611,10 @@ export default function Reports() {
       setRadial_Score(radial_result);
       // console.log(radial_result)
     }
-    if(radial_self_data){
+    if (radial_self_data) {
       setRadial_Label(radial_self_data.map(item => item.statement)); // Set the statement labels
     }
-  }, [selectedAttribute, radial_result,radial_self_data])
+  }, [selectedAttribute, radial_result, radial_self_data])
 
   useEffect(() => {
     fetch_radar("total");
@@ -618,8 +628,8 @@ export default function Reports() {
 
       const result = radial_score;
 
-      console.log(result);
-      console.log(selfresults);
+      // console.log(result);
+      // console.log(selfresults);
 
       const maxData = new Array(result.length).fill(100);
       const selfData = radial_self_data.map(item => item.average_weight);
@@ -689,8 +699,8 @@ export default function Reports() {
     responsive: true,
     plugins: {
       legend: {
-         position: "bottom",
-        align:"end"
+        position: "bottom",
+        align: "end"
       },
       title: {
         display: true,
@@ -712,7 +722,7 @@ export default function Reports() {
         },
       },
 
-      
+
     },
   };
 
@@ -778,24 +788,24 @@ export default function Reports() {
           font: {
             size: 12,
           },
-          callback: function(label) {
+          callback: function (label) {
             let words = label.split(" ");
             let formattedLabel = [];
-            
+
             for (let i = 0; i < words.length; i += 3) {
               formattedLabel.push(words.slice(i, i + 3).join(" "));
             }
-  
+
             return formattedLabel; // Returns array for multi-line label
           }
-  
+
         },
         suggestedMin: 0,
         suggestedMax: 100,
       },
     },
   };
-  
+
   const items = [
     {
       id: 1,
@@ -842,11 +852,11 @@ export default function Reports() {
     { id: "bar", label: "Bar Chart" },
     { id: "radial", label: "Radial Chart" },
   ];
- 
+
   useEffect(() => {
-    console.log(self_table_data);
-    console.log(notself_table_data);
-  
+    // console.log(self_table_data);
+    // console.log(notself_table_data);
+
     if (self_table_data.length > 0) {
       // Merge self and not-self scores properly
       const mergedScores = self_table_data.map((selfScore) => {
@@ -856,7 +866,7 @@ export default function Reports() {
             reln.attribute_name === selfScore.attribute_name &&
             reln.company_name === selfScore.company_name
         );
-  
+
         return {
           company_name: selfScore.company_name,
           attribute_name: selfScore.attribute_name,
@@ -866,8 +876,8 @@ export default function Reports() {
           avg_reln_perc: relationshipScore ? relationshipScore.average_score_percentage : 0, // Relationship percentage
         };
       });
-  
-      console.log(mergedScores);
+
+      // console.log(mergedScores);
       setTable_Data(mergedScores);
     }
   }, [self_table_data, notself_table_data]);
@@ -962,7 +972,6 @@ export default function Reports() {
       labels: demographicTypes,
       datasets: [
         {
-          label: "Score",
           data: selfresult,
           backgroundColor: selfresult.map((_, index) => colors[index % colors.length]),
           borderColor: selfresult.map((_, index) => colors[index % colors.length]),
@@ -1066,8 +1075,14 @@ export default function Reports() {
                       specific_type_bar(item.key);
                       setScore_Type(item.key);
                       setSelectedChart(item.key);
+                      if (item.key === 'demography') {
+                        fetch_spefifc_data('total');
+                        console.log(total);
+                        console.log('opend');
+                        processDemographicData();
 
-                      processDemographicData(data);
+                      }
+                      processDemographicData();
 
                     }}
 
@@ -1274,7 +1289,7 @@ export default function Reports() {
                                         {row.avg_reln_weight?.toFixed(2) || "0.00"}
                                       </TableCell>
                                       <TableCell className="text-center">
-                                        {(row.avg_reln_perc.toFixed(2) )}%
+                                        {(row.avg_reln_perc.toFixed(2))}%
                                       </TableCell>
                                     </>
                                   )}
