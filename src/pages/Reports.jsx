@@ -725,6 +725,43 @@ export default function Reports() {
 
     },
   };
+  const baroptions = {
+    indexAxis: "x", // Ensures vertical bars
+    elements: {
+      bar: {
+        borderWidth: 2,
+      },
+    },
+    responsive: true,
+    plugins: {
+      legend: {
+        display:false,
+        position: "bottom",
+        align: "end"
+      },
+      title: {
+        display: true,
+        text: "Report",
+      },
+      datalabels: {
+        anchor: "end", // Positions label on top of bars
+        align: "top",
+        offset: 5, // Adds margin above the bar
+        font: {
+          weight: "bold",
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100
+
+        },
+      },
+
+
+    },
+  };
 
   const specific_type_bar = (relationship_type) => {
     if (label && selfresults) {
@@ -972,6 +1009,7 @@ export default function Reports() {
       labels: demographicTypes,
       datasets: [
         {
+          label:"",
           data: selfresult,
           backgroundColor: selfresult.map((_, index) => colors[index % colors.length]),
           borderColor: selfresult.map((_, index) => colors[index % colors.length]),
@@ -983,6 +1021,9 @@ export default function Reports() {
   useEffect(() => {
     Demography_bar_data(selectedAttribute);
   }, [selectedAttribute])
+  useEffect(()=>{
+    processDemographicData();
+  },[total]);
 
   return (
     <div className="p-6">
@@ -1077,10 +1118,6 @@ export default function Reports() {
                       setSelectedChart(item.key);
                       if (item.key === 'demography') {
                         fetch_spefifc_data('total');
-                        console.log(total);
-                        console.log('opend');
-                        processDemographicData();
-
                       }
                       processDemographicData();
 
@@ -1161,7 +1198,7 @@ export default function Reports() {
 
                             <div>
                               <div ref={chartRef}>
-                                <Bar data={demographicbardata} options={options} plugins={[ChartDataLabels]} />
+                                <Bar data={demographicbardata} options={baroptions} plugins={[ChartDataLabels]} />
                               </div>
                               <button onClick={copyToClipboard} className="mt-4">
                                 Copy Chart to Clipboard
