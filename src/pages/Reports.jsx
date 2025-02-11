@@ -170,12 +170,12 @@ export default function Reports() {
       }));
 
 
-      console.log(relation_count_map_temp);
+      // console.log(relation_count_map_temp);
       setRelationCountMap(relationCountArray);
-      console.log(filteredData);
-
-
       // console.log(filteredData);
+
+
+      console.log(filteredData);
       // Transform data to match expected structure
       const formattedData = filteredData.map(e => {
         const attributeMap = {};
@@ -187,17 +187,13 @@ export default function Reports() {
 
           if (!attributeMap[attributeName]) {
             attributeMap[attributeName] = { totalWeight: 0, count: 0 };
-          }else{
-
-            attributeMap[attributeName].totalWeight += weight;
-            attributeMap[attributeName].count += 1;
-  
-  
           }
 
-
-
-        });
+            attributeMap[attributeName].totalWeight += weight;
+            attributeMap[attributeName].count += 1;  
+          
+          });
+        console.log(attributeMap);
 
 
 
@@ -309,7 +305,7 @@ export default function Reports() {
   const fetch_user = async () => {
     if (selectedCompany) {
 
-      console.log(selectedCompany);
+      // console.log(selectedCompany);
       try {
         const { data, error } = await supabase
           .from("users")
@@ -318,7 +314,7 @@ export default function Reports() {
         if (data) {
           setUsers(data);
 
-          console.log(data);
+          // console.log(data);
 
         } else {
           console.log(error);
@@ -353,6 +349,7 @@ export default function Reports() {
   const fetch_spefifc_data = (relationship_type) => {
     if (!data) return;
   
+    console.log(data);
     // Separate self and not-self data
     const selfData = data.filter((item) => item.relationship_type === null);
   
@@ -373,14 +370,16 @@ export default function Reports() {
   
     const aggregatedSelfData = labels.map((label) => {
       const selfItems = selfData.filter((item) => item.attribute_name === label);
+      console.log(selfItems);
+
       const avgSelfWeight = selfItems.length
-        ? selfItems.reduce((sum, i) => sum + i.average_weight, 0) / selfItems.length
+        ? selfItems.reduce((sum, i) => sum + i.average_weight, 0) 
         : 0;
       const avgSelfScore = selfItems.length
-        ? selfItems.reduce((sum, i) => sum + i.average_score_percentage, 0) / selfItems.length
+        ? selfItems.reduce((sum, i) => sum + i.average_score_percentage, 0) 
         : 0;
   
-      selfResultsMap[label] = avgSelfWeight;
+      selfResultsMap[label] = avgSelfScore;
   
       return {
         company_name: selfItems[0]?.company_name || "Unknown",
@@ -392,14 +391,16 @@ export default function Reports() {
   
     const aggregatedNotSelfData = labels.map((label) => {
       const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
+      console.log(notSelfItems);
+
       const avgNotSelfWeight = notSelfItems.length
-        ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) / notSelfItems.length
+        ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0) 
         : 0;
       const avgNotSelfScore = notSelfItems.length
-        ? notSelfItems.reduce((sum, i) => sum + i.average_score_percentage, 0) / notSelfItems.length
+        ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_score_percentage), 0) 
         : 0;
   
-      notSelfResultsMap[label] = avgNotSelfWeight;
+      notSelfResultsMap[label] = avgNotSelfScore;
   
       return {
         company_name: notSelfItems[0]?.company_name || "Unknown",
@@ -411,7 +412,7 @@ export default function Reports() {
   
     // Merge self and not-self aggregated data
 
-  
+
     // Set data for charts and tables
     setLabel(labels);
     setSelfResults(Object.values(selfResultsMap));
@@ -420,8 +421,8 @@ export default function Reports() {
     setSelfTableData(aggregatedSelfData);
     setNotSelfTableData(aggregatedNotSelfData);
   
-    console.log("Final Self Data:", aggregatedSelfData);
-    console.log("Final Not Self Data:", aggregatedNotSelfData);
+    // console.log("Final Self Data:", aggregatedSelfData);
+    // console.log("Final Not Self Data:", aggregatedNotSelfData);
     
   };
   
@@ -1241,7 +1242,7 @@ export default function Reports() {
                                         {row.avg_reln_weight?.toFixed(2) || "0.00"}
                                       </TableCell>
                                       <TableCell className="text-center">
-                                        {(row.avg_reln_perc )}%
+                                        {(row.avg_reln_perc.toFixed(2) )}%
                                       </TableCell>
                                     </>
                                   )}
