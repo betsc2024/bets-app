@@ -186,7 +186,9 @@ export default function UserReports() {
           const calculateAverageWeight = (data) => {
             const attributeMap = {};
             const statementMap = {};
-
+            
+            console.log(data);
+            
             let firstsname = "";
             data.forEach(evaluation => {
               evaluation.evaluation_responses.forEach(response => {
@@ -214,7 +216,7 @@ export default function UserReports() {
 
               });
             });
-            // console.log(attributeMap);
+            console.log(attributeMap);
             // console.log(statementMap);
             let count_statement = 1;
             if (firstsname != "") {
@@ -231,8 +233,8 @@ export default function UserReports() {
           const result2 = calculateAverageWeight(total_Data);
 
 
-          // console.log(result);
-          // console.log(result2);
+          console.log(result);
+          console.log(result2);
 
 
           setSelfScore(result);
@@ -334,6 +336,7 @@ export default function UserReports() {
       attribute_Data.forEach((item, index) => {
         if (item.id) {
           const foundScore = score.find(s => s.attribute_id === item.id);
+          // console.log(foundScore);
           if (foundScore) {
             label_temp.push(item.name);
             res_temp.push(Math.round(foundScore.avg_score_perc));
