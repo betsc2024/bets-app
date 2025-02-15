@@ -713,21 +713,30 @@ export default function UserReports() {
       legend: {
         position: 'bottom',
       },
-      title: {
-        display: true,
-        text: 'Self',
-        position: 'bottom',
+      datalabels: {
+        display: true, // Show labels on each data point
+        color: "black", // Set text color
+        font: {
+          size: 14, // Make numbers bigger
+          weight: "bold", // Make numbers bold
+        },
+        formatter: (value) => value, // Show raw data value
       },
     },
     scales: {
       r: {
+        ticks: {
+          display:false
+         },
         grid: {
           color: 'rgba(0, 0, 0, 0.1)',
         },
         pointLabels: {
           color: 'black',
           font: {
-            size: 12,
+            size: 14,
+            weight : "bolder"
+
           },
           callback: function(label) {
             let words = label.split(" ");

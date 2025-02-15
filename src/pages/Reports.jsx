@@ -66,6 +66,7 @@ export default function Reports() {
   const [radial_data, setRadial_data] = useState(null);
   const [radial_result, set_Radial_Result] = useState(null);
   const [radial_self_data, setRadialSelfData] = useState(null);
+  const [radial_ideal_score,  setRadial_IdealScore] = useState(null);
 
 
   const [self_table_data, setSelfTableData] = useState([]);
@@ -93,9 +94,9 @@ export default function Reports() {
   const chartRef = useRef(null);
 
   const copyToClipboard = async () => {
-    console.log('copyToClipboard');
+    // console.log('copyToClipboard');
     if (chartRef.current) {
-      console.log("Click");
+      // console.log("Click");
       const canvas = await html2canvas(chartRef.current);
       canvas.toBlob((blob) => {
         if (blob) {
@@ -178,7 +179,7 @@ export default function Reports() {
       // console.log(filteredData);
 
 
-      console.log(filteredData);
+      // console.log(filteredData);
       // Transform data to match expected structure
       const formattedData = filteredData.map(e => {
         const attributeMap = {};
@@ -196,7 +197,7 @@ export default function Reports() {
           attributeMap[attributeName].count += 1;
 
         });
-        console.log(attributeMap);
+        // console.log(attributeMap);
 
 
 
@@ -209,7 +210,7 @@ export default function Reports() {
         }));
       }).flat();
 
-      console.log(formattedData);
+      // console.log(formattedData);
 
       setData(formattedData);
 
@@ -235,7 +236,7 @@ export default function Reports() {
       let relationshipTypes = new Set();
 
       data.forEach((item, index) => {
-        const relationshipType = item.relationship_type || "Self"; // Treat null as "Self"
+        const relationshipType = item.relationship_type || "self"; // Treat null as "Self"
         relationshipTypes.add(relationshipType);
 
         // Process each item based on the new data structure
@@ -254,22 +255,23 @@ export default function Reports() {
         attributeMap[attributeName][relationshipType].total += weight;
         attributeMap[attributeName][relationshipType].count += 1;
       });
-
+      relationshipTypes.add("Total");
 
       const relationshipTypesArray = Array.from(relationshipTypes);
-
+      // console.log(attributeMap);
       const processedData = Object.keys(attributeMap).map((attribute, index) => {
         let row = { SrNo: index + 1, Attribute: attribute };
 
         relationshipTypesArray.forEach((type) => {
           row[type] = attributeMap[attribute][type]
-            ? (attributeMap[attribute][type].total / attributeMap[attribute][type].count).toFixed(1)
+            ? (attributeMap[attribute][type].total / attributeMap[attribute][type].count).toFixed(2)
             : 0;
         });
         if (total.length > 0 && total) {
-          console.log(total);
-          row["Total"] = total[index].average_score_percentage;
+          // console.log(total);
+          row["Total"] = (total[index].average_score_percentage).toFixed(2);
         }
+        // console.log(row);
 
 
         return row;
@@ -487,7 +489,11 @@ export default function Reports() {
               evaluation_assignments ( 
             id,
             user_to_evaluate_id,
-            company_id
+            company_id,
+            companies(
+             name,
+             ideal_score
+            )
             ),
           evaluation_responses (
             attribute_statement_options (
@@ -509,7 +515,10 @@ export default function Reports() {
 
       // console.log(query_info);
       // console.log(id);
-      // console.log(user_id);
+      // console.log(user_id);  
+
+      
+      setRadial_IdealScore(query_info[0].evaluation_assignments?.companies.ideal_score);
 
       const query_Data = query_info.filter(evaluation =>
         evaluation.evaluation_assignments?.company_id === id &&
@@ -577,7 +586,7 @@ export default function Reports() {
           if (option && option.attribute_statements) {
             const statement = option.attribute_statements.statement;
             if (!processedData[statement]) {
-              processedData[statement] = { totalWeight: 0, count: 0 };
+              processedData[statement] = { totalWeight: 0, count: 0};
             }
             processedData[statement].totalWeight += option.weight;
             processedData[statement].count += 1;
@@ -624,7 +633,7 @@ export default function Reports() {
 
     // Fetch self data and max data
 
-    if (radial_score && radial_label && radial_self_data) {
+    if (radial_score && radial_label && radial_self_data && radial_ideal_score) {
 
       const result = radial_score;
 
@@ -632,7 +641,10 @@ export default function Reports() {
       // console.log(selfresults);
 
       const maxData = new Array(result.length).fill(100);
+        const idealscoreData = new Array(result.length).fill(radial_ideal_score || 50);
+   
       const selfData = radial_self_data.map(item => item.average_weight);
+
 
       let relationshipData = [];
       relationshipData = result.map(item => item.average_weight);
@@ -651,41 +663,55 @@ export default function Reports() {
           {
             label: 'Self',
             data: selfData,
-            backgroundColor: 'rgba(255, 99, 132, 0.2)',
-            borderColor: 'rgba(255, 99, 132, 1)',
-            pointBackgroundColor: 'rgba(255, 99, 132, 1)',
+            backgroundColor: 'rgba(255, 0, 0, 0.15)', // Red
+            borderColor: 'rgba(255, 0, 0, 0.9)',
+            borderWidth: 2.5,
+            pointBackgroundColor: 'rgba(255, 0, 0, 1)',
             pointBorderColor: '#fff',
             pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgba(255, 99, 132, 1)',
+            pointHoverBorderColor: 'rgba(255, 0, 0, 1)',
           },
           {
             label: 'Total',
             data: relationshipData,
-            backgroundColor: 'rgba(54, 162, 235, 0.2)',
-            borderColor: 'rgba(54, 162, 235, 1)',
-            pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+            backgroundColor: 'rgba(0, 128, 0, 0.15)', // Green
+            borderColor: 'rgba(0, 128, 0, 0.9)',
+            borderWidth: 2.5,
+            pointBackgroundColor: 'rgba(0, 128, 0, 1)',
             pointBorderColor: '#fff',
             pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgba(54, 162, 235, 1)',
+            pointHoverBorderColor: 'rgba(0, 128, 0, 1)',
           },
           {
             label: 'Max Score (100)',
             data: maxData,
-            backgroundColor: 'rgba(255, 206, 86, 0.2)',
-            borderColor: 'rgba(255, 206, 86, 1)',
-            pointBackgroundColor: 'rgba(255, 206, 86, 1)',
+            backgroundColor: 'rgba(255, 255, 0, 0.15)', // Yellow
+            borderColor: 'rgba(255, 255, 0, 0.9)',
+            borderWidth: 2.5,
+            pointBackgroundColor: 'rgba(255, 255, 0, 1)',
             pointBorderColor: '#fff',
             pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgba(255, 206, 86, 1)',
+            pointHoverBorderColor: 'rgba(255, 255, 0, 1)',
+          },
+          {
+            label: 'Ideal Score',
+            data: idealscoreData,
+            backgroundColor: 'rgba(0, 0, 255, 0.15)', // Blue
+            borderColor: 'rgba(0, 0, 255, 0.9)',
+            borderWidth: 2.5,
+            pointBackgroundColor: 'rgba(0, 0, 255, 1)',
+            pointBorderColor: '#fff',
+            pointHoverBackgroundColor: '#fff',
+            pointHoverBorderColor: 'rgba(0, 0, 255, 1)',
           },
         ],
       };
-
+      
       // console.log(radarData);
 
       setRadial_data(radarData); // Set the radar chart data
     }
-  }, [selectedAttribute, radial_label, radial_score, radial_self_data])
+  }, [selectedAttribute, radial_label, radial_score, radial_self_data,radial_ideal_score])
 
 
 
@@ -808,22 +834,30 @@ export default function Reports() {
     plugins: {
       legend: {
         position: 'bottom',
+        
       },
-      title: {
-        display: true,
-        text: 'Self',
-        position: 'bottom',
+      datalabels: {
+        display: true, // Show labels on each data point
+        color: "black", // Set text color
+        font: {
+          size: 14, // Make numbers bigger
+          weight: "bold", // Make numbers bold
+        },
+        formatter: (value) => value, // Show raw data value
       },
     },
     scales: {
       r: {
+          ticks: {
+           display:false
+          },
         grid: {
           color: 'rgba(0, 0, 0, 0.1)',
         },
         pointLabels: {
           color: 'black',
           font: {
-            size: 12,
+            size: 14,
           },
           callback: function (label) {
             let words = label.split(" ");
@@ -990,12 +1024,13 @@ export default function Reports() {
     let selfresult = [];
 
     if (demographicData) {
+      // console.log(demographicData);
       demographicData.map((item, index) => {
         if (item.Attribute === attribute) {
           for (let key in item) {
             if (key !== "Attribute" && key !== "SrNo") {
               selfresult.push(
-                item[key]
+               item[key]
               );
             }
           }
@@ -1272,11 +1307,11 @@ export default function Reports() {
 
                                   {demographicTypes.map((type) => (
                                     <TableCell key={type} className="text-center">
-                                      {Math.round(row[type])}
+                                      {row[type]}%
                                     </TableCell>
                                   ))}
 
-                                  <TableCell className="text-center">{row["Total"]}</TableCell>
+                                  <TableCell className="text-center">{row["Total"]}%</TableCell>
                                 </TableRow>
                               ))
                             ) : (
