@@ -104,7 +104,7 @@ export default function CompanyManagement() {
   const [companies, setCompanies] = useState([]);
   const [industries, setIndustries] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [newCompany, setNewCompany] = useState({ name: '', industry_id: '', settings: {} });
+  const [newCompany, setNewCompany] = useState({ name: '', industry_id: '',settings: {}, ideal_score : null  });
   const [editingCompany, setEditingCompany] = useState(null);
   const [companyToDelete, setCompanyToDelete] = useState(null);
   const [selectedCompanyUsers, setSelectedCompanyUsers] = useState(null);
@@ -182,7 +182,7 @@ export default function CompanyManagement() {
       if (error) throw error;
       
       toast.success('Company added successfully');
-      setNewCompany({ name: '', industry_id: '', settings: {} });
+      setNewCompany({ name: '', industry_id: '', settings: {}, ideal_score : null });
       fetchCompanies();
     } catch (error) {
       toast.error('Error adding company');
@@ -196,11 +196,13 @@ export default function CompanyManagement() {
     if (!editingCompany) return;
     
     try {
+      console.log(editingCompany);
       const { error } = await supabase
         .from('companies')
         .update({
           name: editingCompany.name,
           industry_id: editingCompany.industry_id,
+          ideal_score : editingCompany.ideal_score,
           settings: editingCompany.settings
         })
         .eq('id', editingCompany.id);
@@ -334,11 +336,28 @@ export default function CompanyManagement() {
               <Label htmlFor="industry">Industry</Label>
               <div className="mt-1">
                 <SelectWithSearch
+                id="industry"
                   value={newCompany.industry_id}
                   onValueChange={(value) => setNewCompany({ ...newCompany, industry_id: value })}
                   options={industries}
                   placeholder="Select an industry"
+                  required
+
                 />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="ideal_score">ideal_score</Label>
+              <div className="mt-1">
+              <Input
+              id="ideal_score"
+              value = {newCompany.ideal_score}
+              onChange={(value) => setNewCompany({ ...newCompany, ideal_score: value })}
+              placeholder="Enter a Ideal Score"
+            required
+
+            
+          />
               </div>
             </div>
             <Button type="submit" disabled={loading} className="w-full">
@@ -473,7 +492,12 @@ export default function CompanyManagement() {
                 <Input
                   id="edit-name"
                   value={editingCompany.name}
-                  onChange={(e) => setEditingCompany({ ...editingCompany, name: e.target.value })}
+                  onChange={(e) => 
+                  {
+                    console.log("Edit")
+                    setEditingCompany({ ...editingCompany, name: e.target.value })}
+
+                  }
                   placeholder="Enter company name"
                   className="mt-1"
                 />
@@ -482,13 +506,28 @@ export default function CompanyManagement() {
                 <Label htmlFor="edit-industry">Industry</Label>
                 <div className="mt-1">
                   <SelectWithSearch
+                  id= "edit-industry"
                     value={editingCompany.industry_id}
-                    onValueChange={(value) => setEditingCompany({ ...editingCompany, industry_id: value })}
+                    onValueChange={(value) => setEditingCompany({ ...editingCompany, industry_id: value})}
                     options={industries}
                     placeholder="Select an industry"
                   />
                 </div>
               </div>
+              <div>
+              <Label htmlFor="edit-ideal_score">Ideal score</Label>
+              <div className="mt-1">
+              <Input
+              id = "edit-ideal_score"
+              value = {editingCompany.ideal_score}
+              onChange={(e) => {
+                console.log(editingCompany);
+                setEditingCompany({ ...editingCompany, ideal_score: Number(e.target.value) }) 
+              }}
+            placeholder="Enter a Ideal Score"
+            />
+              </div>
+            </div>
             </div>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
