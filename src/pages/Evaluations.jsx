@@ -45,6 +45,8 @@ import { Label } from '../components/ui/label';
 const StatusProgress = ({ currentStatus }) => {
   const statuses = ['draft', 'active'];
   const currentIndex = statuses.indexOf(currentStatus?.toLowerCase() || 'draft');
+ 
+
 
   return (
     <div className="w-full">
@@ -143,6 +145,9 @@ export default function Evaluations() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const itemsPerPage = 8;
   const assignmentsPerPage = 10;
+  const [companies, setCompanies] = useState([]);
+  const  [selectedCompany ,setSelectedCompany] = useState(null);
+  const  [allbanks, setAllbanks] = useState(true);
 
   const relationshipTypes = [
     { value: 'top_boss', label: 'Top Boss' },
@@ -156,21 +161,49 @@ export default function Evaluations() {
 
   const [currentUserId, setCurrentUserId] = useState(null);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const fetch_companies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("companies")
+        .select('*');
+      if (data) {
+        setCompanies(data);
+      } else {
+        console.log(error);
+      }
+    } catch (error) {
+      console.log(error);
+      toast.error(error);
+    }
+  }
 
-  const fetchUsers = async () => {
+ useEffect(() => {
+   fetch_companies();
+ }, []);
+
+
+  const fetchUsers = async (company_id) => {
     try {
       const { data: userData, error } = await supabase
         .from('users')
         .select('*')
-        .order('full_name');
-
+        .eq('company_id',company_id);
+      
       if (error) throw error;
+      console.log(userData);
       setUsers(userData || []);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast.error('Failed to fetch users');
     }
   };
+
+  useEffect(()=>{
+    if(selectedCompany){
+      // console.log(selectedCompany);
+      fetchUsers(selectedCompany.id);
+    }
+  },[selectedCompany])
 
   const getStatusBadgeStyle = (status) => {
     const baseStyle = "inline-flex items-center px-3 py-1 rounded-full text-sm font-medium";
@@ -249,7 +282,7 @@ export default function Evaluations() {
     }
   };
 
-  const fetchBanks = async () => {
+  const fetchBanks = async (type) => {
     try {
       const { data, error } = await supabase
         .from('attribute_banks')
@@ -271,15 +304,19 @@ export default function Evaluations() {
           if (companyError) throw companyError;
           companies = companyData || [];
         }
-
-        const banksWithCompanies = data.map(bank => ({
-          ...bank,
-          company_name: bank.company_id 
-            ? companies.find(c => c.id === bank.company_id)?.name || 'Unknown'
-            : 'N/A'
-        }));
-
-        setBanks(banksWithCompanies);
+        if(type  === false){
+          console.log(banks);
+          
+      
+          const banksWithCompanies = data.filter((item)=>{
+            return item.company_id === selectedCompany.id;
+          });
+  
+          setBanks(banksWithCompanies);
+        }else{
+          setBanks(data);
+        }
+       
       } else {
         setBanks(data || []);
       }
@@ -746,20 +783,26 @@ export default function Evaluations() {
       console.log('Loading initial data...');
       await Promise.all([
         fetchAssignments(),
-        fetchBanks()
+        fetchBanks(true)
       ]);
     };
 
     loadInitialData();
   }, []);
 
+
+  useEffect(()=>{
+    console.log(allbanks);
+    fetchBanks(allbanks);
+  },[allbanks])
+
   // Only fetch users when bank changes
-  useEffect(() => {
-    if (selectedBank) {
-      console.log('Selected bank changed, fetching users...');
-      fetchCompanyUsers(selectedBank.company_id);
-    }
-  }, [selectedBank]);
+  // useEffect(() => {
+  //   if (selectedBank) {
+  //     console.log('Selected bank changed, fetching users...');
+  //     fetchCompanyUsers(selectedBank.company_id);
+  //   }
+  // }, [selectedBank]);
 
   // Only fetch assignments when tab changes to manage
   useEffect(() => {
@@ -1193,7 +1236,36 @@ export default function Evaluations() {
             </div>
 
             <div>
-              <Label>Select Bank</Label>
+              <Label>Select Company</Label>
+              <Select value={selectedCompany?.id} onValueChange={(value) => {
+                const company = companies.find(b => b.id === value);
+                setSelectedCompany(company);
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a Company" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+
+            <div className='row'>
+              <div className='col'>
+              <Label>Select Bank From : </Label>
+              <input type = "radio"  className='mx-2' id="all" name="select_bank" defaultChecked onClick={()=>{
+                setAllbanks(true);
+              }} />
+              <Label>All</Label>
+              <input type = "radio" className='mx-2' id="specific" name="select_bank" onClick={()=>{
+                setAllbanks(false);
+              }}/>
+              <Label>Industry Specific</Label>
               <Select value={selectedBank?.id} onValueChange={(value) => {
                 const bank = banks.find(b => b.id === value);
                 setSelectedBank(bank);
@@ -1209,6 +1281,7 @@ export default function Evaluations() {
                   ))}
                 </SelectContent>
               </Select>
+              </div>
             </div>
 
             {selectedBank && (

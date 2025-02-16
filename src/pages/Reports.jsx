@@ -643,11 +643,11 @@ export default function Reports() {
       const maxData = new Array(result.length).fill(100);
         const idealscoreData = new Array(result.length).fill(radial_ideal_score || 50);
    
-      const selfData = radial_self_data.map(item => item.average_weight);
+      const selfData = radial_self_data.map(item => (item.average_weight).toFixed(2));
 
 
       let relationshipData = [];
-      relationshipData = result.map(item => item.average_weight);
+      relationshipData = result.map(item => (item.average_weight).toFixed(2));
 
 
       // Combine self, relationship, and max data
@@ -1294,7 +1294,6 @@ export default function Reports() {
                                 </TableHead>
                               ))}
 
-                              <TableHead className="text-center">Total</TableHead>
                             </TableRow>
                           </TableHeader>
 
@@ -1311,7 +1310,6 @@ export default function Reports() {
                                     </TableCell>
                                   ))}
 
-                                  <TableCell className="text-center">{row["Total"]}%</TableCell>
                                 </TableRow>
                               ))
                             ) : (
