@@ -426,6 +426,7 @@ export default function AttributeManagement() {
         toast.error('Statement text is required');
         return;
       }
+      console.log(currentStatement);
 
       setLoading(true);
 
@@ -448,7 +449,7 @@ export default function AttributeManagement() {
 
       if (statementError) {
         console.error('Statement Error:', statementError);
-        throw new Error('Failed to create statement');
+        throw new Error('Failed to create statement/Check it can be duplicate statement');
       }
 
       // 2. Insert the options with proper weights
