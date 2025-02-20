@@ -41,6 +41,8 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from '../components/ui/select';
 import { MultiSelect } from '../components/ui/multi-select';
 import { Label } from '../components/ui/label';
+import * as Progress from "@radix-ui/react-progress";
+import emailjs from '@emailjs/browser';
 
 const StatusProgress = ({ currentStatus }) => {
   const statuses = ['draft', 'active'];
@@ -149,6 +151,9 @@ export default function Evaluations() {
   const  [selectedCompany ,setSelectedCompany] = useState(null);
   const  [allbanks, setAllbanks] = useState(true);
 
+  const [progress, setProgress] = useState(0);
+  const [showProgress, setShowProgress] = useState(false);
+
   const relationshipTypes = [
     { value: 'top_boss', label: 'Top Boss' },
     { value: 'hr', label: 'HR' },
@@ -181,6 +186,49 @@ export default function Evaluations() {
    fetch_companies();
  }, []);
 
+//  const sendMail = (to_mail,to_name) => {
+//   const service_Id = import.meta.env.VITE_EMAIL_SERVICE_ID;
+//   const template_Id = import.meta.env.VITE_EMAIL_TEMPLATE_ID;
+//   const public_Key = import.meta.env.VITE_EMAIL_PUBLIC_KEY;
+//   const message = {
+//     to_name : to_name,
+//     to_email : to_mail,
+//     from_name : "bets",
+//     message : `
+//      You have new Evalution please complete it.
+//      Invite link : "http://localhost:5173/login"
+//      UserName : ${to_mail}
+//      Password : "123123"
+//     `,
+//   }
+
+//   setShowProgress(true);
+//   setProgress(0);
+  
+//   emailjs.send(service_Id,template_Id,message,public_Key).then(() => {
+//     let value = 0;
+//     const interval = setInterval(()=>{
+//       value += 10;
+//       setProgress(value);
+//       if(value >=100){
+//         clearInterval(interval);
+//         setTimeout(() => setShowProgress(false), 500); // Hide after completion
+//       }
+//     },100)
+//     console.log("Email sent successfully");
+//     const date = new Date();
+//     toast.message(`Email send successfully on ${date.toString()} ${to_mail}`);
+
+//   },
+//   (error)=>{
+//     console.log(error);
+//     toast.error(error);
+//     setShowProgress(false);
+
+//   }
+//   );
+//  };
+ 
 
   const fetchUsers = async (company_id) => {
     try {
@@ -190,7 +238,7 @@ export default function Evaluations() {
         .eq('company_id',company_id);
       
       if (error) throw error;
-      console.log(userData);
+      // console.log(userData);
       setUsers(userData || []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -305,7 +353,7 @@ export default function Evaluations() {
           companies = companyData || [];
         }
         if(type  === false){
-          console.log(banks);
+          // console.log(banks);
           
       
           const banksWithCompanies = data.filter((item)=>{
@@ -348,7 +396,7 @@ export default function Evaluations() {
       
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('Current user:', user?.id);
+      // console.log('Current user:', user?.id);
       
       // Get user data
       const { data: userData } = await supabase
@@ -357,7 +405,7 @@ export default function Evaluations() {
         .eq('id', user?.id)
         .single();
       
-      console.log('User data:', userData);
+      // console.log('User data:', userData);
 
       // Get all assignments
       const { data: assignments, error } = await supabase
@@ -401,7 +449,7 @@ export default function Evaluations() {
         return;
       }
 
-      console.log('Raw assignments data:', assignments);
+      // console.log('Raw assignments data:', assignments);
 
       // Group assignments by evaluation name
       const groupedAssignments = assignments.reduce((acc, assignment) => {
@@ -413,7 +461,7 @@ export default function Evaluations() {
         return acc;
       }, {});
 
-      console.log('Final grouped assignments:', groupedAssignments);
+      // console.log('Final grouped assignments:', groupedAssignments);
       setAssignments(assignments);
 
     } catch (error) {
@@ -531,7 +579,7 @@ export default function Evaluations() {
           due_date: null
         };
 
-        console.log('Creating assignment with data:', assignmentData);
+        // console.log('Creating assignment with data:', assignmentData);
 
         const { data: assignment, error: assignmentError } = await supabase
           .from('evaluation_assignments')
@@ -792,7 +840,7 @@ export default function Evaluations() {
 
 
   useEffect(()=>{
-    console.log(allbanks);
+    // console.log(allbanks);
     fetchBanks(allbanks);
   },[allbanks])
 
@@ -836,6 +884,8 @@ export default function Evaluations() {
           <p className="text-sm text-gray-600">Bank: {assignmentsToShow[0]?.attribute_banks?.name}</p>
           <p className="text-sm text-gray-600">Company: {assignmentsToShow[0]?.companies?.name}</p>
         </div>
+    
+
 
         <div className="rounded-md border">
           <Table>
@@ -915,6 +965,7 @@ export default function Evaluations() {
 
     return (
       <div className="space-y-4">
+
         {selectedAssignmentForView ? (
           <div>
             <div className="mb-4 flex items-center justify-between">
@@ -937,6 +988,7 @@ export default function Evaluations() {
               {Object.values(groupedAssignments).map((group) => (
                 <Card key={group.evaluation_name} className="flex flex-col">
                   <CardHeader>
+                    {console.log(group)}
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div>
@@ -1057,10 +1109,10 @@ export default function Evaluations() {
                       )}
                     </div>
                   </CardContent>
-                  <CardFooter>
+                  <CardFooter className="flex-col " >
                     <Button
                       variant="outline"
-                      className="w-full"
+                      className="w-full mb-2 "
                       onClick={() => {
                         // Set all assignments for this evaluation name when viewing details
                         const allAssignmentsForEval = assignments.filter(
@@ -1074,6 +1126,14 @@ export default function Evaluations() {
                     >
                       View Details
                     </Button>
+                    {/* <Button onClick={()=>{
+                      toast.info("Sending Wait.... ");
+                      group.assignments[0]?.evaluations.map((item)=>{
+                        sendMail(item.evaluator.email,item.evaluator.full_name);
+                      })
+                    }} className="w-full" >
+                      Send mail
+                    </Button> */}
                   </CardFooter>
                 </Card>
               ))}
@@ -1217,11 +1277,26 @@ export default function Evaluations() {
 
   return (
     <div className="p-6">
+           { showProgress && (
+        <div className="fixed bottom-4 right-4 w-[200px]">
+          <Progress.Root
+            className="relative h-[12px] w-full overflow-hidden rounded-full bg-gray-300 border"
+            value={progress}
+          >
+            <Progress.Indicator
+              className="h-full bg-green-500 transition-transform duration-300"
+              style={{ transform: `translateX(-${100 - progress}%)` }}
+            />
+          </Progress.Root>
+            <p>Email in Progress....</p>
+        </div>
+      )}
       <Tabs defaultValue={currentTab} onValueChange={setCurrentTab}>
         <TabsList>
           <TabsTrigger value="create">Create Evaluation</TabsTrigger>
           <TabsTrigger value="manage">Manage Evaluations</TabsTrigger>
         </TabsList>
+        
 
         <TabsContent value="create" className="space-y-4">
           <div className="space-y-4">
@@ -1254,8 +1329,8 @@ export default function Evaluations() {
               </Select>
             </div>
 
-
-            <div className='row'>
+{
+  selectedCompany &&  <div className='row'>
               <div className='col'>
               <Label>Select Bank From : </Label>
               <input type = "radio"  className='mx-2' id="all" name="select_bank" defaultChecked onClick={()=>{
@@ -1282,8 +1357,7 @@ export default function Evaluations() {
                 </SelectContent>
               </Select>
               </div>
-            </div>
-
+            </div>}
             {selectedBank && (
               <div className="space-y-4">
                 <Card>
@@ -1400,9 +1474,12 @@ export default function Evaluations() {
                 </Button>
               </div>
             )}
+          
+          
           </div>
-        </TabsContent>
 
+        </TabsContent>
+          
         <TabsContent value="manage">
           <div className="space-y-8">
             <div>
