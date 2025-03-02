@@ -86,7 +86,6 @@ export default function AttributeManagement() {
   const [editingRows, setEditingRows] = useState({});
   const [editedData, setEditedData] = useState({});
   const [deletedOptions, setDeletedOptions] = useState({});
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   // Filter dialog states
   const [industryDialogOpen, setIndustryDialogOpen] = useState(false);
@@ -340,12 +339,15 @@ export default function AttributeManagement() {
   const handleEdit = (attribute, statement) => {
     const editKey = `${attribute.id}-${statement.id}`;
     
-    // Prepare the edited data structure
+    // Initialize edit data with current values
     setEditedData(prev => ({
       ...prev,
       [attribute.id]: {
         attribute: {
           ...attribute,
+          name: attribute.name,
+          description: attribute.description,
+          analysis_type: attribute.analysis_type,
           selectedIndustries: attribute.attribute_industry_mapping?.map(m => m.industry_id) || []
         },
         statements: [{
@@ -360,12 +362,11 @@ export default function AttributeManagement() {
       }
     }));
     
+    // Set editing state for this row
     setEditingRows(prev => ({
       ...prev,
       [editKey]: true
     }));
-    
-    setIsEditDialogOpen(true);
   };
 
   const isEditing = (attributeId, statementId) => {
@@ -505,19 +506,16 @@ export default function AttributeManagement() {
   const handleSaveEdit = async (attributeId, statementId) => {
     try {
       const editedAttribute = editedData[attributeId];
-      const editKey = `${attributeId}-${statementId}`;
-      
-      const hasInvalidWeights = editedAttribute.statements[0].options.some(opt => {
-        const weight = validateWeights(opt.weight);
-        return weight === '' || isNaN(weight);
-      });
-
-      if (hasInvalidWeights) {
-        toast.error("Please ensure all weights are valid numbers");
+      if (!editedAttribute) {
+        toast.error("No changes to save");
         return;
       }
 
-      await supabase
+      const editKey = `${attributeId}-${statementId}`;
+      setLoading(true);
+
+      // Update attribute details
+      const { error: attributeError } = await supabase
         .from('attributes')
         .update({
           name: editedAttribute.attribute.name,
@@ -526,13 +524,16 @@ export default function AttributeManagement() {
         })
         .eq('id', attributeId);
 
+      if (attributeError) throw attributeError;
+
+      // Update industry mappings
       await supabase
         .from('attribute_industry_mapping')
         .delete()
         .eq('attribute_id', attributeId);
 
-      if (editedAttribute.attribute.selectedIndustries.length > 0) {
-        await supabase
+      if (editedAttribute.attribute.selectedIndustries?.length > 0) {
+        const { error: industryError } = await supabase
           .from('attribute_industry_mapping')
           .insert(
             editedAttribute.attribute.selectedIndustries.map(industryId => ({
@@ -540,55 +541,54 @@ export default function AttributeManagement() {
               industry_id: industryId
             }))
           );
+
+        if (industryError) throw industryError;
       }
 
+      // Update statement
       const statement = editedAttribute.statements[0];
-      await supabase
+      const { error: statementError } = await supabase
         .from('attribute_statements')
         .update({ statement: statement.statement })
         .eq('id', statement.id);
 
-      // Delete removed options from database
-      if (deletedOptions[statementId]?.length > 0) {
-        await supabase
-          .from('attribute_statement_options')
-          .delete()
-          .in('id', deletedOptions[statementId]);
-      }
+      if (statementError) throw statementError;
 
-      // Update remaining options
+      // Update options
       for (const option of statement.options) {
         if (option.id) {
-          await supabase
+          const { error: optionError } = await supabase
             .from('attribute_statement_options')
             .update({
               option_text: option.text,
               weight: option.weight
             })
             .eq('id', option.id);
+
+          if (optionError) throw optionError;
         }
       }
 
+      // Clear edit states
       setEditingRows(prev => {
         const newState = { ...prev };
         delete newState[editKey];
         return newState;
       });
+      
       setEditedData(prev => {
         const newState = { ...prev };
         delete newState[attributeId];
         return newState;
       });
-      setDeletedOptions(prev => {
-        const newState = { ...prev };
-        delete newState[statementId];
-        return newState;
-      });
 
       toast.success('Changes saved successfully');
-      fetchAttributes();
+      await fetchAttributes(); // Refresh the data
     } catch (error) {
-      toast.error('Failed to save changes');
+      console.error('Error saving changes:', error);
+      toast.error('Failed to save changes: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1294,77 +1294,269 @@ export default function AttributeManagement() {
                     const editData = editedData[attribute.id];
 
                     return (
-                      <TableRow key={`${attribute.id}-${statement.id}-${index}`} className="border-b border-gray-300">
+                      <TableRow key={`${attribute.id}-${statement.id}`} className="border-b border-gray-300">
                         <TableCell className="align-top border-r border-gray-300">{attribute.analysis_type}</TableCell>
                         <TableCell className="align-top border-r border-gray-300">
-                          <div className="font-semibold text-base">{attribute.name}</div>
-                          {attribute.description && (
-                            <div className="text-sm text-muted-foreground mt-1">
-                              {truncateText(attribute.description, 100)}
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <Input
+                                value={editedData[attribute.id]?.attribute?.name || attribute.name}
+                                onChange={(e) => {
+                                  setEditedData(prev => ({
+                                    ...prev,
+                                    [attribute.id]: {
+                                      ...prev[attribute.id],
+                                      attribute: {
+                                        ...(prev[attribute.id]?.attribute || attribute),
+                                        name: e.target.value
+                                      }
+                                    }
+                                  }));
+                                }}
+                                className="w-full"
+                              />
+                              <Textarea
+                                value={editedData[attribute.id]?.attribute?.description || attribute.description}
+                                onChange={(e) => {
+                                  setEditedData(prev => ({
+                                    ...prev,
+                                    [attribute.id]: {
+                                      ...prev[attribute.id],
+                                      attribute: {
+                                        ...(prev[attribute.id]?.attribute || attribute),
+                                        description: e.target.value
+                                      }
+                                    }
+                                  }));
+                                }}
+                                className="mt-1"
+                              />
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="font-medium">{attribute.name}</div>
+                              {attribute.description && (
+                                <div className="text-sm text-muted-foreground mt-1">
+                                  {truncateText(attribute.description, 100)}
+                                </div>
+                              )}
                             </div>
                           )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300">
-                          {statement.statement}
-                        </TableCell>
-                        <TableCell className="align-top border-r border-gray-300 p-0">
-                          {statement.attribute_statement_options?.length > 0 ? (
-                            <div className="divide-y divide-gray-300">
-                              {statement.attribute_statement_options
-                                .sort((a, b) => b.weight - a.weight)
-                                .map((option) => (
-                                  <div key={option.id} className="text-sm p-2">
-                                    {option.option_text}
-                                  </div>
-                                ))}
-                            </div>
+                          {isEditing ? (
+                            <Textarea
+                              value={editedData[attribute.id]?.statements?.[0]?.statement || statement.statement}
+                              onChange={(e) => {
+                                setEditedData(prev => ({
+                                  ...prev,
+                                  [attribute.id]: {
+                                    ...prev[attribute.id],
+                                    statements: [{
+                                      ...(prev[attribute.id]?.statements?.[0] || statement),
+                                      statement: e.target.value
+                                    }]
+                                  }
+                                }));
+                              }}
+                              className="w-full"
+                            />
                           ) : (
-                            <div className="p-2">
-                              <span className="text-muted-foreground">No options</span>
-                            </div>
+                            statement.statement
                           )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300 p-0">
-                          {statement.attribute_statement_options?.length > 0 ? (
+                          {isEditing ? (
                             <div className="divide-y divide-gray-300">
-                              {statement.attribute_statement_options
+                              {(editedData[attribute.id]?.statements?.[0]?.options || statement.attribute_statement_options)
                                 .sort((a, b) => b.weight - a.weight)
-                                .map((option) => (
-                                  <div key={option.id} className="text-sm p-2 text-center">
-                                    {option.weight}
+                                .map((option, index) => (
+                                  <div key={option.id || index} className="flex items-center p-2">
+                                    <Input
+                                      value={option.text || option.option_text}
+                                      onChange={(e) => {
+                                        const options = editedData[attribute.id]?.statements?.[0]?.options || 
+                                          statement.attribute_statement_options.map(opt => ({
+                                            id: opt.id,
+                                            text: opt.option_text,
+                                            weight: opt.weight
+                                          }));
+                                        
+                                        setEditedData(prev => ({
+                                          ...prev,
+                                          [attribute.id]: {
+                                            ...prev[attribute.id],
+                                            statements: [{
+                                              ...(prev[attribute.id]?.statements?.[0] || statement),
+                                              options: options.map((opt, i) =>
+                                                i === index ? { ...opt, text: e.target.value } : opt
+                                              )
+                                            }]
+                                          }
+                                        }));
+                                      }}
+                                      className="w-full"
+                                    />
                                   </div>
                                 ))}
                             </div>
                           ) : (
-                            <div className="p-2 text-center">
-                              <span>-</span>
+                            statement.attribute_statement_options?.length > 0 ? (
+                              <div className="divide-y divide-gray-300">
+                                {statement.attribute_statement_options
+                                  .sort((a, b) => b.weight - a.weight)
+                                  .map((option) => (
+                                    <div key={option.id} className="text-sm p-2">
+                                      {option.option_text}
+                                    </div>
+                                  ))}
+                              </div>
+                            ) : (
+                              <div className="p-2">
+                                <span className="text-muted-foreground">No options</span>
+                              </div>
+                            )
+                          )}
+                        </TableCell>
+                        <TableCell className="align-top border-r border-gray-300 p-0">
+                          {isEditing ? (
+                            <div className="divide-y divide-gray-300">
+                              {(editedData[attribute.id]?.statements?.[0]?.options || statement.attribute_statement_options)
+                                .sort((a, b) => b.weight - a.weight)
+                                .map((option, index) => (
+                                  <div key={option.id || index} className="flex items-center p-2">
+                                    <Input
+                                      type="number"
+                                      value={option.weight}
+                                      onChange={(e) => {
+                                        const options = editedData[attribute.id]?.statements?.[0]?.options || 
+                                          statement.attribute_statement_options.map(opt => ({
+                                            id: opt.id,
+                                            text: opt.option_text,
+                                            weight: opt.weight
+                                          }));
+                                        
+                                        setEditedData(prev => ({
+                                          ...prev,
+                                          [attribute.id]: {
+                                            ...prev[attribute.id],
+                                            statements: [{
+                                              ...(prev[attribute.id]?.statements?.[0] || statement),
+                                              options: options.map((opt, i) =>
+                                                i === index ? { ...opt, weight: parseInt(e.target.value) } : opt
+                                              )
+                                            }]
+                                          }
+                                        }));
+                                      }}
+                                      className="w-full text-center"
+                                    />
+                                  </div>
+                                ))}
                             </div>
+                          ) : (
+                            statement.attribute_statement_options?.length > 0 ? (
+                              <div className="divide-y divide-gray-300">
+                                {statement.attribute_statement_options
+                                  .sort((a, b) => b.weight - a.weight)
+                                  .map((option) => (
+                                    <div key={option.id} className="text-sm p-2 text-center">
+                                      {option.weight}
+                                    </div>
+                                  ))}
+                              </div>
+                            ) : (
+                              <div className="p-2 text-center">
+                                <span>-</span>
+                              </div>
+                            )
                           )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300">
-                          {attribute.attribute_industry_mapping?.map((mapping, idx) => (
-                            <div key={mapping.industry_id} className="text-sm">
-                              {mapping.industries?.name}
-                              {idx < attribute.attribute_industry_mapping.length - 1 ? ', ' : ''}
+                          {isEditing ? (
+                            <div className="space-y-2 p-2 max-h-48 overflow-y-auto">
+                              {industries.map((industry) => (
+                                <div key={industry.id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`industry-${attribute.id}-${industry.id}`}
+                                    checked={(editedData[attribute.id]?.attribute?.selectedIndustries || 
+                                            attribute.attribute_industry_mapping?.map(m => m.industry_id) || [])
+                                            .includes(industry.id)}
+                                    onCheckedChange={(checked) => {
+                                      const currentSelected = editedData[attribute.id]?.attribute?.selectedIndustries || 
+                                        attribute.attribute_industry_mapping?.map(m => m.industry_id) || [];
+                                      
+                                      const newSelected = checked 
+                                        ? [...currentSelected, industry.id]
+                                        : currentSelected.filter(id => id !== industry.id);
+                                      
+                                      setEditedData(prev => ({
+                                        ...prev,
+                                        [attribute.id]: {
+                                          ...prev[attribute.id],
+                                          attribute: {
+                                            ...(prev[attribute.id]?.attribute || {
+                                              ...attribute,
+                                              selectedIndustries: attribute.attribute_industry_mapping?.map(m => m.industry_id) || []
+                                            }),
+                                            selectedIndustries: newSelected
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                  />
+                                  <Label htmlFor={`industry-${attribute.id}-${industry.id}`} className="text-sm">
+                                    {industry.name}
+                                  </Label>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          ) : (
+                            attribute.attribute_industry_mapping?.map((mapping, idx) => (
+                              <div key={mapping.industry_id} className="text-sm">
+                                {mapping.industries?.name}
+                                {idx < attribute.attribute_industry_mapping.length - 1 ? ', ' : ''}
+                              </div>
+                            ))
+                          )}
                         </TableCell>
                         <TableCell className="align-top">
                           <div className="flex justify-center space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditClick(attribute, statement)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setStatementToDelete(statement)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {isEditing ? (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleSaveEdit(attribute.id, statement.id)}
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleCancelEdit(attribute.id, statement.id)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEdit(attribute, statement)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setStatementToDelete(statement)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1428,120 +1620,6 @@ export default function AttributeManagement() {
       </AlertDialog>
 
       <DeleteStatementDialog />
-
-      {/* Edit Dialog */}
-      <DialogComponent open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Edit Attribute</DialogTitle>
-          </DialogHeader>
-          {selectedAttribute && editedData[selectedAttribute.id] && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Name</Label>
-                <Input
-                  id="edit-name"
-                  value={editedData[selectedAttribute.id].attribute.name}
-                  onChange={(e) => setEditedData(prev => ({
-                    ...prev,
-                    [selectedAttribute.id]: {
-                      ...prev[selectedAttribute.id],
-                      attribute: {
-                        ...prev[selectedAttribute.id].attribute,
-                        name: e.target.value
-                      }
-                    }
-                  }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-description">Description</Label>
-                <Textarea
-                  id="edit-description"
-                  value={editedData[selectedAttribute.id].attribute.description}
-                  onChange={(e) => setEditedData(prev => ({
-                    ...prev,
-                    [selectedAttribute.id]: {
-                      ...prev[selectedAttribute.id],
-                      attribute: {
-                        ...prev[selectedAttribute.id].attribute,
-                        description: e.target.value
-                      }
-                    }
-                  }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Analysis Type</Label>
-                <Select
-                  value={editedData[selectedAttribute.id].attribute.analysis_type}
-                  onValueChange={(value) => setEditedData(prev => ({
-                    ...prev,
-                    [selectedAttribute.id]: {
-                      ...prev[selectedAttribute.id],
-                      attribute: {
-                        ...prev[selectedAttribute.id].attribute,
-                        analysis_type: value
-                      }
-                    }
-                  }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="behavior">Behavior</SelectItem>
-                    <SelectItem value="leadership">Leadership</SelectItem>
-                    <SelectItem value="both">Both</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Industries</Label>
-                <div className="border rounded-lg p-4 space-y-2 h-48 overflow-y-auto">
-                  {industries.map((industry) => (
-                    <div key={industry.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`edit-industry-${industry.id}`}
-                        checked={editedData[selectedAttribute.id].attribute.selectedIndustries.includes(industry.id)}
-                        onCheckedChange={(checked) => {
-                          setEditedData(prev => {
-                            const newSelectedIndustries = checked
-                              ? [...prev[selectedAttribute.id].attribute.selectedIndustries, industry.id]
-                              : prev[selectedAttribute.id].attribute.selectedIndustries.filter(id => id !== industry.id);
-                            
-                            return {
-                              ...prev,
-                              [selectedAttribute.id]: {
-                                ...prev[selectedAttribute.id],
-                                attribute: {
-                                  ...prev[selectedAttribute.id].attribute,
-                                  selectedIndustries: newSelectedIndustries
-                                }
-                              }
-                            };
-                          });
-                        }}
-                      />
-                      <Label htmlFor={`edit-industry-${industry.id}`} className="text-sm font-normal">
-                        {industry.name}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={() => handleSaveEdit(selectedAttribute.id, editedData[selectedAttribute.id].statements[0].id)}>
-                  Save Changes
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </DialogComponent>
     </div>
   );
 }
