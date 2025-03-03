@@ -383,7 +383,7 @@ export default function Reports() {
         ? selfItems.reduce((sum, i) => sum + i.average_score_percentage, 0)
         : 0;
 
-      selfResultsMap[label] = avgSelfScore;
+      selfResultsMap[label] = avgSelfScore.toFixed(2);
 
       return {
         company_name: selfItems[0]?.company_name || "Unknown",
@@ -415,7 +415,7 @@ export default function Reports() {
         avgNotSelfScore = avgNotSelfScore / total_c;
 
 
-        notSelfResultsMap[label] = avgNotSelfScore;
+        notSelfResultsMap[label] = avgNotSelfScore.toFixed(2);
 
         // console.log(notSelfItems);
         return {
@@ -439,7 +439,7 @@ export default function Reports() {
           ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_score_percentage), 0)
           : 0;
 
-        notSelfResultsMap[label] = avgNotSelfScore;
+        notSelfResultsMap[label] = avgNotSelfScore.toFixed(2);
 
         return {
           company_name: notSelfItems[0]?.company_name || "Unknown",
