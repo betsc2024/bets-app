@@ -23,6 +23,7 @@ import { Toaster } from 'sonner'
 import { useState } from 'react'
 import { Menu } from 'lucide-react'
 import UserReports from './components/user/UserReports'
+import AnalysisType from './pages/AnalysisType'
 
 function Layout() {
   const { user } = useAuth()
@@ -58,6 +59,7 @@ function Layout() {
             <Route path="/attribute-management" element={<AdminRouteGuard><AttributeManagement /></AdminRouteGuard>} />
             <Route path="/industry-management" element={<AdminRouteGuard><IndustryManagement /></AdminRouteGuard>} />
             <Route path="/user-management" element={<AdminRouteGuard><UserManagement /></AdminRouteGuard>} />
+            <Route path="/analysis-type" element={<AdminRouteGuard><AnalysisType /></AdminRouteGuard>} />
             <Route path="/company-management" element={<AdminRouteGuard><CompanyManagement /></AdminRouteGuard>} />
             <Route path="/reports" element={<AdminRouteGuard><Reports /></AdminRouteGuard>} />
             <Route path="/evaluations" element={<AdminRouteGuard><Evaluations /></AdminRouteGuard>} />

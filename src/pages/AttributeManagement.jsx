@@ -58,11 +58,11 @@ export default function AttributeManagement() {
   const [newAttribute, setNewAttribute] = useState({
     name: '',
     description: '',
-    analysis_type: 'behavior',
+    analysis_type: '',
     is_industry_standard: true,
     selectedIndustries: []
   });
-
+  const [analysisTypeList, setAnalysisTypeList] = useState([]);
   const [industrySearchQuery, setIndustrySearchQuery] = useState('');
   const [attributeSearchQuery, setAttributeSearchQuery] = useState('');
   const [statementSearchQuery, setStatementSearchQuery] = useState('');
@@ -72,8 +72,8 @@ export default function AttributeManagement() {
   const [selectedAttributeFilter, setSelectedAttributeFilter] = useState('all');
   const [selectedStatementFilter, setSelectedStatementFilter] = useState('all');
   const [selectedAttributeId, setSelectedAttributeId] = useState(null);
-  const [currentStatement, setCurrentStatement] = useState({ 
-    text: '', 
+  const [currentStatement, setCurrentStatement] = useState({
+    text: '',
     attribute_bank_id: null,
     options: [
       { text: 'Excellent', weight: 100 },
@@ -81,7 +81,7 @@ export default function AttributeManagement() {
       { text: 'Good', weight: 60 },
       { text: 'Fair & Satisfactory', weight: 40 },
       { text: 'Needs Improvement', weight: 20 }
-    ] 
+    ]
   });
   const [editingRows, setEditingRows] = useState({});
   const [editedData, setEditedData] = useState({});
@@ -99,6 +99,7 @@ export default function AttributeManagement() {
   useEffect(() => {
     fetchAttributes();
     fetchIndustries();
+    fetchanalysis();
   }, []);
 
   useEffect(() => {
@@ -106,8 +107,8 @@ export default function AttributeManagement() {
     const addPassiveScrollListeners = () => {
       const scrollableElements = document.querySelectorAll('.overflow-y-auto, .overflow-auto');
       scrollableElements.forEach(element => {
-        element.addEventListener('scroll', () => {}, { passive: true });
-        element.addEventListener('touchstart', () => {}, { passive: true });
+        element.addEventListener('scroll', () => { }, { passive: true });
+        element.addEventListener('touchstart', () => { }, { passive: true });
       });
     };
 
@@ -117,16 +118,25 @@ export default function AttributeManagement() {
     return () => {
       const scrollableElements = document.querySelectorAll('.overflow-y-auto, .overflow-auto');
       scrollableElements.forEach(element => {
-        element.removeEventListener('scroll', () => {});
-        element.removeEventListener('touchstart', () => {});
+        element.removeEventListener('scroll', () => { });
+        element.removeEventListener('touchstart', () => { });
       });
     };
   }, []);
+  const fetchanalysis = async () => {
+    try {
+      const response = await supabase.from('analysis_type').select("*");
+      setAnalysisTypeList(response.data);
+      console.log(response.data);
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   const fetchAttributes = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch attributes one by one to avoid any potential cascade issues
       const { data: attributesData, error: attributesError } = await supabase
         .from('attributes')
@@ -240,15 +250,15 @@ export default function AttributeManagement() {
       }
 
       toast.success('Attribute saved successfully');
-      
+
       // Reset form
       setNewAttribute({
         name: '',
         description: '',
-        analysis_type: 'behavior',
+        analysis_type: '',
         selectedIndustries: []
       });
-      
+
       // Refresh attributes list
       await fetchAttributes();
     } catch (error) {
@@ -305,7 +315,7 @@ export default function AttributeManagement() {
       setNewAttribute({
         name: '',
         description: '',
-        analysis_type: 'behavior',
+        analysis_type: '',
         selectedIndustries: []
       });
       fetchAttributes();
@@ -318,7 +328,7 @@ export default function AttributeManagement() {
 
   const deleteAttribute = async () => {
     if (!attributeToDelete) return;
-    
+
     try {
       const { error } = await supabase
         .from('attributes')
@@ -326,7 +336,7 @@ export default function AttributeManagement() {
         .eq('id', attributeToDelete.id);
 
       if (error) throw error;
-      
+
       toast.success('Attribute deleted successfully');
       fetchAttributes();
     } catch (error) {
@@ -338,7 +348,7 @@ export default function AttributeManagement() {
 
   const handleEdit = (attribute, statement) => {
     const editKey = `${attribute.id}-${statement.id}`;
-    
+
     // Initialize edit data with current values
     setEditedData(prev => ({
       ...prev,
@@ -361,7 +371,7 @@ export default function AttributeManagement() {
         }]
       }
     }));
-    
+
     // Set editing state for this row
     setEditingRows(prev => ({
       ...prev,
@@ -407,7 +417,7 @@ export default function AttributeManagement() {
       // Check if user is super_admin
       const isSuperAdmin = () => {
         return (
-          user?.app_metadata?.role === 'super_admin' || 
+          user?.app_metadata?.role === 'super_admin' ||
           user?.role === 'super_admin' ||
           user?.email?.endsWith('@bets.com')  // Assuming @bets.com emails are super admins
         );
@@ -478,10 +488,10 @@ export default function AttributeManagement() {
       }
 
       toast.success('Statement and options added successfully');
-      
+
       // Reset form
-      setCurrentStatement({ 
-        text: '', 
+      setCurrentStatement({
+        text: '',
         attribute_bank_id: null,
         options: [
           { text: 'Excellent', weight: 100 },
@@ -489,10 +499,10 @@ export default function AttributeManagement() {
           { text: 'Good', weight: 60 },
           { text: 'Fair & Satisfactory', weight: 40 },
           { text: 'Needs Improvement', weight: 20 }
-        ] 
+        ]
       });
       setSelectedAttributeId(null);
-      
+
       // Refresh the data
       await fetchAttributes();
     } catch (error) {
@@ -575,7 +585,7 @@ export default function AttributeManagement() {
         delete newState[editKey];
         return newState;
       });
-      
+
       setEditedData(prev => {
         const newState = { ...prev };
         delete newState[attributeId];
@@ -624,7 +634,7 @@ export default function AttributeManagement() {
       }
 
       toast.success('Statement deleted successfully');
-      await fetchAttributes(); 
+      await fetchAttributes();
       setStatementToDelete(null);
     } catch (error) {
       console.error('Delete error:', error);
@@ -676,7 +686,7 @@ export default function AttributeManagement() {
 
   const processAttributesForDisplay = (attributes) => {
     // First sort the attributes by name
-    const sortedAttributes = [...attributes].sort((a, b) => 
+    const sortedAttributes = [...attributes].sort((a, b) =>
       (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())
     );
 
@@ -709,16 +719,16 @@ export default function AttributeManagement() {
   // Filter and paginate the data
   const filteredAttributes = attributes.filter(attr => {
     const matchesIndustry = selectedIndustryFilter === 'all' ||
-      attr.attribute_industry_mapping?.some(mapping => 
-        (mapping.industry_id === selectedIndustryFilter || 
-         (mapping.industries && mapping.industries.id === selectedIndustryFilter))
+      attr.attribute_industry_mapping?.some(mapping =>
+      (mapping.industry_id === selectedIndustryFilter ||
+        (mapping.industries && mapping.industries.id === selectedIndustryFilter))
       );
 
     const matchesAttribute = selectedAttributeFilter === 'all' ||
       attr.id === selectedAttributeFilter;
 
     const matchesStatement = selectedStatementFilter === 'all' ||
-      attr.attribute_statements?.some(stmt => 
+      attr.attribute_statements?.some(stmt =>
         stmt.id === selectedStatementFilter
       );
 
@@ -734,7 +744,7 @@ export default function AttributeManagement() {
 
   const isSuperAdmin = () => {
     return (
-      user?.app_metadata?.role === 'super_admin' || 
+      user?.app_metadata?.role === 'super_admin' ||
       user?.role === 'super_admin' ||
       user?.email?.endsWith('@bets.com')  // Assuming @bets.com emails are super admins
     );
@@ -788,9 +798,11 @@ export default function AttributeManagement() {
                       <SelectValue placeholder="Select analysis type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="behavior">Behavior</SelectItem>
-                      <SelectItem value="leadership">Leadership</SelectItem>
-                      <SelectItem value="both">Both</SelectItem>
+                      {
+                        analysisTypeList && analysisTypeList.map((item) => (
+                          <SelectItem key={item.key} value={ String(item.analysis_type)  }>{item.analysis_type}</SelectItem>
+                        ))
+                      }
                     </SelectContent>
                   </Select>
                 </div>
@@ -805,7 +817,7 @@ export default function AttributeManagement() {
                     />
                     <div className="border rounded-lg p-4 space-y-2 h-48 overflow-y-auto">
                       {industries
-                        .filter(industry => 
+                        .filter(industry =>
                           industry.name.toLowerCase().includes(industrySearchQuery.toLowerCase())
                         )
                         .map((industry) => (
@@ -833,8 +845,8 @@ export default function AttributeManagement() {
                     </div>
                   </div>
                 </div>
-                <Button 
-                  onClick={handleSaveAttribute} 
+                <Button
+                  onClick={handleSaveAttribute}
                   className="w-full"
                   disabled={!newAttribute.name.trim()}
                 >
@@ -848,7 +860,7 @@ export default function AttributeManagement() {
         <Card className="w-full">
           <div className="p-6">
             <h2 className="text-lg font-semibold mb-4">Add Statement and Options</h2>
-            
+
             {/* Attribute Selection */}
             <div className="mb-6">
               <Label>Select Attribute</Label>
@@ -870,14 +882,14 @@ export default function AttributeManagement() {
                   </div>
                   <div className="max-h-[200px] overflow-y-auto">
                     {attributes
-                      .filter(attr => 
+                      .filter(attr =>
                         attr.name.toLowerCase().includes(attributeSearchQuery.toLowerCase())
                       )
                       .map((attr) => (
                         <SelectItem key={attr.id} value={attr.id}>
                           {attr.name}
                         </SelectItem>
-                    ))}
+                      ))}
                   </div>
                 </SelectContent>
               </Select>
@@ -959,12 +971,12 @@ export default function AttributeManagement() {
 
             {/* Save Button */}
             <div className="mt-6">
-              <Button 
-                onClick={addStatement} 
+              <Button
+                onClick={addStatement}
                 className="w-full"
                 disabled={
-                  !selectedAttributeId || 
-                  !currentStatement.text.trim() || 
+                  !selectedAttributeId ||
+                  !currentStatement.text.trim() ||
                   currentStatement.options.length === 0 ||
                   currentStatement.options.some(opt => !opt.text.trim() || opt.weight === undefined || opt.weight === null)
                 }
@@ -992,8 +1004,8 @@ export default function AttributeManagement() {
                 <DialogComponent open={industryDialogOpen} onOpenChange={setIndustryDialogOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline" className="w-full justify-between mt-1">
-                      {selectedIndustryFilter === 'all' 
-                        ? "All Industries" 
+                      {selectedIndustryFilter === 'all'
+                        ? "All Industries"
                         : industries.find(i => i.id === selectedIndustryFilter)?.name || "Select Industry"}
                       <ChevronDown className="h-4 w-4 opacity-50" />
                     </Button>
@@ -1029,7 +1041,7 @@ export default function AttributeManagement() {
                           All Industries
                         </div>
                         {industries
-                          .filter(industry => 
+                          .filter(industry =>
                             industry.name.toLowerCase().includes(industrySearchQuery.toLowerCase())
                           )
                           .map((industry) => (
@@ -1047,13 +1059,13 @@ export default function AttributeManagement() {
                               {industry.name}
                             </div>
                           ))}
-                        {industries.filter(industry => 
+                        {industries.filter(industry =>
                           industry.name.toLowerCase().includes(industrySearchQuery.toLowerCase())
                         ).length === 0 && industrySearchQuery && (
-                          <div className="text-sm text-muted-foreground text-center py-6">
-                            No industries found
-                          </div>
-                        )}
+                            <div className="text-sm text-muted-foreground text-center py-6">
+                              No industries found
+                            </div>
+                          )}
                       </div>
                     </ScrollArea>
                   </DialogContent>
@@ -1102,7 +1114,7 @@ export default function AttributeManagement() {
                           All Attributes
                         </div>
                         {attributes
-                          .filter(attr => 
+                          .filter(attr =>
                             attr.name.toLowerCase().includes(attributeSearchQuery.toLowerCase())
                           )
                           .map((attr) => (
@@ -1127,13 +1139,13 @@ export default function AttributeManagement() {
                               </div>
                             </div>
                           ))}
-                        {attributes.filter(attr => 
+                        {attributes.filter(attr =>
                           attr.name.toLowerCase().includes(attributeSearchQuery.toLowerCase())
                         ).length === 0 && attributeSearchQuery && (
-                          <div className="text-sm text-muted-foreground text-center py-6">
-                            No attributes found
-                          </div>
-                        )}
+                            <div className="text-sm text-muted-foreground text-center py-6">
+                              No attributes found
+                            </div>
+                          )}
                       </div>
                     </ScrollArea>
                   </DialogContent>
@@ -1148,11 +1160,11 @@ export default function AttributeManagement() {
                       {selectedStatementFilter === 'all'
                         ? "All Statements"
                         : truncateText(
-                            attributes
-                              .flatMap(attr => attr.attribute_statements || [])
-                              .find(stmt => stmt.id === selectedStatementFilter)?.statement || "Select Statement",
-                            40
-                          )}
+                          attributes
+                            .flatMap(attr => attr.attribute_statements || [])
+                            .find(stmt => stmt.id === selectedStatementFilter)?.statement || "Select Statement",
+                          40
+                        )}
                       <ChevronDown className="h-4 w-4 opacity-50" />
                     </Button>
                   </DialogTrigger>
@@ -1187,9 +1199,9 @@ export default function AttributeManagement() {
                           All Statements
                         </div>
                         {attributes
-                          .flatMap(attr => 
+                          .flatMap(attr =>
                             (attr.attribute_statements || [])
-                              .filter(stmt => stmt.statement && 
+                              .filter(stmt => stmt.statement &&
                                 stmt.statement.toLowerCase().includes(statementSearchQuery.toLowerCase())
                               )
                               .map(stmt => ({
@@ -1222,14 +1234,14 @@ export default function AttributeManagement() {
                           ))}
                         {attributes
                           .flatMap(attr => attr.attribute_statements || [])
-                          .filter(stmt => 
-                            stmt.statement && 
+                          .filter(stmt =>
+                            stmt.statement &&
                             stmt.statement.toLowerCase().includes(statementSearchQuery.toLowerCase())
                           ).length === 0 && statementSearchQuery && (
-                          <div className="text-sm text-muted-foreground text-center py-6">
-                            No statements found
-                          </div>
-                        )}
+                            <div className="text-sm text-muted-foreground text-center py-6">
+                              No statements found
+                            </div>
+                          )}
                       </div>
                     </ScrollArea>
                   </DialogContent>
@@ -1283,7 +1295,7 @@ export default function AttributeManagement() {
                 ) : paginatedItems.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="h-24 text-center">
-                      No attributes found. 
+                      No attributes found.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -1375,13 +1387,13 @@ export default function AttributeManagement() {
                                     <Input
                                       value={option.text || option.option_text}
                                       onChange={(e) => {
-                                        const options = editedData[attribute.id]?.statements?.[0]?.options || 
+                                        const options = editedData[attribute.id]?.statements?.[0]?.options ||
                                           statement.attribute_statement_options.map(opt => ({
                                             id: opt.id,
                                             text: opt.option_text,
                                             weight: opt.weight
                                           }));
-                                        
+
                                         setEditedData(prev => ({
                                           ...prev,
                                           [attribute.id]: {
@@ -1429,13 +1441,13 @@ export default function AttributeManagement() {
                                       type="number"
                                       value={option.weight}
                                       onChange={(e) => {
-                                        const options = editedData[attribute.id]?.statements?.[0]?.options || 
+                                        const options = editedData[attribute.id]?.statements?.[0]?.options ||
                                           statement.attribute_statement_options.map(opt => ({
                                             id: opt.id,
                                             text: opt.option_text,
                                             weight: opt.weight
                                           }));
-                                        
+
                                         setEditedData(prev => ({
                                           ...prev,
                                           [attribute.id]: {
@@ -1479,17 +1491,17 @@ export default function AttributeManagement() {
                                 <div key={industry.id} className="flex items-center space-x-2">
                                   <Checkbox
                                     id={`industry-${attribute.id}-${industry.id}`}
-                                    checked={(editedData[attribute.id]?.attribute?.selectedIndustries || 
-                                            attribute.attribute_industry_mapping?.map(m => m.industry_id) || [])
-                                            .includes(industry.id)}
+                                    checked={(editedData[attribute.id]?.attribute?.selectedIndustries ||
+                                      attribute.attribute_industry_mapping?.map(m => m.industry_id) || [])
+                                      .includes(industry.id)}
                                     onCheckedChange={(checked) => {
-                                      const currentSelected = editedData[attribute.id]?.attribute?.selectedIndustries || 
+                                      const currentSelected = editedData[attribute.id]?.attribute?.selectedIndustries ||
                                         attribute.attribute_industry_mapping?.map(m => m.industry_id) || [];
-                                      
-                                      const newSelected = checked 
+
+                                      const newSelected = checked
                                         ? [...currentSelected, industry.id]
                                         : currentSelected.filter(id => id !== industry.id);
-                                      
+
                                       setEditedData(prev => ({
                                         ...prev,
                                         [attribute.id]: {
@@ -1572,12 +1584,12 @@ export default function AttributeManagement() {
               <Pagination>
                 <PaginationContent>
                   <PaginationItem>
-                    <PaginationPrevious 
+                    <PaginationPrevious
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
                     />
                   </PaginationItem>
-                  
+
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => (
                     <PaginationItem key={pageNumber}>
                       <PaginationLink
@@ -1588,9 +1600,9 @@ export default function AttributeManagement() {
                       </PaginationLink>
                     </PaginationItem>
                   ))}
-                  
+
                   <PaginationItem>
-                    <PaginationNext 
+                    <PaginationNext
                       onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
                     />
