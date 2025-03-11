@@ -54,6 +54,7 @@ import cn from 'classnames';
 export default function AttributeBank() {
   const { user } = useAuth();
   const [analysisType, setAnalysisType] = useState('behavior');
+  const [analysisTypeList, setAnalysisTypeList] = useState([]);
   const [attributes, setAttributes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState('all');
@@ -137,6 +138,17 @@ export default function AttributeBank() {
     }
   }, []);
 
+    const fetchanalysis =  async ()=>{
+      try{
+        const response = await supabase.from('analysis_type').select("*");
+        setAnalysisTypeList(response.data);
+        console.log(response.data);
+      }catch(e){
+        console.error(e);
+      }
+    }
+
+
   // Fetch companies on mount
   useEffect(() => {
     fetchCompanies();
@@ -150,6 +162,7 @@ export default function AttributeBank() {
   // Fetch banks on mount
   useEffect(() => {
     fetchBanks();
+    fetchanalysis();
   }, []);
 
   const fetchBanks = async () => {
@@ -507,9 +520,11 @@ export default function AttributeBank() {
                       <SelectValue placeholder="Select analysis type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem key="behavior" value="behavior">Behavior</SelectItem>
-                      <SelectItem key="leadership" value="leadership">Leadership</SelectItem>
-                      <SelectItem key="both" value="both">Both</SelectItem>
+                   {
+                    analysisTypeList && analysisTypeList.map((item)=>(     
+                          <SelectItem key={item.key} value={item.analysis_type}>{item.analysis_type}</SelectItem>
+                    ))
+                    }
                     </SelectContent>
                   </Select>
                 </CardContent>

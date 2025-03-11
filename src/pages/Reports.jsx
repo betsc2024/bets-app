@@ -424,10 +424,6 @@ export default function Reports() {
           average_weight: avgNotSelfWeight,
           average_score_percentage: avgNotSelfScore,
         };
-
-
-
-
       } else {
         const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
         // console.log(notSelfItems);

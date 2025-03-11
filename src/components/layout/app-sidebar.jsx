@@ -12,7 +12,8 @@ import {
   Building,
   ChevronLeft,
   ChevronRight,
-  User
+  User,
+  FileChartColumn,
 } from "lucide-react"
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/supabase'
@@ -56,6 +57,7 @@ export default function AppSidebar({ isOpen, onToggle }) {
     { icon: Settings, label: "Attribute Management", href: "/attribute-management" },
     { icon: Building2, label: "Industry Management", href: "/industry-management" },
     { icon: Users2, label: "User Management", href: "/user-management" },
+    { icon: FileChartColumn, label: "Analysis Type", href: "/analysis-type" },
   ];
 
   const userSidebarItems = [
