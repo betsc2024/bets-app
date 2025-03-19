@@ -89,7 +89,11 @@ export default function Reports() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [relation_count_map, setRelationCountMap] = useState([]);
   // const [relation_count_map_o,setRelationCountMap_o] = useState({});
+  const [analysis , setAnaysis] =  useState("");
+  const [analysisTypeList,setAnalysisTypeList]  = useState([]);
 
+  const  [bank , setBank] = useState("");
+  const [bankList,setBankList] = useState([]);
 
   const chartRef = useRef(null);
 
@@ -113,7 +117,7 @@ export default function Reports() {
 
 
 
-  const fetchData = async (selectedCompany, selectedUser) => {
+  const fetchData = async (selectedCompany, selectedUser , selectedAnalysis = "",selectedBank = "") => {
     try {
       setBarData(null);
       setTable_Data([]);
@@ -124,7 +128,7 @@ export default function Reports() {
       const user_id = selectedUser?.id;
 
       // Fetch data without deep filtering
-      const { data, error } = await supabase
+      let query  = supabase
         .from("evaluations")
         .select(`
           relationship_type,
@@ -132,19 +136,46 @@ export default function Reports() {
             id,
             user_to_evaluate_id,
             company_id,
-            companies ( id, name ) 
+            companies ( 
+            id,
+            name
+            ),
+            attribute_banks (
+            id,
+            name
+            )
           ),
           evaluation_responses (
             attribute_statement_options ( 
               weight, 
               attribute_statements ( 
                 statement,
-                attributes ( name ) 
+                attributes ( name , analysis_type) 
               ) 
             ) 
           )
         `)
         .eq("status", "completed");
+        
+        let { data, error } = await query;
+        if (selectedAnalysis !== "") {
+          data = data.filter((item) =>
+              item.evaluation_responses.some(
+                  (response) =>
+                      response.attribute_statement_options.attribute_statements.attributes.analysis_type === selectedAnalysis
+              )
+          );
+          // console.log(data);
+      }
+    
+        // **Case 3: Filter by Bank if provided**
+          if (selectedBank !== "") {
+            data = data.filter((item)=> 
+              item.evaluation_assignments.attribute_banks.id === selectedBank
+            );
+            // console.log(data);
+        }
+    
 
       if (error) throw error;
 
@@ -185,12 +216,12 @@ export default function Reports() {
         const attributeMap = {};
 
         e.evaluation_responses.forEach(res => {
-          const attributeName = res.attribute_statement_options.attribute_statements.attributes.name;
+          const attributeName = res.attribute_statement_options.attribute_statements?.attributes?.name;
           const weight = res.attribute_statement_options.weight || 0;
-
+          const analysis_type = res.attribute_statement_options.attribute_statements?.attributes?.analysis_type;
 
           if (!attributeMap[attributeName]) {
-            attributeMap[attributeName] = { totalWeight: 0, count: 0 };
+            attributeMap[attributeName] = { totalWeight: 0, count: 0,analysis_type:analysis_type };
           }
 
           attributeMap[attributeName].totalWeight += weight;
@@ -201,12 +232,13 @@ export default function Reports() {
 
 
 
-        return Object.entries(attributeMap).map(([attribute_name, { totalWeight, count }]) => ({
+        return Object.entries(attributeMap).map(([attribute_name, { totalWeight, count ,analysis_type}]) => ({
           relationship_type: e.relationship_type,
           company_name: e.evaluation_assignments?.companies?.name || "N/A",
           attribute_name,
           average_weight: count > 0 ? totalWeight / count : 0,
           average_score_percentage: (totalWeight / count) / relation_count_map_temp[e.relationship_type],
+          analysis_type : analysis_type
         }));
       }).flat();
 
@@ -307,6 +339,8 @@ export default function Reports() {
       toast.error(error);
     }
   }
+
+
   const fetch_user = async () => {
     if (selectedCompany) {
 
@@ -331,19 +365,42 @@ export default function Reports() {
       console.log("Error in Fetching Company");
     }
   }
+  const fetch_analysis = async ()=>{
+    try{
+      const response = await supabase.from('analysis_type').select('*');
+      setAnalysisTypeList(response.data);
+      console.log(response);
+    }catch(e){
+      console.log(e);
+    }
+  }
+
+  const fetch_bank = async (selectedCompany)=>{
+    try{
+      const response = await supabase.from('attribute_banks').select().eq('company_id',selectedCompany?.id); 
+      setBankList(response.data);
+    }catch(err){
+      console.log(err);
+    }
+  }
 
   useEffect(() => {
     fetch_companies();
+    fetch_analysis();
+    fetch_bank();
   }, []);
 
   useEffect(() => {
     fetch_user();
     fetchData(selectedCompany, selectedUser);
     fetch_spefifc_data(score_type);
+    fetch_bank(selectedCompany);
   }, [selectedCompany, selectedUser])
 
 
-
+  useEffect(()=>{
+    fetchData(selectedCompany,selectedUser,analysis,bank);
+  },[analysis,bank,selectedCompany,selectedUser])
 
 
 
@@ -471,7 +528,7 @@ export default function Reports() {
 
 
 
-  const fetch_radar = async (relationship_type) => {
+  const fetch_radar = async (relationship_type , selectedAnalysis = "" , selectedBank = "") => {
 
     try {
 
@@ -489,6 +546,10 @@ export default function Reports() {
             companies(
              name,
              ideal_score
+            ),
+            attribute_banks (
+            id,
+            name
             )
             ),
           evaluation_responses (
@@ -497,7 +558,8 @@ export default function Reports() {
               attribute_statements (
                 statement,
                 attributes(
-                name
+                name,
+                analysis_type
                 )
               )
             )
@@ -507,14 +569,32 @@ export default function Reports() {
 
 
 
-      const { data: query_info, error } = await query;
+      let { data: query_info, error } = await query;
+
+      if (selectedAnalysis !== "") {
+        query_info = query_info.filter((item) =>
+            item.evaluation_responses.some(
+                (response) =>
+                    response.attribute_statement_options.attribute_statements.attributes.analysis_type === selectedAnalysis
+            )
+        );
+        // console.log(data);
+    }
+  
+      // **Case 3: Filter by Bank if provided**
+        if (selectedBank !== "") {
+          query_info = query_info.filter((item)=> 
+            item.evaluation_assignments.attribute_banks.id === selectedBank
+          );
+          // console.log(data);
+      }
 
       // console.log(query_info);
       // console.log(id);
       // console.log(user_id);  
 
       
-      setRadial_IdealScore(query_info[0].evaluation_assignments?.companies.ideal_score);
+      setRadial_IdealScore(query_info[0]?.evaluation_assignments?.companies.ideal_score);
 
       const query_Data = query_info.filter(evaluation =>
         evaluation.evaluation_assignments?.company_id === id &&
@@ -622,8 +702,8 @@ export default function Reports() {
   }, [selectedAttribute, radial_result, radial_self_data])
 
   useEffect(() => {
-    fetch_radar("total");
-  }, [selectedAttribute]);
+    fetch_radar("total",analysis,bank);
+  }, [selectedAttribute,analysis,bank]);
 
   useEffect(() => {
 
@@ -1093,6 +1173,36 @@ export default function Reports() {
               ))}
             </SelectContent>
           </Select>
+          <Label className='mt-3 mb-3'> Select an Analysis Type </Label>
+          <Select value={analysis} onValueChange={(value) => {
+            setAnaysis(value);
+            }}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select an Analysis Type" />
+            </SelectTrigger>
+            <SelectContent>
+              {analysisTypeList.map((user) => (
+                <SelectItem key={user.id} value={user.analysis_type}>
+                  {user.analysis_type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Label className='mt-3 mb-3'> Select an Bank </Label>
+          <Select value={bank} onValueChange={(value) => {
+            setBank(value);
+          }}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select an Bank" />
+            </SelectTrigger>
+            <SelectContent>
+              { bankList && bankList.map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {selectedCompany && selectedUser ? <Button
           className="w-48 ml-3 bg-primary hover:bg-red-600 text-primary-foreground font-semibold  }" onClick={() => { deleteEvaluationResponses(selectedCompany?.id) }}             >
@@ -1101,7 +1211,7 @@ export default function Reports() {
         </Button> : <></>}
       </div>
       {
-        selectedCompany && selectedUser ?
+        selectedCompany && selectedUser  ?
           <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
             <TableHeader className="text-white">
               <TableRow>
