@@ -159,13 +159,15 @@ export default function Reports() {
         
         let { data, error } = await query;
         if (selectedAnalysis !== "") {
+          console.log(data);
           data = data.filter((item) =>
               item.evaluation_responses.some(
                   (response) =>
                       response.attribute_statement_options.attribute_statements.attributes.analysis_type === selectedAnalysis
               )
           );
-          // console.log(data);
+          console.log(data);
+          console.log(selectedAnalysis);
       }
     
         // **Case 3: Filter by Bank if provided**
