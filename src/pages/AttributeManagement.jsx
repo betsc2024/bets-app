@@ -800,7 +800,7 @@ export default function AttributeManagement() {
                     <SelectContent>
                       {
                         analysisTypeList && analysisTypeList.map((item) => (
-                          <SelectItem key={item.key} value={ String(item.analysis_type)  }>{item.analysis_type}</SelectItem>
+                          <SelectItem key={item.key} value={ item.analysis_type  }>{item.analysis_type}</SelectItem>
                         ))
                       }
                     </SelectContent>
