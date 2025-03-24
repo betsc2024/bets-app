@@ -20,47 +20,47 @@ export default function Dashboard() {
     ? 'Super Admin'
     : user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
   
-  const overviewCards = [
-    {
-      title: "Attribute Bank",
-      description: "Manage and organize attributes",
-      icon: Database,
-      value: "24 Attributes",
-      link: "/attribute-bank",
-      color: "text-violet-500"
-    },
-    {
-      title: "Industry Management",
-      description: "Configure industry settings",
-      icon: Building2,
-      value: "8 Industries",
-      link: "/industry",
-      color: "text-blue-500"
-    },
-    {
-      title: "User Management",
-      description: "Manage user access and roles",
-      icon: Users2,
-      value: "12 Users",
-      link: "/users",
-      color: "text-green-500"
-    },
-    {
-      title: "Evaluations",
-      description: "Track and review evaluations",
-      icon: ClipboardList,
-      value: "6 Active",
-      link: "/evaluations",
-      color: "text-orange-500"
-    }
-  ];
+  // const overviewCards = [
+  //   {
+  //     title: "Attribute Bank",
+  //     description: "Manage and organize attributes",
+  //     icon: Database,
+  //     value: "24 Attributes",
+  //     link: "/attribute-bank",
+  //     color: "text-violet-500"
+  //   },
+  //   {
+  //     title: "Industry Management",
+  //     description: "Configure industry settings",
+  //     icon: Building2,
+  //     value: "8 Industries",
+  //     link: "/industry",
+  //     color: "text-blue-500"
+  //   },
+  //   {
+  //     title: "User Management",
+  //     description: "Manage user access and roles",
+  //     icon: Users2,
+  //     value: "12 Users",
+  //     link: "/users",
+  //     color: "text-green-500"
+  //   },
+  //   {
+  //     title: "Evaluations",
+  //     description: "Track and review evaluations",
+  //     icon: ClipboardList,
+  //     value: "6 Active",
+  //     link: "/evaluations",
+  //     color: "text-orange-500"
+  //   }
+  // ];
 
   const quickActions = [
     {
       title: "Add New Industry",
       description: "Configure a new industry sector",
       icon: Building2,
-      link: "/industry"
+      link: "/industry-management"
     },
     {
       title: "Add New Attribute",
@@ -95,7 +95,7 @@ export default function Dashboard() {
       
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {overviewCards.map((card, index) => (
+        {/* overviewCards.map((card, index) => (
           <Card 
             key={index} 
             className="hover:border-primary/50 transition-all hover:shadow-md cursor-pointer"
@@ -112,7 +112,7 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground mt-1">{card.description}</p>
             </CardContent>
           </Card>
-        ))}
+        )) */}
       </div>
 
       {/* Quick Actions */}
