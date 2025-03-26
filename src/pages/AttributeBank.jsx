@@ -117,7 +117,7 @@ export default function AttributeBank() {
               weight
             )
           ),
-          attribute_industry_mapping:attribute_industry_mapping!inner (
+          attribute_industry_mapping:attribute_industry_mapping (
             industry_id,
             industries (
               id,
@@ -522,7 +522,7 @@ export default function AttributeBank() {
                     <SelectContent>
                    {
                     analysisTypeList && analysisTypeList.map((item)=>(     
-                          <SelectItem key={item.key} value={item.analysis_type}>{item.analysis_type}</SelectItem>
+                          <SelectItem key={item.analysis_type} value={item.analysis_type}>{item.analysis_type}</SelectItem>
                     ))
                     }
                     </SelectContent>
@@ -2115,12 +2115,7 @@ function CreateBank({ companies, onSuccess }) {
         let query = supabase
           .from('attributes')
           .select(`
-            id,
-            name,
-            description,
-            analysis_type,
-            is_industry_standard,
-            company_id,
+            *,
             attribute_statements (
               id,
               statement,
@@ -2131,13 +2126,15 @@ function CreateBank({ companies, onSuccess }) {
               )
             ),
             attribute_industry_mapping (
+              industry_id,
               industries (
                 id,
                 name
               )
             )
           `)
-          .in('analysis_type', [analysisType, 'both']);
+          .eq('analysis_type', analysisType)
+          .order('name', { ascending: true });
 
         // Apply industry filter if selected and not "all"
         if (selectedFilterIndustry && selectedFilterIndustry !== 'all') {
@@ -2151,7 +2148,7 @@ function CreateBank({ companies, onSuccess }) {
           query = query.or(`company_id.is.null,company_id.eq.${selectedCompany}`);
         }
 
-        const { data: attributes, error: attrError } = await query.order('name');
+        const { data: attributes, error: attrError } = await query;
 
         if (attrError) {
           console.error('Error fetching attributes:', attrError);

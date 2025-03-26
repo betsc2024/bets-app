@@ -104,7 +104,7 @@ export default function CompanyManagement() {
   const [companies, setCompanies] = useState([]);
   const [industries, setIndustries] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [newCompany, setNewCompany] = useState({ name: '', industry_id: '',settings: {}, ideal_score : null  });
+  const [newCompany, setNewCompany] = useState({ name: '', industry_id: '', settings: {} });
   const [editingCompany, setEditingCompany] = useState(null);
   const [companyToDelete, setCompanyToDelete] = useState(null);
   const [selectedCompanyUsers, setSelectedCompanyUsers] = useState(null);
@@ -182,7 +182,7 @@ export default function CompanyManagement() {
       if (error) throw error;
       
       toast.success('Company added successfully');
-      setNewCompany({ name: '', industry_id: '', settings: {}, ideal_score : null });
+      setNewCompany({ name: '', industry_id: '', settings: {} });
       fetchCompanies();
     } catch (error) {
       toast.error('Error adding company');
@@ -344,20 +344,6 @@ export default function CompanyManagement() {
                   required
 
                 />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="ideal_score">ideal_score</Label>
-              <div className="mt-1">
-              <Input
-              id="ideal_score"
-              value = {newCompany.ideal_score}
-              onChange={(value) => setNewCompany({ ...newCompany, ideal_score: value })}
-              placeholder="Enter a Ideal Score"
-            required
-
-            
-          />
               </div>
             </div>
             <Button type="submit" disabled={loading} className="w-full">
