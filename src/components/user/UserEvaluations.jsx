@@ -379,7 +379,7 @@ const UserEvaluations = () => {
                     className="space-y-3"
                   >
                     {statement.attribute_statement_options
-                      ?.sort((a, b) => a.display_order - b.display_order)
+                      ?.sort((a, b) => b.weight - a.weight)
                       .map((option) => (
                         <div 
                           key={option.id}
