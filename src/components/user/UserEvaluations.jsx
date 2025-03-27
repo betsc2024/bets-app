@@ -22,6 +22,7 @@ const UserEvaluations = () => {
   const [statements, setStatements] = useState([]);
   const [responses, setResponses] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [attributeGroups, setAttributeGroups] = useState([]);
   const { user } = useAuth();
   const [userCompany,setUserCompany] = useState("");
   const [c,setEvalCount] = useState(null);
@@ -136,42 +137,31 @@ const UserEvaluations = () => {
 
       if (evaluationError) throw evaluationError;
 
-    
-
       console.log(evaluationData);
-      // attributes!inner(
-      //   id,
-      //   name,
-      //   description
-      // ),
 
-      // Get statements for the attribute bank >>>Prev
+      // Get statements for the attribute bank with attribute information
       const { data: statementsData, error: statementsError } = await supabase
         .from('attribute_statements')
         .select(`
           id,
           statement,
           attribute_bank_id,
+          attribute_id,
+          attributes (
+            id,
+            name,
+            description
+          ),
           attribute_statement_options (
-               id,
-              option_text,
-              weight
+            id,
+            option_text,
+            weight
           )
         `)
         .eq('attribute_bank_id', evaluationData.evaluation_assignments.attribute_banks?.id)
         .order('created_at');
 
       if (statementsError) throw statementsError;
-
-
-
-
-      
-
-
-     
- 
-
 
       // Get existing responses
       const { data: existingResponses, error: responsesError } = await supabase
@@ -186,16 +176,28 @@ const UserEvaluations = () => {
         responseMap[response.statement_id] = response.selected_option_id;
       });
 
+      // Group statements by attribute
+      const groupedStatements = {};
+      statementsData.forEach(statement => {
+        const attributeId = statement.attribute_id;
+        if (!groupedStatements[attributeId]) {
+          groupedStatements[attributeId] = {
+            attribute: statement.attributes,
+            statements: []
+          };
+        }
+        groupedStatements[attributeId].statements.push(statement);
+      });
 
+      // Convert to array for easier rendering
+      const attributeGroupsArray = Object.values(groupedStatements);
 
       console.log(responseMap);
 
       setSelectedEvaluation(evaluationData);
       setStatements(statementsData || []);
       setResponses(responseMap);
-
-     
-     
+      setAttributeGroups(attributeGroupsArray);
     } catch (error) {
       console.error('Error loading evaluation details:', error);
       toast.error(error.message || 'Failed to load evaluation details');
@@ -359,48 +361,101 @@ const UserEvaluations = () => {
 
           <ScrollArea className="flex-grow px-4">
             <div className="space-y-8 py-4">
-              {statements.map((statement , index) => (
-                <div 
-                  key={statement.id}
-                  className="bg-gray-50 rounded-lg p-6 shadow-inner"
-                >
-                  <div className="mb-4">
-                    <h4 className="text-lg font-semibold text-purple-800">
-                      {(index + 1) + ". " +statement.statement}
-                    </h4>
-                    {/* <p className="text-gray-600 mt-2">
-                      {statement.statement}
-                    </p> */}
+              {attributeGroups.map((group, groupIndex) => (
+                <div key={group.attribute?.id || groupIndex} className="mb-10">
+                  {/* Attribute Section Header */}
+                  <div className="bg-purple-50 rounded-lg p-4 mb-6 border-l-4 border-purple-600">
+                    <h3 className="text-xl font-bold text-purple-800 mb-2">
+                      {group.attribute?.name || "Section " + (groupIndex + 1)}
+                    </h3>
+                    {group.attribute?.description && (
+                      <p className="text-gray-700">{group.attribute.description}</p>
+                    )}
                   </div>
 
-                  <RadioGroup
-                    value={responses[statement.id]?.toString()}
-                    onValueChange={(value) => handleOptionSelect(statement.id, value)}
-                    className="space-y-3"
-                  >
-                    {statement.attribute_statement_options
-                      ?.sort((a, b) => b.weight - a.weight)
-                      .map((option) => (
-                        <div 
-                          key={option.id}
-                          className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50"
-                        >
-                          <RadioGroupItem 
-                            value={option.id.toString()} 
-                            id={`option-${statement.id}-${option.id}`}
-                          />
-                          <Label 
-                            htmlFor={`option-${statement.id}-${option.id}`}
-                            className="flex-1 text-gray-700 cursor-pointer"
-                          >
-                            {option.option_text}
-                          </Label>
-                  
-                        </div>
-                      ))}
-                  </RadioGroup>
+                  {/* Statements in this attribute group */}
+                  {group.statements.map((statement, statementIndex) => (
+                    <div 
+                      key={statement.id}
+                      className="bg-gray-50 rounded-lg p-6 shadow-inner mb-6"
+                    >
+                      <div className="mb-4">
+                        <h4 className="text-lg font-semibold text-purple-800">
+                          {(statementIndex + 1) + ". " + statement.statement}
+                        </h4>
+                      </div>
+
+                      <RadioGroup
+                        value={responses[statement.id]?.toString()}
+                        onValueChange={(value) => handleOptionSelect(statement.id, value)}
+                        className="space-y-3"
+                      >
+                        {statement.attribute_statement_options
+                          ?.sort((a, b) => b.weight - a.weight)
+                          .map((option) => (
+                            <div 
+                              key={option.id}
+                              className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50"
+                            >
+                              <RadioGroupItem 
+                                value={option.id.toString()} 
+                                id={`option-${statement.id}-${option.id}`}
+                              />
+                              <Label 
+                                htmlFor={`option-${statement.id}-${option.id}`}
+                                className="flex-1 text-gray-700 cursor-pointer"
+                              >
+                                {option.option_text}
+                              </Label>
+                            </div>
+                          ))}
+                      </RadioGroup>
+                    </div>
+                  ))}
                 </div>
               ))}
+
+              {attributeGroups.length === 0 && statements.length > 0 && (
+                // Fallback to original rendering if attribute grouping fails
+                statements.map((statement, index) => (
+                  <div 
+                    key={statement.id}
+                    className="bg-gray-50 rounded-lg p-6 shadow-inner mb-6"
+                  >
+                    <div className="mb-4">
+                      <h4 className="text-lg font-semibold text-purple-800">
+                        {(index + 1) + ". " + statement.statement}
+                      </h4>
+                    </div>
+
+                    <RadioGroup
+                      value={responses[statement.id]?.toString()}
+                      onValueChange={(value) => handleOptionSelect(statement.id, value)}
+                      className="space-y-3"
+                    >
+                      {statement.attribute_statement_options
+                        ?.sort((a, b) => b.weight - a.weight)
+                        .map((option) => (
+                          <div 
+                            key={option.id}
+                            className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50"
+                          >
+                            <RadioGroupItem 
+                              value={option.id.toString()} 
+                              id={`option-${statement.id}-${option.id}`}
+                            />
+                            <Label 
+                              htmlFor={`option-${statement.id}-${option.id}`}
+                              className="flex-1 text-gray-700 cursor-pointer"
+                            >
+                              {option.option_text}
+                            </Label>
+                          </div>
+                        ))}
+                    </RadioGroup>
+                  </div>
+                ))
+              )}
             </div>
           </ScrollArea>
 
