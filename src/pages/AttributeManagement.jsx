@@ -158,7 +158,7 @@ export default function AttributeManagement() {
 
       if (attributesError) throw attributesError;
 
-      // Then fetch statements for each attribute
+      // Then fetch statements for each attribute that are NOT associated with any bank
       const processedData = await Promise.all(attributesData.map(async (attr) => {
         const { data: statements, error: stmtError } = await supabase
           .from('attribute_statements')
@@ -175,6 +175,7 @@ export default function AttributeManagement() {
             )
           `)
           .eq('attribute_id', attr.id)
+          .is('attribute_bank_id', null)  // Only get statements not associated with a bank
           .order('created_at', { ascending: true });
 
         if (stmtError) throw stmtError;

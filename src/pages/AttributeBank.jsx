@@ -2024,7 +2024,7 @@ function CreateBank({ companies, onSuccess }) {
       }
 
       // Create attribute statements with their options
-      for (const { attributeId } of selectedStatements) {
+      for (const { statementId, attributeId } of selectedStatements) {
         // First, get the original statement and its options
         const { data: originalStatement, error: stmtError } = await supabase
           .from('attribute_statements')
@@ -2037,7 +2037,7 @@ function CreateBank({ companies, onSuccess }) {
               weight
             )
           `)
-          .eq('attribute_id', attributeId)
+          .eq('id', statementId)
           .single();
 
         if (stmtError) {
