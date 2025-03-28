@@ -11,8 +11,8 @@ import {
 import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
-import { ScrollArea } from "../../components/ui/scroll-area";
 import { toast } from 'sonner';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const UserEvaluations = () => {
   const [evaluations, setEvaluations] = useState([]);
@@ -26,7 +26,9 @@ const UserEvaluations = () => {
   const { user } = useAuth();
   const [userCompany,setUserCompany] = useState("");
   const [c,setEvalCount] = useState(null);
-  // console.log(user.user_metadata?.full_name); Debugging
+  const [currentStatementIndex, setCurrentStatementIndex] = useState(0);
+  const [flattenedStatements, setFlattenedStatements] = useState([]);
+  const [currentAttributeIndex, setCurrentAttributeIndex] = useState(0);
 
   useEffect(() => {
     if (user?.id) {
@@ -35,18 +37,12 @@ const UserEvaluations = () => {
     }
   }, [user]);
 
-
-
-
-
-
   const company = async () => {
     try {
       const { data, error } = await supabase
         .from("companies")
         .select("id, name")
         .eq("id", user.user_metadata?.company_id);
-  
   
       if (data && data.length > 0) {
         console.log("Company Name:", data[0].name);
@@ -207,11 +203,60 @@ const UserEvaluations = () => {
     }
   };
 
+  useEffect(() => {
+    if (attributeGroups.length > 0) {
+      // Flatten all statements from all attribute groups for easy navigation
+      const flattened = [];
+      attributeGroups.forEach((group, groupIndex) => {
+        let statementNumberInSection = 1; // Reset counter for each section
+        group.statements.forEach(statement => {
+          flattened.push({
+            statement,
+            attributeIndex: groupIndex,
+            attributeName: group.attribute?.name || `Section ${groupIndex + 1}`,
+            attributeDescription: group.attribute?.description || '',
+            statementNumberInSection: statementNumberInSection++ // Track statement number within section
+          });
+        });
+      });
+      setFlattenedStatements(flattened);
+      setCurrentStatementIndex(0);
+      setCurrentAttributeIndex(0);
+    }
+  }, [attributeGroups]);
+
   const handleOptionSelect = (statementId, optionId) => {
     setResponses(prev => ({
       ...prev,
       [statementId]: optionId
     }));
+  };
+
+  const handleNextStatement = () => {
+    if (currentStatementIndex < flattenedStatements.length - 1) {
+      setCurrentStatementIndex(prevIndex => {
+        const newIndex = prevIndex + 1;
+        setCurrentAttributeIndex(flattenedStatements[newIndex].attributeIndex);
+        return newIndex;
+      });
+    }
+  };
+
+  const handlePreviousStatement = () => {
+    if (currentStatementIndex > 0) {
+      setCurrentStatementIndex(prevIndex => {
+        const newIndex = prevIndex - 1;
+        setCurrentAttributeIndex(flattenedStatements[newIndex].attributeIndex);
+        return newIndex;
+      });
+    }
+  };
+
+  const goToStatement = (index) => {
+    if (index >= 0 && index < flattenedStatements.length) {
+      setCurrentStatementIndex(index);
+      setCurrentAttributeIndex(flattenedStatements[index].attributeIndex);
+    }
   };
 
   const handleSubmitEvaluation = async () => {
@@ -234,9 +279,7 @@ const UserEvaluations = () => {
         selected_option_id: responses[statement.id],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }
-    ));
-
+      }));
 
       console.log(responseData);
 
@@ -291,7 +334,6 @@ const UserEvaluations = () => {
 
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {evaluations.map((evaluation) => {
-          // console.log(evaluation);
           return (
             <div
               key={evaluation.id}
@@ -348,7 +390,7 @@ const UserEvaluations = () => {
         open={!!selectedEvaluation} 
         onOpenChange={(open) => !open && setSelectedEvaluation(null)}
       >
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-4xl h-auto max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-2xl">
             { selectedEvaluation?.status === 'completed' ? toast.warning("Already Evaluated") : <></>}
@@ -359,94 +401,65 @@ const UserEvaluations = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-grow px-4">
-            <div className="space-y-8 py-4">
-              {attributeGroups.map((group, groupIndex) => (
-                <div key={group.attribute?.id || groupIndex} className="mb-10">
-                  {/* Attribute Section Header */}
-                  <div className="bg-purple-50 rounded-lg p-4 mb-6 border-l-4 border-purple-600">
-                    <h3 className="text-xl font-bold text-purple-800 mb-2">
-                      {group.attribute?.name || "Section " + (groupIndex + 1)}
+          <div className="flex-grow px-4 py-2 overflow-auto">
+            {attributeGroups.length > 0 && flattenedStatements.length > 0 ? (
+              <div className="space-y-4">
+                {/* Progress indicator */}
+                <div className="bg-purple-50 rounded-lg p-3 mb-4 border-l-4 border-purple-600 sticky top-0 z-10">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-lg font-bold text-purple-800">
+                      {flattenedStatements[currentStatementIndex]?.attributeName}
                     </h3>
-                    {group.attribute?.description && (
-                      <p className="text-gray-700">{group.attribute.description}</p>
-                    )}
-                  </div>
-
-                  {/* Statements in this attribute group */}
-                  {group.statements.map((statement, statementIndex) => (
-                    <div 
-                      key={statement.id}
-                      className="bg-gray-50 rounded-lg p-6 shadow-inner mb-6"
-                    >
-                      <div className="mb-4">
-                        <h4 className="text-lg font-semibold text-purple-800">
-                          {(statementIndex + 1) + ". " + statement.statement}
-                        </h4>
-                      </div>
-
-                      <RadioGroup
-                        value={responses[statement.id]?.toString()}
-                        onValueChange={(value) => handleOptionSelect(statement.id, value)}
-                        className="space-y-3"
-                      >
-                        {statement.attribute_statement_options
-                          ?.sort((a, b) => b.weight - a.weight)
-                          .map((option) => (
-                            <div 
-                              key={option.id}
-                              className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50"
-                            >
-                              <RadioGroupItem 
-                                value={option.id.toString()} 
-                                id={`option-${statement.id}-${option.id}`}
-                              />
-                              <Label 
-                                htmlFor={`option-${statement.id}-${option.id}`}
-                                className="flex-1 text-gray-700 cursor-pointer"
-                              >
-                                {option.option_text}
-                              </Label>
-                            </div>
-                          ))}
-                      </RadioGroup>
+                    <div className="text-sm text-gray-600">
+                      Statement {flattenedStatements[currentStatementIndex]?.statementNumberInSection} of {attributeGroups[currentAttributeIndex]?.statements.length}
                     </div>
-                  ))}
+                  </div>
+                  
+                  {/* Attribute description if available */}
+                  {flattenedStatements[currentStatementIndex]?.attributeDescription && (
+                    <p className="text-gray-700 mb-2 text-sm">
+                      {flattenedStatements[currentStatementIndex].attributeDescription}
+                    </p>
+                  )}
+                  
+                  {/* Progress bar for current section */}
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div 
+                      className="bg-purple-600 h-1.5 rounded-full" 
+                      style={{ width: `${(flattenedStatements[currentStatementIndex]?.statementNumberInSection / attributeGroups[currentAttributeIndex]?.statements.length) * 100}%` }}
+                    ></div>
+                  </div>
                 </div>
-              ))}
 
-              {attributeGroups.length === 0 && statements.length > 0 && (
-                // Fallback to original rendering if attribute grouping fails
-                statements.map((statement, index) => (
-                  <div 
-                    key={statement.id}
-                    className="bg-gray-50 rounded-lg p-6 shadow-inner mb-6"
-                  >
-                    <div className="mb-4">
-                      <h4 className="text-lg font-semibold text-purple-800">
-                        {(index + 1) + ". " + statement.statement}
+                {/* Current statement with its options */}
+                {flattenedStatements[currentStatementIndex] && (
+                  <div className="bg-gray-50 rounded-lg p-4 shadow-inner mb-4">
+                    <div className="mb-3">
+                      <h4 className="text-base font-semibold text-purple-800">
+                        {flattenedStatements[currentStatementIndex].statementNumberInSection + ". " + flattenedStatements[currentStatementIndex].statement.statement}
                       </h4>
                     </div>
 
                     <RadioGroup
-                      value={responses[statement.id]?.toString()}
-                      onValueChange={(value) => handleOptionSelect(statement.id, value)}
-                      className="space-y-3"
+                      value={responses[flattenedStatements[currentStatementIndex].statement.id]?.toString()}
+                      onValueChange={(value) => handleOptionSelect(flattenedStatements[currentStatementIndex].statement.id, value)}
+                      className="space-y-2"
                     >
-                      {statement.attribute_statement_options
+                      {flattenedStatements[currentStatementIndex].statement.attribute_statement_options
                         ?.sort((a, b) => b.weight - a.weight)
                         .map((option) => (
                           <div 
                             key={option.id}
-                            className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50"
+                            className="flex items-center space-x-2 bg-white p-3 rounded-md shadow-sm hover:bg-gray-50"
                           >
                             <RadioGroupItem 
                               value={option.id.toString()} 
-                              id={`option-${statement.id}-${option.id}`}
+                              id={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
+                              className="h-4 w-4"
                             />
                             <Label 
-                              htmlFor={`option-${statement.id}-${option.id}`}
-                              className="flex-1 text-gray-700 cursor-pointer"
+                              htmlFor={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
+                              className="flex-1 text-gray-700 cursor-pointer text-sm"
                             >
                               {option.option_text}
                             </Label>
@@ -454,10 +467,39 @@ const UserEvaluations = () => {
                         ))}
                     </RadioGroup>
                   </div>
-                ))
-              )}
-            </div>
-          </ScrollArea>
+                )}
+
+                {/* Navigation buttons */}
+                <div className="flex justify-between items-center mt-4 pb-2">
+                  <Button
+                    onClick={handlePreviousStatement}
+                    disabled={currentStatementIndex === 0}
+                    variant="outline"
+                    className="flex items-center text-xs px-3 py-1 h-8"
+                    size="sm"
+                  >
+                    <ChevronLeft className="mr-1 h-3 w-3" />
+                    Prev
+                  </Button>
+                  
+                  <Button
+                    onClick={handleNextStatement}
+                    disabled={currentStatementIndex === flattenedStatements.length - 1}
+                    variant="outline"
+                    className="flex items-center text-xs px-3 py-1 h-8"
+                    size="sm"
+                  >
+                    Next
+                    <ChevronRight className="ml-1 h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                Loading statements...
+              </div>
+            )}
+          </div>
 
           <div className="flex justify-end gap-4 mt-6 px-4 py-3 border-t">
             <Button
@@ -469,7 +511,7 @@ const UserEvaluations = () => {
             </Button>
             <Button
               onClick={handleSubmitEvaluation}
-              disabled={isSubmitting}
+              disabled={isSubmitting || flattenedStatements.length === 0}
               className="bg-purple-600 hover:bg-purple-700"
             >
               {isSubmitting ? (
