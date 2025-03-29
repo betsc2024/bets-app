@@ -830,6 +830,19 @@ export default function Reports() {
             pointHoverBackgroundColor: '#fff',
             pointHoverBorderColor: 'rgba(0, 128, 0, 1)',
           },
+          /* Ideal Score - To be implemented later
+          {
+            label: 'Ideal Score',
+            data: radial_label.map(() => radial_ideal_score),
+            backgroundColor: 'rgba(0, 0, 255, 0.15)',
+            borderColor: 'rgba(0, 0, 255, 0.9)',
+            borderWidth: 2.5,
+            pointBackgroundColor: 'rgba(0, 0, 255, 1)',
+            pointBorderColor: '#fff',
+            pointHoverBackgroundColor: '#fff',
+            pointHoverBorderColor: 'rgba(0, 0, 255, 1)',
+          },
+          */
           {
             label: 'Max Score (100)',
             data: maxData,
@@ -856,7 +869,7 @@ export default function Reports() {
         radial_self_data
       });
     }
-  }, [selectedAttribute, radial_label, radial_score, radial_self_data]);
+  }, [selectedAttribute, radial_label, radial_score, radial_self_data])
   const options = {
     indexAxis: "x", // Ensures vertical bars
     elements: {

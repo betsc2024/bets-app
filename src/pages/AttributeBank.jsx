@@ -53,6 +53,8 @@ import cn from 'classnames';
 
 export default function AttributeBank() {
   const { user } = useAuth();
+  
+  // All state declarations
   const [analysisType, setAnalysisType] = useState('behavior');
   const [analysisTypeList, setAnalysisTypeList] = useState([]);
   const [attributes, setAttributes] = useState([]);
@@ -85,85 +87,15 @@ export default function AttributeBank() {
   const [statementSearchQuery, setStatementSearchQuery] = useState('');
   const itemsPerPage = 10;
 
-  // Fetch companies data
-  const fetchCompanies = useMemo(() => async () => {
+  // API functions
+  const fetchanalysis = async () => {
     try {
-      const { data: companiesData, error: companiesError } = await supabase
-        .from('companies')
-        .select('*');
-
-      if (companiesError) throw companiesError;
-      setCompanies(companiesData);
-    } catch (error) {
-      console.error('Error fetching companies:', error);
-      toast.error('Failed to fetch companies');
+      const response = await supabase.from('analysis_type').select("*");
+      setAnalysisTypeList(response.data);
+    } catch (e) {
+      console.error(e);
     }
-  }, []);
-
-  // Fetch attributes based on analysis type
-  const fetchAttributes = useMemo(() => async (type) => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('attributes')
-        .select(`
-          *,
-          attribute_statements (
-            id,
-            statement,
-            attribute_statement_options (
-              id,
-              option_text,
-              weight
-            )
-          ),
-          attribute_industry_mapping:attribute_industry_mapping (
-            industry_id,
-            industries (
-              id,
-              name
-            )
-          )
-        `)
-        .eq('analysis_type', type)
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-      setAttributes(data);
-    } catch (error) {
-      console.error('Error fetching attributes:', error);
-      toast.error('Failed to fetch attributes');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-    const fetchanalysis =  async ()=>{
-      try{
-        const response = await supabase.from('analysis_type').select("*");
-        setAnalysisTypeList(response.data);
-        console.log(response.data);
-      }catch(e){
-        console.error(e);
-      }
-    }
-
-
-  // Fetch companies on mount
-  useEffect(() => {
-    fetchCompanies();
-  }, [fetchCompanies]);
-
-  // Fetch attributes when analysis type changes
-  useEffect(() => {
-    fetchAttributes(analysisType);
-  }, [analysisType, fetchAttributes]);
-
-  // Fetch banks on mount
-  useEffect(() => {
-    fetchBanks();
-    fetchanalysis();
-  }, []);
+  };
 
   const fetchBanks = async () => {
     setLoading(true);
@@ -193,24 +125,66 @@ export default function AttributeBank() {
     }
   };
 
-  // Generate a unique bank name with incrementing 3-digit code
-  const generateUniqueBankName = async () => {
-    const { data: existingBanks } = await supabase
-      .from('attribute_banks')
-      .select('name')
-      .ilike('name', 'New Bank%')
-      .order('name', { ascending: false });
+  // Memoized functions
+  const fetchCompanies = useMemo(() => async () => {
+    try {
+      const { data: companiesData, error: companiesError } = await supabase
+        .from('companies')
+        .select('*');
 
-    let maxNumber = 0;
-    existingBanks?.forEach(bank => {
-      const match = bank.name.match(/New Bank -(\d{3})/);
-      if (match) {
-        const num = parseInt(match[1]);
-        maxNumber = Math.max(maxNumber, num);
-      }
-    });
+      if (companiesError) throw companiesError;
+      setCompanies(companiesData);
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      toast.error('Failed to fetch companies');
+    }
+  }, []);
 
-    return `New Bank -${String(maxNumber + 1).padStart(3, '0')}`;
+  const fetchAttributes = useMemo(() => async (type) => {
+    try {
+      setLoading(true);
+      let query = supabase
+        .from('attributes')
+        .select(`
+          *,
+          attribute_statements!inner (
+            id,
+            statement,
+            attribute_bank_id,
+            attribute_statement_options (
+              id,
+              option_text,
+              weight
+            )
+          ),
+          attribute_industry_mapping (
+            industry_id,
+            industries (
+              id,
+              name
+            )
+          )
+        `)
+        .eq('analysis_type', type)
+        .is('attribute_statements.attribute_bank_id', null)
+        .order('name', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      setAttributes(data || []);
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Failed to fetch attributes');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Event handlers
+  const handleAnalysisTypeChange = (value) => {
+    setAnalysisType(value);
+    setNewBank(prev => ({ ...prev, analysis_type: value }));
   };
 
   const handleCreateBank = async (e) => {
@@ -218,13 +192,11 @@ export default function AttributeBank() {
     setLoading(true);
 
     try {
-      // First check if user is authenticated
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('You must be logged in to create a bank');
       }
 
-      // Check if a bank with the same name exists
       const { data: existingBank, error: checkError } = await supabase
         .from('attribute_banks')
         .select('id')
@@ -240,7 +212,6 @@ export default function AttributeBank() {
         throw new Error('A bank with this name already exists');
       }
 
-      // Create the bank
       const bankName = newBank.name || await generateUniqueBankName();
       const { data: bank, error: createError } = await supabase
         .from('attribute_banks')
@@ -263,9 +234,7 @@ export default function AttributeBank() {
         throw new Error('Failed to create bank - no data returned');
       }
 
-      // Create attribute statements with their options
       for (const { statementId, attributeId } of selectedStatements) {
-        // First, get the original statement and its options
         const { data: originalStatement, error: stmtError } = await supabase
           .from('attribute_statements')
           .select(`
@@ -285,7 +254,6 @@ export default function AttributeBank() {
           continue;
         }
 
-        // Create new statement for the bank
         const { data: newStatement, error: newStmtError } = await supabase
           .from('attribute_statements')
           .insert({
@@ -303,7 +271,6 @@ export default function AttributeBank() {
           continue;
         }
 
-        // Copy over the options
         if (originalStatement.attribute_statement_options?.length > 0) {
           const newOptions = originalStatement.attribute_statement_options.map(opt => ({
             statement_id: newStatement.id,
@@ -348,9 +315,7 @@ export default function AttributeBank() {
     });
   };
 
-  // Get paginated items with flattened statements
   const paginatedItems = useMemo(() => {
-    // First, flatten the attributes with their statements
     let flattenedItems = attributes.flatMap(attr => 
       attr.attribute_statements?.map(statement => ({
         ...attr,
@@ -358,7 +323,6 @@ export default function AttributeBank() {
       })) || []
     );
 
-    // Apply filters
     flattenedItems = flattenedItems.filter(item => {
       const matchesIndustry = selectedIndustryFilter === 'all' ||
         item.attribute_industry_mapping?.some(mapping => 
@@ -374,13 +338,11 @@ export default function AttributeBank() {
       return matchesIndustry && matchesAttribute && matchesStatement;
     });
     
-    // Then paginate the filtered array
     const startIndex = (page - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     return flattenedItems.slice(startIndex, endIndex);
   }, [attributes, page, itemsPerPage, selectedIndustryFilter, selectedAttributeFilter, selectedStatementFilter]);
 
-  // Calculate total pages based on flattened items
   const totalPages = useMemo(() => {
     const totalItems = attributes.reduce((acc, attr) => 
       acc + (attr.attribute_statements?.length || 0), 0
@@ -396,7 +358,6 @@ export default function AttributeBank() {
         return;
       }
 
-      // First get all statements for this bank
       const { data: statements, error: stmtFetchError } = await supabase
         .from('attribute_statements')
         .select('id')
@@ -404,7 +365,6 @@ export default function AttributeBank() {
 
       if (stmtFetchError) throw stmtFetchError;
 
-      // Delete statement options for all statements
       if (statements?.length > 0) {
         const { error: optionsError } = await supabase
           .from('attribute_statement_options')
@@ -414,7 +374,6 @@ export default function AttributeBank() {
         if (optionsError) throw optionsError;
       }
 
-      // Then delete all statements
       const { error: statementsError } = await supabase
         .from('attribute_statements')
         .delete()
@@ -422,7 +381,6 @@ export default function AttributeBank() {
 
       if (statementsError) throw statementsError;
 
-      // Finally delete the bank
       const { error: bankError } = await supabase
         .from('attribute_banks')
         .delete()
@@ -438,6 +396,20 @@ export default function AttributeBank() {
       toast.error('Failed to delete bank and its statements');
     }
   };
+
+  // Effects
+  useEffect(() => {
+    fetchCompanies();
+  }, [fetchCompanies]);
+
+  useEffect(() => {
+    fetchAttributes(analysisType);
+  }, [analysisType, fetchAttributes]);
+
+  useEffect(() => {
+    fetchBanks();
+    fetchanalysis();
+  }, []);
 
   return (
     <div className="flex h-full">
@@ -510,10 +482,7 @@ export default function AttributeBank() {
                 <CardContent>
                   <Select
                     value={analysisType}
-                    onValueChange={(value) => {
-                      setAnalysisType(value);
-                      setNewBank(prev => ({ ...prev, analysis_type: value }));
-                    }}
+                    onValueChange={handleAnalysisTypeChange}
                     required
                   >
                     <SelectTrigger>
@@ -1150,7 +1119,6 @@ function BankDetails({ bank, onRefresh }) {
         return;
       }
 
-      // First get all statements for this bank
       const { data: statements, error: stmtFetchError } = await supabase
         .from('attribute_statements')
         .select('id')
@@ -1158,7 +1126,6 @@ function BankDetails({ bank, onRefresh }) {
 
       if (stmtFetchError) throw stmtFetchError;
 
-      // Delete statement options for all statements
       if (statements?.length > 0) {
         const { error: optionsError } = await supabase
           .from('attribute_statement_options')
@@ -1168,7 +1135,6 @@ function BankDetails({ bank, onRefresh }) {
         if (optionsError) throw optionsError;
       }
 
-      // Then delete all statements
       const { error: statementsError } = await supabase
         .from('attribute_statements')
         .delete()
@@ -1176,7 +1142,6 @@ function BankDetails({ bank, onRefresh }) {
 
       if (statementsError) throw statementsError;
 
-      // Finally delete the bank
       const { error: bankError } = await supabase
         .from('attribute_banks')
         .delete()
@@ -1385,9 +1350,7 @@ function BankDetails({ bank, onRefresh }) {
                           statement.options.map((option) => (
                             <div key={option.id} className="flex justify-between items-center text-sm">
                               <span className="font-medium">{option.option_text}</span>
-                              <span className="text-muted-foreground bg-secondary px-2 py-1 rounded-md">
-                                {option.weight}
-                              </span>
+                              <span className="text-muted-foreground ml-2">{option.weight}</span>
                             </div>
                           ))
                         ) : (
@@ -1478,7 +1441,6 @@ function BankList({ banks, onBankSelect, onRefresh }) {
         return;
       }
 
-      // First get all statements for this bank
       const { data: statements, error: stmtFetchError } = await supabase
         .from('attribute_statements')
         .select('id')
@@ -1486,7 +1448,6 @@ function BankList({ banks, onBankSelect, onRefresh }) {
 
       if (stmtFetchError) throw stmtFetchError;
 
-      // Delete statement options for all statements
       if (statements?.length > 0) {
         const { error: optionsError } = await supabase
           .from('attribute_statement_options')
@@ -1496,7 +1457,6 @@ function BankList({ banks, onBankSelect, onRefresh }) {
         if (optionsError) throw optionsError;
       }
 
-      // Then delete all statements
       const { error: statementsError } = await supabase
         .from('attribute_statements')
         .delete()
@@ -1504,7 +1464,6 @@ function BankList({ banks, onBankSelect, onRefresh }) {
 
       if (statementsError) throw statementsError;
 
-      // Finally delete the bank
       const { error: bankError } = await supabase
         .from('attribute_banks')
         .delete()
@@ -1977,13 +1936,11 @@ function CreateBank({ companies, onSuccess }) {
     setLoading(true);
 
     try {
-      // First check if user is authenticated
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('You must be logged in to create a bank');
       }
 
-      // Check if a bank with the same name exists
       const { data: existingBank, error: checkError } = await supabase
         .from('attribute_banks')
         .select('id')
@@ -1999,7 +1956,6 @@ function CreateBank({ companies, onSuccess }) {
         throw new Error('A bank with this name already exists');
       }
 
-      // Create the bank
       const { data: bank, error: createError } = await supabase
         .from('attribute_banks')
         .insert({
@@ -2023,9 +1979,7 @@ function CreateBank({ companies, onSuccess }) {
         throw new Error('Failed to create bank - no data returned');
       }
 
-      // Create attribute statements with their options
       for (const { statementId, attributeId } of selectedStatements) {
-        // First, get the original statement and its options
         const { data: originalStatement, error: stmtError } = await supabase
           .from('attribute_statements')
           .select(`
@@ -2045,7 +1999,6 @@ function CreateBank({ companies, onSuccess }) {
           continue;
         }
 
-        // Create new statement for the bank
         const { data: newStatement, error: newStmtError } = await supabase
           .from('attribute_statements')
           .insert({
@@ -2063,7 +2016,6 @@ function CreateBank({ companies, onSuccess }) {
           continue;
         }
 
-        // Copy over the options
         if (originalStatement.attribute_statement_options?.length > 0) {
           const newOptions = originalStatement.attribute_statement_options.map(opt => ({
             statement_id: newStatement.id,
@@ -2083,7 +2035,6 @@ function CreateBank({ companies, onSuccess }) {
 
       toast.success('Bank created successfully');
       
-      // Reset form
       setBankName('');
       setBankDescription('');
       setSelectedCompany('');
@@ -2091,7 +2042,6 @@ function CreateBank({ companies, onSuccess }) {
       setSelectedStatements([]);
       setCustomStatements([]);
       
-      // Notify parent of success
       onSuccess();
       
     } catch (error) {
@@ -2102,7 +2052,6 @@ function CreateBank({ companies, onSuccess }) {
     }
   };
 
-  // Fetch statements based on filters and analysis type
   useEffect(() => {
     if (!analysisType) {
       setAvailableStatements([]);
@@ -2116,9 +2065,10 @@ function CreateBank({ companies, onSuccess }) {
           .from('attributes')
           .select(`
             *,
-            attribute_statements (
+            attribute_statements!inner (
               id,
               statement,
+              attribute_bank_id,
               attribute_statement_options (
                 id,
                 option_text,
@@ -2134,14 +2084,13 @@ function CreateBank({ companies, onSuccess }) {
             )
           `)
           .eq('analysis_type', analysisType)
+          .is('attribute_statements.attribute_bank_id', null)
           .order('name', { ascending: true });
 
-        // Apply industry filter if selected and not "all"
         if (selectedFilterIndustry && selectedFilterIndustry !== 'all') {
           query = query.eq('attribute_industry_mapping.industry_id', selectedFilterIndustry);
         }
 
-        // Apply custom statements filter
         if (!includeCustomStatements) {
           query = query.eq('is_industry_standard', true);
         } else {
@@ -2155,7 +2104,6 @@ function CreateBank({ companies, onSuccess }) {
           throw attrError;
         }
 
-        // Transform the data to match our table structure
         const transformedData = attributes?.map(attr => ({
           id: attr.id,
           name: attr.name,
@@ -2179,7 +2127,6 @@ function CreateBank({ companies, onSuccess }) {
     fetchStatements();
   }, [analysisType, selectedCompany, includeCustomStatements, selectedFilterIndustry]);
 
-  // Fetch industries for filter
   useEffect(() => {
     const fetchIndustries = async () => {
       const { data, error } = await supabase
@@ -2199,7 +2146,6 @@ function CreateBank({ companies, onSuccess }) {
     fetchIndustries();
   }, []);
 
-  // Fetch existing attributes
   useEffect(() => {
     const fetchExistingAttributes = async () => {
       try {
@@ -2219,7 +2165,6 @@ function CreateBank({ companies, onSuccess }) {
     fetchExistingAttributes();
   }, []);
 
-  // Pagination
   const totalPages = Math.ceil(availableStatements.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -2468,7 +2413,6 @@ function CreateBank({ companies, onSuccess }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {console.log('Current statements in render:', availableStatements)}
                   {loading ? (
                     <TableRow>
                       <TableCell colSpan={6} className="h-24 text-center">
