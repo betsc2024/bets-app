@@ -98,23 +98,69 @@ export default function Reports() {
   const chartRef = useRef(null);
 
   const copyToClipboard = async () => {
-    // console.log('copyToClipboard');
-    if (chartRef.current) {
-      // console.log("Click");
+    try {
+      if (!chartRef.current) {
+        toast.error("Chart not found");
+        return;
+      }
+
       const canvas = await html2canvas(chartRef.current);
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const item = new ClipboardItem({ "image/png": blob });
-          navigator.clipboard.write([item]).then(() => {
-            alert("Chart copied to clipboard!");
-          });
+      
+      // Try using modern Clipboard API first
+      if (navigator.clipboard && navigator.clipboard.write) {
+        canvas.toBlob(async (blob) => {
+          if (blob) {
+            try {
+              const item = new ClipboardItem({ "image/png": blob });
+              await navigator.clipboard.write([item]);
+              toast.success("Chart copied to clipboard!");
+            } catch (err) {
+              console.error("Clipboard write failed:", err);
+              // Fallback: Offer download if clipboard fails
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'chart.png';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              toast.info("Chart downloaded as image (clipboard access denied)");
+            }
+          }
+        });
+      } else {
+        // Fallback for browsers without Clipboard API support
+        const url = canvas.toDataURL();
+        const img = document.createElement('img');
+        img.src = url;
+        document.body.appendChild(img);
+        const range = document.createRange();
+        range.selectNode(img);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        try {
+          document.execCommand('copy');
+          window.getSelection().removeAllRanges();
+          document.body.removeChild(img);
+          toast.success("Chart copied to clipboard!");
+        } catch (err) {
+          console.error("Legacy clipboard copy failed:", err);
+          // Offer download as last resort
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'chart.png';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          toast.info("Chart downloaded as image (clipboard not supported)");
         }
-      });
+      }
+    } catch (error) {
+      console.error("Copy to clipboard failed:", error);
+      toast.error("Failed to copy chart. Please try again.");
     }
   };
-
-
-
 
 
   const fetchData = async (selectedCompany, selectedUser , selectedAnalysis = "",selectedBank = "") => {
@@ -298,12 +344,12 @@ export default function Reports() {
 
         relationshipTypesArray.forEach((type) => {
           row[type] = attributeMap[attribute][type]
-            ? (attributeMap[attribute][type].total / attributeMap[attribute][type].count).toFixed(2)
+            ? (attributeMap[attribute][type].total / attributeMap[attribute][type].count)
             : 0;
         });
         if (total.length > 0 && total) {
           // console.log(total);
-          row["Total"] = (total[index].average_score_percentage).toFixed(2);
+          row["Total"] = (total[index].average_score_percentage);
         }
         // console.log(row);
 
@@ -442,7 +488,7 @@ export default function Reports() {
         ? selfItems.reduce((sum, i) => sum + i.average_score_percentage, 0)
         : 0;
 
-      selfResultsMap[label] = avgSelfScore.toFixed(2);
+      selfResultsMap[label] = avgSelfScore;
 
       return {
         company_name: selfItems[0]?.company_name || "Unknown",
@@ -474,7 +520,7 @@ export default function Reports() {
         avgNotSelfScore = avgNotSelfScore / total_c;
 
 
-        notSelfResultsMap[label] = avgNotSelfScore.toFixed(2);
+        notSelfResultsMap[label] = avgNotSelfScore;
 
         // console.log(notSelfItems);
         return {
@@ -494,7 +540,7 @@ export default function Reports() {
           ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_score_percentage), 0)
           : 0;
 
-        notSelfResultsMap[label] = avgNotSelfScore.toFixed(2);
+        notSelfResultsMap[label] = avgNotSelfScore;
 
         return {
           company_name: notSelfItems[0]?.company_name || "Unknown",
@@ -533,6 +579,13 @@ export default function Reports() {
   const fetch_radar = async (relationship_type , selectedAnalysis = "" , selectedBank = "") => {
 
     try {
+
+      console.log('Starting fetch_radar with:', {
+        relationship_type,
+        selectedAnalysis,
+        selectedBank,
+        selectedAttribute
+      });
 
       const id = selectedCompany?.id;
       const user_id = selectedUser?.id;
@@ -591,7 +644,8 @@ export default function Reports() {
           // console.log(data);
       }
 
-      // console.log(query_info);
+      console.log('Filtered Query Data:', query_info);
+
       // console.log(id);
       // console.log(user_id);  
 
@@ -602,8 +656,6 @@ export default function Reports() {
         evaluation.evaluation_assignments?.company_id === id &&
         evaluation.evaluation_assignments?.user_to_evaluate_id === user_id
       )
-
-      // console.log(query_Data);
 
       if (error) {
         throw new Error('Error fetching data: ' + error.message);
@@ -621,7 +673,10 @@ export default function Reports() {
       };
 
       const data = filterByAttributeName(query_Data, selectedAttribute);
-      // console.log(data);
+      console.log('Data filtered by attribute:', {
+        selectedAttribute,
+        filteredData: data
+      });
 
       const fetch_self_Data = (query_Data) => {
         const filteredData = query_Data.filter(item => item.relationship_type === null);
@@ -648,6 +703,7 @@ export default function Reports() {
         }));
 
 
+        console.log('Self Data Processed:', result);
         return result;
       }
       const temp_self_Data = fetch_self_Data(data);
@@ -678,6 +734,7 @@ export default function Reports() {
         average_weight: totalWeight / count,
       }));
 
+      console.log('Relationship Data Processed:', result);
       set_Radial_Result(result);
 
     } catch (err) {
@@ -688,52 +745,65 @@ export default function Reports() {
 
 
   useEffect(() => {
-
     if (radial_result) {
-      // console.log("calc");
-      // console.log(selectedAttribute);
-      // console.log(radial_result);
+      console.log('Setting radial labels and scores from result:', {
+        radial_result,
+        statements: radial_result.map(item => item.statement)
+      });
 
-      setRadial_Label(radial_result.map(item => item.statement)); // Set the statement labels
+      setRadial_Label(radial_result.map(item => item.statement));
       setRadial_Score(radial_result);
-      // console.log(radial_result)
     }
     if (radial_self_data) {
-      setRadial_Label(radial_self_data.map(item => item.statement)); // Set the statement labels
+      console.log('Setting radial labels from self data:', {
+        radial_self_data,
+        statements: radial_self_data.map(item => item.statement)
+      });
+      setRadial_Label(radial_self_data.map(item => item.statement));
     }
   }, [selectedAttribute, radial_result, radial_self_data])
 
   useEffect(() => {
-    fetch_radar("total",analysis,bank);
-  }, [selectedAttribute,analysis,bank]);
+    console.log('Fetching radar data with:', {
+      selectedAttribute,
+      analysis,
+      bank
+    });
+    fetch_radar("total", analysis, bank);
+  }, [selectedAttribute, analysis, bank])
+
+
 
   useEffect(() => {
-
     // Fetch self data and max data
-
-    if (radial_score && radial_label && radial_self_data && radial_ideal_score) {
+    if (radial_score && radial_label && radial_self_data) {
+      console.log('Radar Chart Data Creation - Input:', {
+        radial_score,
+        radial_label,
+        radial_self_data
+      });
 
       const result = radial_score;
-
-      // console.log(result);
-      // console.log(selfresults);
-
       const maxData = new Array(result.length).fill(100);
-        const idealscoreData = new Array(result.length).fill(radial_ideal_score || 50);
-   
-      const selfData = radial_self_data.map(item => (item.average_weight).toFixed(2));
+      
+      console.log('Processing self data...');
+      const selfData = radial_self_data.map(item => {
+        console.log('Self item:', item);
+        return item.average_weight;
+      });
 
+      console.log('Processing relationship data...');
+      let relationshipData = result.map(item => {
+        console.log('Relationship item:', item);
+        return item.average_weight;
+      });
 
-      let relationshipData = [];
-      relationshipData = result.map(item => (item.average_weight).toFixed(2));
-
-
-      // Combine self, relationship, and max data
-      // console.log(selfData);
-      // console.log(relationshipData);
-      // console.log(maxData);
-      // console.log(radial_label);
-
+      console.log('Creating final radar data with:', {
+        labels: radial_label,
+        selfData,
+        relationshipData,
+        maxData
+      });
 
       const radarData = {
         labels: radial_label,
@@ -741,7 +811,7 @@ export default function Reports() {
           {
             label: 'Self',
             data: selfData,
-            backgroundColor: 'rgba(255, 0, 0, 0.15)', // Red
+            backgroundColor: 'rgba(255, 0, 0, 0.15)',
             borderColor: 'rgba(255, 0, 0, 0.9)',
             borderWidth: 2.5,
             pointBackgroundColor: 'rgba(255, 0, 0, 1)',
@@ -752,7 +822,7 @@ export default function Reports() {
           {
             label: 'Total',
             data: relationshipData,
-            backgroundColor: 'rgba(0, 128, 0, 0.15)', // Green
+            backgroundColor: 'rgba(0, 128, 0, 0.15)',
             borderColor: 'rgba(0, 128, 0, 0.9)',
             borderWidth: 2.5,
             pointBackgroundColor: 'rgba(0, 128, 0, 1)',
@@ -763,36 +833,30 @@ export default function Reports() {
           {
             label: 'Max Score (100)',
             data: maxData,
-            backgroundColor: 'rgba(255, 255, 0, 0.15)', // Yellow
+            backgroundColor: 'rgba(255, 255, 0, 0.15)',
             borderColor: 'rgba(255, 255, 0, 0.9)',
             borderWidth: 2.5,
             pointBackgroundColor: 'rgba(255, 255, 0, 1)',
             pointBorderColor: '#fff',
             pointHoverBackgroundColor: '#fff',
             pointHoverBorderColor: 'rgba(255, 255, 0, 1)',
-          },
-          {
-            label: 'Ideal Score',
-            data: idealscoreData,
-            backgroundColor: 'rgba(0, 0, 255, 0.15)', // Blue
-            borderColor: 'rgba(0, 0, 255, 0.9)',
-            borderWidth: 2.5,
-            pointBackgroundColor: 'rgba(0, 0, 255, 1)',
-            pointBorderColor: '#fff',
-            pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgba(0, 0, 255, 1)',
-          },
+          }
         ],
       };
       
-      // console.log(radarData);
-
-      setRadial_data(radarData); // Set the radar chart data
+      console.log('Setting final radar data:', radarData);
+      setRadial_data(radarData);
+    } else {
+      console.log('Missing required data for radar chart:', {
+        hasRadialScore: !!radial_score,
+        hasRadialLabel: !!radial_label,
+        hasRadialSelfData: !!radial_self_data,
+        radial_score,
+        radial_label,
+        radial_self_data
+      });
     }
-  }, [selectedAttribute, radial_label, radial_score, radial_self_data,radial_ideal_score])
-
-
-
+  }, [selectedAttribute, radial_label, radial_score, radial_self_data]);
   const options = {
     indexAxis: "x", // Ensures vertical bars
     elements: {
@@ -912,49 +976,69 @@ export default function Reports() {
     plugins: {
       legend: {
         position: 'bottom',
-        
+        display: true,
       },
       datalabels: {
-        display: true, // Show labels on each data point
-        color: "black", // Set text color
+        display: true,
+        color: "black",
         font: {
-          size: 14, // Make numbers bigger
-          weight: "bold", // Make numbers bold
+          size: 14,
+          weight: "bold",
         },
-        formatter: (value) => value, // Show raw data value
+        formatter: (value) => {
+          const num = parseFloat(value);
+          return !isNaN(num) ? num.toFixed(1) : value;
+        },
+        anchor: 'center',
+        align: 'center',
       },
+      tooltip: {
+        enabled: true,
+        callbacks: {
+          label: function(context) {
+            const num = parseFloat(context.raw);
+            return `${context.dataset.label}: ${!isNaN(num) ? num.toFixed(1) : context.raw}`;
+          }
+        }
+      }
     },
     scales: {
       r: {
-          ticks: {
-           display:false
-          },
+        ticks: {
+          display: false,
+          stepSize: 20,
+        },
         grid: {
+          color: 'rgba(0, 0, 0, 0.1)',
+        },
+        angleLines: {
           color: 'rgba(0, 0, 0, 0.1)',
         },
         pointLabels: {
           color: 'black',
           font: {
-            size: 14,
+            size: 12,
+            weight: 'bold'
           },
           callback: function (label) {
             let words = label.split(" ");
             let formattedLabel = [];
-
+            
             for (let i = 0; i < words.length; i += 3) {
               formattedLabel.push(words.slice(i, i + 3).join(" "));
             }
-
-            return formattedLabel; // Returns array for multi-line label
+            
+            return formattedLabel;
           }
-
         },
         suggestedMin: 0,
         suggestedMax: 100,
+        beginAtZero: true
       },
     },
+    responsive: true,
+    maintainAspectRatio: false
   };
-
   const items = [
     {
       id: 1,
@@ -1361,10 +1445,18 @@ export default function Reports() {
                         </div>
                     ) : selectedChart === "radial" && radial_score && item.key === "total" ? (
                       <div>
+                        {console.log('Attempting to render radar section with:', {
+                          selectedChart,
+                          radial_score,
+                          itemKey: item.key
+                        })}
                         <Select
                           value={selectedAttribute}
                           placeholder="Select an attribute"
-                          onValueChange={(value) => { setSelectedAttribute(value); }}
+                          onValueChange={(value) => { 
+                            console.log('Selected new attribute:', value);
+                            setSelectedAttribute(value); 
+                          }}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select an attribute" />
@@ -1377,16 +1469,28 @@ export default function Reports() {
                             ))}
                           </SelectContent>
                         </Select>
+                        {console.log('About to check radial_data:', radial_data)}
                         {radial_data ?
                           <div>
-                            <div ref={chartRef}>
-                              <Radar data={radial_data} options={radaroptions} className="mt-16" />
+                            <div ref={chartRef} style={{ height: '600px', width: '100%', position: 'relative' }}>
+                              {console.log('Rendering Radar Chart with data:', {
+                                labels: radial_data.labels,
+                                datasets: radial_data.datasets.map(d => ({
+                                  label: d.label,
+                                  data: d.data
+                                }))
+                              })}
+                              <Radar 
+                                data={radial_data} 
+                                options={radaroptions} 
+                                className="mt-16"
+                              />
                             </div>
                             <button onClick={copyToClipboard} className="mt-4">
                               Copy Chart to Clipboard
                             </button>
                           </div>
-                          : <></>}
+                          : <div>No radar data available</div>}
                       </div>
                     ) : selectedChart === "table" ? (
                       item.key === "demography" ? (<>
