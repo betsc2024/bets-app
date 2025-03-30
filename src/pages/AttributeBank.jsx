@@ -212,7 +212,7 @@ export default function AttributeBank() {
         throw new Error('A bank with this name already exists');
       }
 
-      const bankName = newBank.name || await generateUniqueBankName();
+      const bankName = await generateUniqueBankName();
       const { data: bank, error: createError } = await supabase
         .from('attribute_banks')
         .insert({
@@ -410,6 +410,34 @@ export default function AttributeBank() {
     fetchBanks();
     fetchanalysis();
   }, []);
+
+  const generateUniqueBankName = async () => {
+    // Get all existing bank names that match our pattern
+    const { data: banks, error } = await supabase
+      .from('attribute_banks')
+      .select('name')
+      .like('name', 'NewBank - %');
+
+    if (error) {
+      console.error('Error fetching bank names:', error);
+      throw new Error('Failed to generate unique bank name');
+    }
+
+    // Find the highest number used
+    let maxNum = 0;
+    banks?.forEach(bank => {
+      const match = bank.name.match(/NewBank - (\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        maxNum = Math.max(maxNum, num);
+      }
+    });
+
+    // Generate the next number (padded with leading zero if needed)
+    const nextNum = maxNum + 1;
+    const paddedNum = nextNum.toString().padStart(2, '0');
+    return `NewBank - ${paddedNum}`;
+  };
 
   return (
     <div className="flex h-full">
