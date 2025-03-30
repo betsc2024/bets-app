@@ -1377,40 +1377,43 @@ export default function Reports() {
                       onValueChange={setSelectedChart}
                       className=""
                     >
-                      {chartOptions.map((option) => (
+                      {chartOptions.map((option) => {
+                        if (option.id === "radial" && item.key !== "total") {
+                          return null;
+                        }
+                        return (
+                          <div
+                            key={option.id}
+                            className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
+                            onClick={() => {
 
-                        option.id === "radial" && item.key != "total" ? <></> : <div
-                          key={option.id}
-                          className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
-                          onClick={() => {
+                              // console.log("clicking");
+                              if (option.id === "bar") {
+                                specific_type_bar(item.key);
+                              }
+                              if (option.id === "radial") {
+                                fetch_radar(item.key);
+                              }
 
-                            // console.log("clicking");
-                            if (option.id === "bar") {
-                              specific_type_bar(item.key);
-                            }
-                            if (option.id === "radial") {
-                              fetch_radar(item.key);
-                            }
-
-                          }}
-                        >
-                          <RadioGroup.Item
-                            value={option.id}
-                            id={`chart-option-${option.id}`}
-                            className="w-0.5 h-10 border border-gray-300 rounded-full flex items-center justify-center data-[state=checked]:bg-primary"
-
+                            }}
                           >
-                            <div className="w-1 h-1 bg-white rounded-full" />
-                          </RadioGroup.Item>
-                          <Label
-                            htmlFor={`chart-option-${option.id}`}
-                            className="flex-1 text-gray-700 cursor-pointer"
-                          >
-                            {option.label}
-                          </Label>
-                        </div>
+                            <RadioGroup.Item
+                              value={option.id}
+                              id={`chart-option-${option.id}`}
+                              className="w-0.5 h-10 border border-gray-300 rounded-full flex items-center justify-center data-[state=checked]:bg-primary"
 
-                      ))}
+                            >
+                              <div className="w-1 h-1 bg-white rounded-full" />
+                            </RadioGroup.Item>
+                            <Label
+                              htmlFor={`chart-option-${option.id}`}
+                              className="flex-1 text-gray-700 cursor-pointer"
+                            >
+                              {option.label}
+                            </Label>
+                          </div>
+                        );
+                      })}
                     </RadioGroup.Root>
 
 
