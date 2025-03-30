@@ -190,7 +190,7 @@ export default function Reports() {
             id,
             name
             )
-          ),
+            ),
           evaluation_responses (
             attribute_statement_options ( 
               weight, 
@@ -435,14 +435,15 @@ export default function Reports() {
   useEffect(() => {
     fetch_companies();
     fetch_analysis();
-    fetch_bank();
   }, []);
 
   useEffect(() => {
-    fetch_user();
-    fetchData(selectedCompany, selectedUser);
-    fetch_spefifc_data(score_type);
-    fetch_bank(selectedCompany);
+    if (selectedCompany?.id) {
+      fetch_user();
+      fetchData(selectedCompany, selectedUser);
+      fetch_spefifc_data(score_type);
+      fetch_bank(selectedCompany);
+    }
   }, [selectedCompany, selectedUser])
 
 
