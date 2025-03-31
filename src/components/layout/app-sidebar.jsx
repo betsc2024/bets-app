@@ -63,8 +63,8 @@ export default function AppSidebar({ isOpen, onToggle }) {
   const userSidebarItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/user" },
     { icon: ClipboardList, label: "My Evaluations", href: "/user/evaluations" },
-    { icon: BarChart3, label: "My Reports", href: "/user/reports" },
-
+    // Temporarily disabled user reports access
+    // { icon: BarChart3, label: "My Reports", href: "/user/reports" },
   ];
 
   const sidebarItems = userRole === 'user' ? userSidebarItems : adminSidebarItems;

@@ -75,11 +75,12 @@ function Layout() {
                 <UserEvaluationsPage />
               </UserRouteGuard>
             } />
-            <Route path="/user/reports" element={
+            {/* Temporarily disabled user reports access */}
+            {/* <Route path="/user/reports" element={
               <UserRouteGuard>
-              <UserReports/>
+                <UserReports/>
               </UserRouteGuard>
-            } />
+            } /> */}
             
             {/* Default Route */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
