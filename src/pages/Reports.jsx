@@ -415,11 +415,22 @@ export default function Reports() {
   }
   const fetch_analysis = async ()=>{
     try{
-      const response = await supabase.from('analysis_type').select('*');
-      setAnalysisTypeList(response.data);
-      console.log(response);
-    }catch(e){
-      console.log(e);
+      const { data, error } = await supabase.from('analysis_type').select('*');
+      
+      if (error) throw error;
+      
+      // Filter out any items with empty or null analysis_type
+      const validAnalysisTypes = data?.filter(item => 
+        item && 
+        item.analysis_type && 
+        typeof item.analysis_type === 'string' && 
+        item.analysis_type.trim() !== ''
+      ) || [];
+      
+      setAnalysisTypeList(validAnalysisTypes);
+    } catch(e){
+      console.error('Error fetching analysis types:', e);
+      toast.error('Failed to fetch analysis types');
     }
   }
 
@@ -1281,10 +1292,15 @@ export default function Reports() {
               <SelectValue placeholder="Select an Analysis Type" />
             </SelectTrigger>
             <SelectContent>
-              {analysisTypeList.map((user) => (
-                <SelectItem key={user.id} value={user.analysis_type}>
-                  {user.analysis_type}
-                </SelectItem>
+              {analysisTypeList?.map((item) => (
+                item?.id && item?.analysis_type ? (
+                  <SelectItem 
+                    key={item.id} 
+                    value={item.analysis_type}
+                  >
+                    {item.analysis_type}
+                  </SelectItem>
+                ) : null
               ))}
             </SelectContent>
           </Select>
