@@ -50,14 +50,14 @@ export default function AppSidebar({ isOpen, onToggle }) {
 
   const adminSidebarItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+    { icon: FileChartColumn, label: "Analysis Type", href: "/analysis-type" },
+    { icon: Building2, label: "Industry Type", href: "/industry-management" },
+    { icon: Settings, label: "Attribute Management", href: "/attribute-management" },
     { icon: Database, label: "Attribute Bank", href: "/attribute-bank" },
     { icon: Building, label: "Company Management", href: "/company-management" },
+    { icon: Users2, label: "User Management", href: "/user-management" },
     { icon: ClipboardList, label: "Evaluations", href: "/evaluations" },
     { icon: BarChart3, label: "Reports", href: "/reports" },
-    { icon: Settings, label: "Attribute Management", href: "/attribute-management" },
-    { icon: Building2, label: "Industry Management", href: "/industry-management" },
-    { icon: Users2, label: "User Management", href: "/user-management" },
-    { icon: FileChartColumn, label: "Analysis Type", href: "/analysis-type" },
   ];
 
   const userSidebarItems = [
