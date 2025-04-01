@@ -43,6 +43,7 @@ import { ChevronDown } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "../lib/utils";
 import { useAuth } from '../contexts/AuthContext';
+import { Badge } from '../components/ui/badge';
 
 export default function AttributeManagement() {
   const { user } = useAuth();
@@ -58,7 +59,7 @@ export default function AttributeManagement() {
   const [newAttribute, setNewAttribute] = useState({
     name: '',
     description: '',
-    analysis_type: '',
+    selectedAnalysisTypes: [],
     is_industry_standard: true,
     selectedIndustries: []
   });
@@ -86,6 +87,7 @@ export default function AttributeManagement() {
   const [editingRows, setEditingRows] = useState({});
   const [editedData, setEditedData] = useState({});
   const [deletedOptions, setDeletedOptions] = useState({});
+  const [analysisTypeSearchQuery, setAnalysisTypeSearchQuery] = useState('');
 
   // Filter dialog states
   const [industryDialogOpen, setIndustryDialogOpen] = useState(false);
@@ -125,43 +127,64 @@ export default function AttributeManagement() {
   }, []);
   const fetchanalysis = async () => {
     try {
-      const { data, error } = await supabase.from('analysis_type').select("*");
+      const { data, error } = await supabase
+        .from('analysis_types')  // Changed from analysis_type to analysis_types
+        .select("id, name");
       
       if (error) throw error;
       
-      // Filter out any items with empty or null analysis_type
-      const validAnalysisTypes = data?.filter(item => 
-        item && 
-        item.analysis_type && 
-        typeof item.analysis_type === 'string' && 
-        item.analysis_type.trim() !== ''
-      ) || [];
+      // Transform to match existing UI expectations
+      const transformedData = data?.map(item => ({
+        id: item.id,
+        analysis_type: item.name  // Map name to analysis_type for UI
+      })) || [];
       
-      setAnalysisTypeList(validAnalysisTypes);
+      setAnalysisTypeList(transformedData);
     } catch (e) {
       console.error('Error fetching analysis types:', e);
       toast.error('Failed to fetch analysis types');
     }
-  }
+  };
 
   const fetchAttributes = async () => {
     try {
       setLoading(true);
 
-      // Fetch attributes one by one to avoid any potential cascade issues
+      // First fetch all industries to have a lookup table
+      const { data: industriesData, error: industriesError } = await supabase
+        .from('industries')
+        .select('*')
+        .order('name');
+
+      if (industriesError) throw industriesError;
+
+      const industriesMap = Object.fromEntries(
+        industriesData.map(industry => [industry.id, industry])
+      );
+
       const { data: attributesData, error: attributesError } = await supabase
         .from('attributes')
         .select(`
           id,
           name,
           description,
-          analysis_type,
           is_industry_standard,
           attribute_industry_mapping (
-            industry_id,
-            industries (
+            industry_id
+          ),
+          attribute_analysis_types (
+            analysis_type_id
+          ),
+          attribute_statements (
+            id,
+            statement,
+            analysis_types,
+            industries,
+            attribute_bank_id,
+            attribute_statement_options (
               id,
-              name
+              option_text,
+              weight
             )
           )
         `)
@@ -169,39 +192,37 @@ export default function AttributeManagement() {
 
       if (attributesError) throw attributesError;
 
-      // Then fetch statements for each attribute that are NOT associated with any bank
-      const processedData = await Promise.all(attributesData.map(async (attr) => {
-        const { data: statements, error: stmtError } = await supabase
-          .from('attribute_statements')
-          .select(`
-            id,
-            statement,
-            attribute_bank_id,
-            attribute_id,
-            attribute_statement_options (
-              id,
-              option_text,
-              weight,
-              created_at
-            )
-          `)
-          .eq('attribute_id', attr.id)
-          .is('attribute_bank_id', null)  // Only get statements not associated with a bank
-          .order('created_at', { ascending: true });
+      console.log('Raw attributes data from DB:', attributesData);
 
-        if (stmtError) throw stmtError;
+      // Transform the data for the UI and filter out bank-linked statements
+      const transformedData = attributesData.map(attr => {
+        console.log('Processing attribute:', {
+          id: attr.id,
+          name: attr.name,
+          industryMappings: attr.attribute_industry_mapping,
+          analysisTypes: attr.attribute_analysis_types
+        });
 
         return {
           ...attr,
-          attribute_statements: statements?.map(stmt => ({
-            ...stmt,
-            attribute_statement_options: (stmt.attribute_statement_options || [])
-              .sort((a, b) => b.weight - a.weight)
-          }))
+          analysis_types: attr.attribute_analysis_types?.map(at => at.analysis_type_id) || [],
+          selectedIndustries: attr.attribute_industry_mapping?.map(im => im.industry_id) || [],
+          industryNames: attr.attribute_industry_mapping?.map(im => industriesMap[im.industry_id]?.name || im.industry_id) || [],
+          attribute_statements: (attr.attribute_statements || [])
+            ?.filter(stmt => stmt.attribute_bank_id === null)
+            ?.map(stmt => ({
+              ...stmt,
+              analysis_types: stmt.analysis_types || [],
+              industries: stmt.industries || [],
+              industryNames: (stmt.industries || []).map(id => industriesMap[id]?.name || id),
+            }))
+            .sort((a, b) => a.statement.localeCompare(b.statement))
         };
-      }));
+      });
 
-      setAttributes(processedData);
+      console.log('Transformed data:', transformedData);
+
+      setAttributes(transformedData);
     } catch (error) {
       console.error('Error fetching attributes:', error);
       toast.error('Failed to fetch attributes');
@@ -226,6 +247,8 @@ export default function AttributeManagement() {
 
   const handleSaveAttribute = async () => {
     try {
+      console.log('Starting attribute save with data:', newAttribute);
+      
       if (!newAttribute.name.trim()) {
         toast.error('Attribute name is required');
         return;
@@ -233,49 +256,119 @@ export default function AttributeManagement() {
 
       setLoading(true);
 
-      // 1. Insert the attribute
+      // 1. Check for existing attribute
+      console.log('Checking for existing attribute...');
+      const { data: existingAttributes, error: checkError } = await supabase
+        .from('attributes')
+        .select('*')
+        .filter('name', 'eq', newAttribute.name.trim());
+
+      if (checkError) {
+        console.error('Error checking existing attributes:', checkError);
+        throw checkError;
+      }
+
+      if (existingAttributes && existingAttributes.length > 0) {
+        console.log('Found existing attribute with same name');
+        toast.error(`An attribute named "${newAttribute.name}" already exists`);
+        return;
+      }
+
+      // First create the attribute
+      console.log('About to create attribute with data:', {
+        name: newAttribute.name.trim(),
+        description: newAttribute.description?.trim() || '',
+        is_industry_standard: true
+      });
+
       const { data: attributeData, error: attributeError } = await supabase
         .from('attributes')
         .insert([{
           name: newAttribute.name.trim(),
           description: newAttribute.description?.trim() || '',
-          analysis_type: newAttribute.analysis_type,
           is_industry_standard: true
         }])
         .select()
         .single();
 
-      if (attributeError) throw attributeError;
+      if (attributeError) {
+        console.error('Error creating attribute:', attributeError);
+        throw attributeError;
+      }
 
-      // 2. Insert industry mappings if any are selected
+      console.log('Successfully created attribute:', attributeData);
+
+      // Then create the industry mappings
       if (newAttribute.selectedIndustries.length > 0) {
+        console.log('Creating industry mappings:', {
+          selectedIndustries: newAttribute.selectedIndustries,
+          attributeId: attributeData.id
+        });
+
         const industryMappings = newAttribute.selectedIndustries.map(industryId => ({
           attribute_id: attributeData.id,
           industry_id: industryId
         }));
 
-        const { error: mappingError } = await supabase
-          .from('attribute_industry_mapping')
-          .insert(industryMappings);
+        console.log('Prepared industry mappings:', industryMappings);
 
-        if (mappingError) throw mappingError;
+        const { data: mappingData, error: mappingError } = await supabase
+          .from('attribute_industry_mapping')
+          .insert(industryMappings)
+          .select();
+
+        if (mappingError) {
+          console.error('Error creating industry mappings:', mappingError);
+          throw mappingError;
+        }
+
+        console.log('Successfully created industry mappings:', mappingData);
+      } else {
+        console.log('No industries selected, skipping industry mappings');
       }
 
-      toast.success('Attribute saved successfully');
+      // 4. Insert analysis type mappings if any
+      if (newAttribute.selectedAnalysisTypes.length > 0) {
+        console.log('Creating analysis type mappings for:', newAttribute.selectedAnalysisTypes);
+        const analysisTypeMappings = newAttribute.selectedAnalysisTypes.map(typeId => ({
+          attribute_id: attributeData.id,
+          analysis_type_id: typeId
+        }));
+
+        console.log('Creating analysis type mappings for:', {
+          selectedTypes: newAttribute.selectedAnalysisTypes,
+          mappings: analysisTypeMappings
+        });
+
+        const { error: analysisTypeError } = await supabase
+          .from('attribute_analysis_types')  // Changed back to the correct table name
+          .insert(analysisTypeMappings);
+
+        if (analysisTypeError) {
+          console.error('Error creating analysis type mappings:', analysisTypeError);
+          throw analysisTypeError;
+        }
+        console.log('Successfully created analysis type mappings');
+      }
+
+      toast.success('Attribute added successfully');  // Changed message from 'saved' to 'added'
 
       // Reset form
+      console.log('Resetting form...');
       setNewAttribute({
         name: '',
         description: '',
-        analysis_type: '',
+        selectedAnalysisTypes: [],
         selectedIndustries: []
       });
 
       // Refresh attributes list
+      console.log('Fetching updated attributes...');
       await fetchAttributes();
+      console.log('Attribute creation process completed successfully');
     } catch (error) {
-      console.error('Error saving attribute:', error);
-      toast.error('Failed to save attribute');
+      console.error('Error in attribute creation process:', error);
+      toast.error('Failed to add attribute');  // Changed message from 'save' to 'add'
     } finally {
       setLoading(false);
     }
@@ -285,53 +378,81 @@ export default function AttributeManagement() {
     e.preventDefault();
     setLoading(true);
     try {
+      console.log('Starting attribute creation with data:', newAttribute);
+
       const { data: existingAttributes, error: checkError } = await supabase
         .from('attributes')
         .select('*')
         .filter('name', 'eq', newAttribute.name);
 
-      if (checkError) throw checkError;
+      if (checkError) {
+        console.error('Error checking existing attributes:', checkError);
+        throw checkError;
+      }
+
+      console.log('Existing attributes check result:', existingAttributes);
 
       if (existingAttributes && existingAttributes.length > 0) {
+        console.log('Found existing attribute with same name');
         toast.error(`An attribute named "${newAttribute.name}" already exists`);
         return;
       }
 
+      console.log('Attempting to insert new attribute...');
       const { data: attributeData, error: attributeError } = await supabase
         .from('attributes')
         .insert([{
           name: newAttribute.name,
           description: newAttribute.description,
-          analysis_type: newAttribute.analysis_type,
+          analysis_type: newAttribute.selectedAnalysisTypes,
           is_industry_standard: newAttribute.is_industry_standard
         }])
         .select()
         .single();
 
-      if (attributeError) throw attributeError;
+      if (attributeError) {
+        console.error('Error creating attribute:', attributeError);
+        throw attributeError;
+      }
+
+      console.log('Successfully created attribute:', attributeData);
 
       if (newAttribute.selectedIndustries.length > 0) {
+        console.log('Creating industry mappings for:', newAttribute.selectedIndustries);
         const industryMappings = newAttribute.selectedIndustries.map(industryId => ({
           attribute_id: attributeData.id,
           industry_id: industryId
         }));
 
+        console.log('Creating industry mappings for:', {
+          selectedIndustries: newAttribute.selectedIndustries,
+          mappings: industryMappings
+        });
+
         const { error: mappingError } = await supabase
           .from('attribute_industry_mapping')
           .insert(industryMappings);
 
-        if (mappingError) throw mappingError;
+        if (mappingError) {
+          console.error('Error creating industry mappings:', mappingError);
+          throw mappingError;
+        }
+        console.log('Successfully created industry mappings');
       }
 
       toast.success('Attribute added successfully');
+      console.log('Resetting form...');
       setNewAttribute({
         name: '',
         description: '',
-        analysis_type: '',
+        selectedAnalysisTypes: [],
         selectedIndustries: []
       });
-      fetchAttributes();
+      console.log('Fetching updated attributes...');
+      await fetchAttributes();
+      console.log('Attribute creation process completed successfully');
     } catch (error) {
+      console.error('Error in attribute creation process:', error);
       toast.error('Failed to add attribute');
     } finally {
       setLoading(false);
@@ -342,16 +463,78 @@ export default function AttributeManagement() {
     if (!attributeToDelete) return;
 
     try {
-      const { error } = await supabase
+      // 1. Delete industry mappings
+      console.log('Deleting industry mappings...');
+      const { error: industryMappingError } = await supabase
+        .from('attribute_industry_mapping')
+        .delete()
+        .eq('attribute_id', attributeToDelete.id);
+
+      if (industryMappingError) {
+        console.error('Error deleting industry mappings:', industryMappingError);
+        throw industryMappingError;
+      }
+
+      // 2. Delete analysis type mappings
+      console.log('Deleting analysis type mappings...');
+      const { error: analysisTypeMappingError } = await supabase
+        .from('attribute_analysis_types')
+        .delete()
+        .eq('attribute_id', attributeToDelete.id);
+
+      if (analysisTypeMappingError) {
+        console.error('Error deleting analysis type mappings:', analysisTypeMappingError);
+        throw analysisTypeMappingError;
+      }
+
+      // 3. Delete statement options
+      console.log('Deleting statement options...');
+      const { data: statements } = await supabase
+        .from('attribute_statements')
+        .select('id')
+        .eq('attribute_id', attributeToDelete.id);
+
+      if (statements && statements.length > 0) {
+        const statementIds = statements.map(s => s.id);
+        const { error: optionsError } = await supabase
+          .from('attribute_statement_options')
+          .delete()
+          .in('statement_id', statementIds);
+
+        if (optionsError) {
+          console.error('Error deleting statement options:', optionsError);
+          throw optionsError;
+        }
+      }
+
+      // 4. Delete statements
+      console.log('Deleting statements...');
+      const { error: statementsError } = await supabase
+        .from('attribute_statements')
+        .delete()
+        .eq('attribute_id', attributeToDelete.id);
+
+      if (statementsError) {
+        console.error('Error deleting statements:', statementsError);
+        throw statementsError;
+      }
+
+      // 5. Finally delete the attribute
+      console.log('Deleting attribute...');
+      const { error: attributeError } = await supabase
         .from('attributes')
         .delete()
         .eq('id', attributeToDelete.id);
 
-      if (error) throw error;
+      if (attributeError) {
+        console.error('Error deleting attribute:', attributeError);
+        throw attributeError;
+      }
 
       toast.success('Attribute deleted successfully');
       fetchAttributes();
     } catch (error) {
+      console.error('Error in deletion process:', error);
       toast.error('Failed to delete attribute');
     } finally {
       setAttributeToDelete(null);
@@ -364,27 +547,27 @@ export default function AttributeManagement() {
     // Initialize edit data with current values
     setEditedData(prev => ({
       ...prev,
-      [attribute.id]: {
+      [editKey]: {
         attribute: {
-          ...attribute,
+          id: attribute.id,
           name: attribute.name,
           description: attribute.description,
-          analysis_type: attribute.analysis_type,
-          selectedIndustries: attribute.attribute_industry_mapping?.map(m => m.industry_id) || []
+          is_industry_standard: attribute.is_industry_standard
         },
-        statements: [{
+        statement: {
           id: statement.id,
           statement: statement.statement,
+          selectedAnalysisTypes: statement.analysis_types || [],
+          selectedIndustries: statement.industries || [], // These are the original IDs
           options: statement.attribute_statement_options?.map(opt => ({
             id: opt.id,
             text: opt.option_text,
             weight: opt.weight
           })) || []
-        }]
+        }
       }
     }));
 
-    // Set editing state for this row
     setEditingRows(prev => ({
       ...prev,
       [editKey]: true
@@ -398,16 +581,8 @@ export default function AttributeManagement() {
 
   const handleCancelEdit = (attributeId, statementId) => {
     const editKey = `${attributeId}-${statementId}`;
-    setEditingRows(prev => {
-      const newState = { ...prev };
-      delete newState[editKey];
-      return newState;
-    });
-    setEditedData(prev => {
-      const newState = { ...prev };
-      delete newState[attributeId];
-      return newState;
-    });
+    setEditingRows({});
+    setEditedData({});
     setDeletedOptions(prev => {
       const newState = { ...prev };
       delete newState[statementId];
@@ -525,135 +700,131 @@ export default function AttributeManagement() {
     }
   };
 
-  const handleSaveEdit = async (attributeId, statementId) => {
+  const handleEditSubmit = async (editKey) => {
     try {
-      const editedAttribute = editedData[attributeId];
-      if (!editedAttribute) {
+      const editedDataItem = editedData[editKey];
+      if (!editedDataItem) {
         toast.error("No changes to save");
         return;
       }
 
-      const editKey = `${attributeId}-${statementId}`;
+      // Extract IDs from editKey
+      const match = editKey.match(/^([^-]+-[^-]+-[^-]+-[^-]+-[^-]+)-(.+)$/);
+      if (!match) {
+        toast.error("Invalid edit key format");
+        return;
+      }
+      const [_, attributeId, statementId] = match;
+      
       setLoading(true);
 
       // Update attribute details
       const { error: attributeError } = await supabase
         .from('attributes')
         .update({
-          name: editedAttribute.attribute.name,
-          description: editedAttribute.attribute.description,
-          analysis_type: editedAttribute.attribute.analysis_type
+          name: editedDataItem.attribute.name,
+          description: editedDataItem.attribute.description,
+          is_industry_standard: editedDataItem.attribute.is_industry_standard
         })
         .eq('id', attributeId);
 
       if (attributeError) throw attributeError;
 
-      // Update industry mappings
-      await supabase
-        .from('attribute_industry_mapping')
-        .delete()
-        .eq('attribute_id', attributeId);
-
-      if (editedAttribute.attribute.selectedIndustries?.length > 0) {
-        const { error: industryError } = await supabase
-          .from('attribute_industry_mapping')
-          .insert(
-            editedAttribute.attribute.selectedIndustries.map(industryId => ({
-              attribute_id: attributeId,
-              industry_id: industryId
-            }))
-          );
-
-        if (industryError) throw industryError;
-      }
-
-      // Update statement
-      const statement = editedAttribute.statements[0];
+      // Update statement with new analysis types and industries
       const { error: statementError } = await supabase
         .from('attribute_statements')
-        .update({ statement: statement.statement })
-        .eq('id', statement.id);
+        .update({
+          statement: editedDataItem.statement.statement,
+          analysis_types: editedDataItem.statement.selectedAnalysisTypes,
+          industries: editedDataItem.statement.selectedIndustries
+        })
+        .eq('id', statementId);
 
       if (statementError) throw statementError;
 
       // Update options
-      for (const option of statement.options) {
-        if (option.id) {
-          const { error: optionError } = await supabase
-            .from('attribute_statement_options')
-            .update({
-              option_text: option.text,
-              weight: option.weight
-            })
-            .eq('id', option.id);
+      if (editedDataItem.statement.options?.length > 0) {
+        for (const option of editedDataItem.statement.options) {
+          if (option.id) {
+            const { error: optionError } = await supabase
+              .from('attribute_statement_options')
+              .update({
+                option_text: option.text || option.option_text,
+                weight: option.weight
+              })
+              .eq('id', option.id);
 
-          if (optionError) throw optionError;
+            if (optionError) throw optionError;
+          }
         }
       }
 
-      // Clear edit states
+      // Reset edit states for just this row
       setEditingRows(prev => {
         const newState = { ...prev };
         delete newState[editKey];
         return newState;
       });
-
       setEditedData(prev => {
         const newState = { ...prev };
-        delete newState[attributeId];
+        delete newState[editKey];
         return newState;
       });
 
       toast.success('Changes saved successfully');
-      await fetchAttributes(); // Refresh the data
+      await fetchAttributes();
     } catch (error) {
-      console.error('Error saving changes:', error);
-      toast.error('Failed to save changes: ' + error.message);
+      console.error('Error updating:', error);
+      toast.error('Failed to save changes');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteStatement = async (statement) => {
-    try {
-      if (!statement || !statement.id) {
-        toast.error('Invalid statement');
-        return;
-      }
+  const handleAnalysisTypeChange = (editKey, typeId) => {
+    setEditedData(prev => {
+      const currentEdit = prev[editKey];
+      if (!currentEdit) return prev;
 
-      setLoading(true);
+      const currentTypes = [...(currentEdit.statement.selectedAnalysisTypes || [])];
+      const newTypes = currentTypes.includes(typeId)
+        ? currentTypes.filter(id => id !== typeId)
+        : [...currentTypes, typeId];
 
-      // First delete the options
-      const { error: optionsError } = await supabase
-        .from('attribute_statement_options')
-        .delete()
-        .eq('statement_id', statement.id);
+      return {
+        ...prev,
+        [editKey]: {
+          ...currentEdit,
+          statement: {
+            ...currentEdit.statement,
+            selectedAnalysisTypes: newTypes
+          }
+        }
+      };
+    });
+  };
 
-      if (optionsError) {
-        console.error('Error deleting options:', optionsError);
-        throw optionsError;
-      }
+  const handleIndustryChange = (editKey, industryId) => {
+    setEditedData(prev => {
+      const currentEdit = prev[editKey];
+      if (!currentEdit) return prev;
 
-      // Then delete the statement
-      const { error: statementError } = await supabase
-        .from('attribute_statements')
-        .delete()
-        .eq('id', statement.id);
+      const currentIndustries = [...(currentEdit.statement.selectedIndustries || [])];
+      const newIndustries = currentIndustries.includes(industryId)
+        ? currentIndustries.filter(id => id !== industryId)
+        : [...currentIndustries, industryId];
 
-      if (statementError) {
-        console.error('Error deleting statement:', statementError);
-        throw statementError;
-      }
-
-      toast.success('Statement deleted successfully');
-      await fetchAttributes();
-      setStatementToDelete(null);
-    } catch (error) {
-      console.error('Delete error:', error);
-      toast.error('Failed to delete statement');
-    } finally {
-      setLoading(false);
-    }
+      return {
+        ...prev,
+        [editKey]: {
+          ...currentEdit,
+          statement: {
+            ...currentEdit.statement,
+            selectedIndustries: newIndustries
+          }
+        }
+      };
+    });
   };
 
   const DeleteStatementDialog = () => (
@@ -690,36 +861,43 @@ export default function AttributeManagement() {
 
     setEditedData(prev => {
       const newData = { ...prev };
-      const statement = newData[attributeId].statements[0];
+      const statement = newData[`${attributeId}-${statementId}`].statement;
       statement.options = statement.options.filter(opt => opt.id !== optionId);
       return newData;
     });
   };
 
   const processAttributesForDisplay = (attributes) => {
-    // First sort the attributes by name
-    const sortedAttributes = [...attributes].sort((a, b) =>
-      (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())
-    );
-
-    return sortedAttributes.map(attr => {
-      const statements = attr.attribute_statements || [];
-      if (statements.length === 0) {
-        // If no statements, create a default row
-        return {
+    return attributes.flatMap(attr => {
+      // If attribute has statements, create an item for each statement
+      if (attr.attribute_statements && attr.attribute_statements.length > 0) {
+        return attr.attribute_statements.map(stmt => ({
           attribute: attr,
-          statement: { id: 'no-statement', statement: 'No statement', attribute_statement_options: [] }
-        };
+          statement: {
+            ...stmt,
+            // Use statement's analysis types if present, otherwise use attribute's
+            analysis_types: stmt.analysis_types?.length > 0 
+              ? stmt.analysis_types 
+              : attr.attribute_analysis_types?.map(at => at.analysis_type_id) || [],
+            // Use statement's industries if present, otherwise use attribute's
+            industries: stmt.industries?.length > 0
+              ? stmt.industries
+              : attr.attribute_industry_mapping?.map(im => im.industry_id) || []
+          }
+        }));
       }
-      // If has statements, create a row for each statement
-      return statements.map(stmt => ({
+      // If attribute has no statements, create a single item with empty statement
+      return [{
         attribute: attr,
         statement: {
-          ...stmt,
-          attribute_statement_options: stmt.attribute_statement_options || []
+          id: `no-statement-${attr.id}`,
+          statement: '',
+          analysis_types: attr.attribute_analysis_types?.map(at => at.analysis_type_id) || [],
+          industries: attr.attribute_industry_mapping?.map(im => im.industry_id) || [],
+          attribute_statement_options: []
         }
-      }));
-    }).flat();
+      }];
+    });
   };
 
   // Utility function to truncate text
@@ -731,9 +909,8 @@ export default function AttributeManagement() {
   // Filter and paginate the data
   const filteredAttributes = attributes.filter(attr => {
     const matchesIndustry = selectedIndustryFilter === 'all' ||
-      attr.attribute_industry_mapping?.some(mapping =>
-      (mapping.industry_id === selectedIndustryFilter ||
-        (mapping.industries && mapping.industries.id === selectedIndustryFilter))
+      attr.attribute_statements?.some(stmt =>
+        stmt.industries?.some(industry => industry === selectedIndustryFilter)
       );
 
     const matchesAttribute = selectedAttributeFilter === 'all' ||
@@ -760,6 +937,34 @@ export default function AttributeManagement() {
       user?.role === 'super_admin' ||
       user?.email?.endsWith('@bets.com')  // Assuming @bets.com emails are super admins
     );
+  };
+
+  const syncAttributeChanges = (editKey, newAttributeData) => {
+    setEditedData(prev => {
+      const currentEdit = prev[editKey];
+      if (!currentEdit) return prev;
+
+      const attributeId = currentEdit.attribute.id;
+      const updates = {};
+
+      // Update all statements that share the same attribute
+      Object.entries(prev).forEach(([key, data]) => {
+        if (data.attribute.id === attributeId) {
+          updates[key] = {
+            ...data,
+            attribute: {
+              ...data.attribute,
+              ...newAttributeData
+            }
+          };
+        }
+      });
+
+      return {
+        ...prev,
+        ...updates
+      };
+    });
   };
 
   return (
@@ -801,27 +1006,73 @@ export default function AttributeManagement() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Analysis Type</Label>
-                  <Select
-                    value={newAttribute.analysis_type}
-                    onValueChange={(value) => setNewAttribute({ ...newAttribute, analysis_type: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select analysis type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {analysisTypeList?.map((item) => (
-                        item?.id && item?.analysis_type ? (
-                          <SelectItem 
-                            key={item.id} 
-                            value={item.analysis_type}
-                          >
-                            {item.analysis_type}
-                          </SelectItem>
-                        ) : null
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Analysis Types</Label>
+                  <div className="space-y-2">
+                    <Input
+                      type="text"
+                      placeholder="Search analysis types..."
+                      value={analysisTypeSearchQuery}
+                      onChange={(e) => setAnalysisTypeSearchQuery(e.target.value)}
+                      className="mb-2"
+                    />
+                    <div className="max-h-48 overflow-y-auto border rounded-md p-2">
+                      {analysisTypeList
+                        .filter(type =>
+                          type.analysis_type.toLowerCase().includes(analysisTypeSearchQuery.toLowerCase())
+                        )
+                        .map((type) => (
+                          <div key={type.id} className="flex items-center space-x-2 py-1">
+                            <Checkbox
+                              id={`analysis-type-${type.id}`}
+                              checked={newAttribute.selectedAnalysisTypes.includes(type.id)}
+                              onCheckedChange={(checked) => {
+                                console.log('Analysis Type selection changed:', {
+                                  typeId: type.id,
+                                  checked,
+                                  currentSelection: newAttribute.selectedAnalysisTypes
+                                });
+                                const updatedTypes = checked
+                                  ? [...newAttribute.selectedAnalysisTypes, type.id]
+                                  : newAttribute.selectedAnalysisTypes.filter(id => id !== type.id);
+                                console.log('Updated analysis types:', updatedTypes);
+                                setNewAttribute({ ...newAttribute, selectedAnalysisTypes: updatedTypes });
+                              }}
+                            />
+                            <Label
+                              htmlFor={`analysis-type-${type.id}`}
+                              className="text-sm font-normal cursor-pointer"
+                            >
+                              {type.analysis_type}
+                            </Label>
+                          </div>
+                        ))}
+                    </div>
+                    {newAttribute.selectedAnalysisTypes.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {newAttribute.selectedAnalysisTypes.map(typeId => {
+                          const type = analysisTypeList.find(t => t.id === typeId);
+                          return type ? (
+                            <Badge
+                              key={type.id}
+                              variant="secondary"
+                              className="flex items-center gap-1"
+                            >
+                              {type.analysis_type}
+                              <X
+                                className="h-3 w-3 cursor-pointer"
+                                onClick={() => {
+                                  setNewAttribute({
+                                    ...newAttribute,
+                                    selectedAnalysisTypes: newAttribute.selectedAnalysisTypes.filter(id => id !== type.id)
+                                  });
+                                }}
+                              />
+                            </Badge>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Industries</Label>
@@ -843,11 +1094,18 @@ export default function AttributeManagement() {
                               id={`industry-${industry.id}`}
                               checked={newAttribute.selectedIndustries.includes(industry.id)}
                               onCheckedChange={(checked) => {
+                                console.log('Industry selection changed:', {
+                                  industryId: industry.id,
+                                  checked,
+                                  currentSelection: newAttribute.selectedIndustries
+                                });
+                                const updatedIndustries = checked
+                                  ? [...newAttribute.selectedIndustries, industry.id]
+                                  : newAttribute.selectedIndustries.filter(id => id !== industry.id);
+                                console.log('Updated industries:', updatedIndustries);
                                 setNewAttribute(prev => ({
                                   ...prev,
-                                  selectedIndustries: checked
-                                    ? [...prev.selectedIndustries, industry.id]
-                                    : prev.selectedIndustries.filter(id => id !== industry.id)
+                                  selectedIndustries: updatedIndustries
                                 }));
                               }}
                             />
@@ -1320,23 +1578,62 @@ export default function AttributeManagement() {
                     const { attribute, statement } = item;
                     const editKey = `${attribute.id}-${statement.id}`;
                     const isEditing = editingRows[editKey];
-                    const editData = editedData[attribute.id];
+                    const editData = editedData[editKey];
 
                     return (
-                      <TableRow key={`${attribute.id}-${statement.id}`} className="border-b border-gray-300">
-                        <TableCell className="align-top border-r border-gray-300">{attribute.analysis_type}</TableCell>
+                      <TableRow key={editKey} className="border-b border-gray-300">
+                        <TableCell className="align-top border-r border-gray-300">
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <div>
+                                <Label>Analysis Types</Label>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {analysisTypeList.map((type) => (
+                                    <div key={type.id} className="flex items-center gap-2">
+                                      <Checkbox
+                                        id={`analysis-type-${type.id}-${editKey}`}
+                                        checked={editedData[editKey]?.statement?.selectedAnalysisTypes !== undefined 
+                                          ? editedData[editKey]?.statement?.selectedAnalysisTypes?.includes(type.id)
+                                          : statement.analysis_types?.includes(type.id)}
+                                        onCheckedChange={() => handleAnalysisTypeChange(editKey, type.id)}
+                                      />
+                                      <Label
+                                        htmlFor={`analysis-type-${type.id}-${editKey}`}
+                                        className="text-sm font-normal"
+                                      >
+                                        {type.analysis_type}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-sm">
+                              {statement.analysis_types?.map((typeId) => {
+                                const type = analysisTypeList.find(t => t.id === typeId);
+                                return type ? (
+                                  <span key={typeId}>
+                                    {type.analysis_type}
+                                    {', '}
+                                  </span>
+                                ) : null;
+                              })}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="align-top border-r border-gray-300">
                           {isEditing ? (
                             <div className="space-y-2">
                               <Input
-                                value={editedData[attribute.id]?.attribute?.name || attribute.name}
+                                value={editedData[editKey]?.attribute?.name || attribute.name}
                                 onChange={(e) => {
                                   setEditedData(prev => ({
                                     ...prev,
-                                    [attribute.id]: {
-                                      ...prev[attribute.id],
+                                    [editKey]: {
+                                      ...prev[editKey],
                                       attribute: {
-                                        ...(prev[attribute.id]?.attribute || attribute),
+                                        ...(prev[editKey]?.attribute || attribute),
                                         name: e.target.value
                                       }
                                     }
@@ -1345,14 +1642,14 @@ export default function AttributeManagement() {
                                 className="w-full"
                               />
                               <Textarea
-                                value={editedData[attribute.id]?.attribute?.description || attribute.description}
+                                value={editedData[editKey]?.attribute?.description || attribute.description}
                                 onChange={(e) => {
                                   setEditedData(prev => ({
                                     ...prev,
-                                    [attribute.id]: {
-                                      ...prev[attribute.id],
+                                    [editKey]: {
+                                      ...prev[editKey],
                                       attribute: {
-                                        ...(prev[attribute.id]?.attribute || attribute),
+                                        ...(prev[editKey]?.attribute || attribute),
                                         description: e.target.value
                                       }
                                     }
@@ -1375,16 +1672,16 @@ export default function AttributeManagement() {
                         <TableCell className="align-top border-r border-gray-300">
                           {isEditing ? (
                             <Textarea
-                              value={editedData[attribute.id]?.statements?.[0]?.statement || statement.statement}
+                              value={editedData[editKey]?.statement?.statement || statement.statement}
                               onChange={(e) => {
                                 setEditedData(prev => ({
                                   ...prev,
-                                  [attribute.id]: {
-                                    ...prev[attribute.id],
-                                    statements: [{
-                                      ...(prev[attribute.id]?.statements?.[0] || statement),
+                                  [editKey]: {
+                                    ...prev[editKey],
+                                    statement: {
+                                      ...(prev[editKey]?.statement || statement),
                                       statement: e.target.value
-                                    }]
+                                    }
                                   }
                                 }));
                               }}
@@ -1397,14 +1694,14 @@ export default function AttributeManagement() {
                         <TableCell className="align-top border-r border-gray-300 p-0">
                           {isEditing ? (
                             <div className="divide-y divide-gray-300">
-                              {(editedData[attribute.id]?.statements?.[0]?.options || statement.attribute_statement_options)
+                              {(editedData[editKey]?.statement?.options || statement.attribute_statement_options)
                                 .sort((a, b) => b.weight - a.weight)
                                 .map((option, index) => (
                                   <div key={option.id || index} className="flex items-center p-2">
                                     <Input
                                       value={option.text || option.option_text}
                                       onChange={(e) => {
-                                        const options = editedData[attribute.id]?.statements?.[0]?.options ||
+                                        const options = editedData[editKey]?.statement?.options ||
                                           statement.attribute_statement_options.map(opt => ({
                                             id: opt.id,
                                             text: opt.option_text,
@@ -1413,14 +1710,14 @@ export default function AttributeManagement() {
 
                                         setEditedData(prev => ({
                                           ...prev,
-                                          [attribute.id]: {
-                                            ...prev[attribute.id],
-                                            statements: [{
-                                              ...(prev[attribute.id]?.statements?.[0] || statement),
+                                          [editKey]: {
+                                            ...prev[editKey],
+                                            statement: {
+                                              ...(prev[editKey]?.statement || statement),
                                               options: options.map((opt, i) =>
                                                 i === index ? { ...opt, text: e.target.value } : opt
                                               )
-                                            }]
+                                            }
                                           }
                                         }));
                                       }}
@@ -1450,7 +1747,7 @@ export default function AttributeManagement() {
                         <TableCell className="align-top border-r border-gray-300 p-0">
                           {isEditing ? (
                             <div className="divide-y divide-gray-300">
-                              {(editedData[attribute.id]?.statements?.[0]?.options || statement.attribute_statement_options)
+                              {(editedData[editKey]?.statement?.options || statement.attribute_statement_options)
                                 .sort((a, b) => b.weight - a.weight)
                                 .map((option, index) => (
                                   <div key={option.id || index} className="flex items-center p-2">
@@ -1458,7 +1755,7 @@ export default function AttributeManagement() {
                                       type="number"
                                       value={option.weight}
                                       onChange={(e) => {
-                                        const options = editedData[attribute.id]?.statements?.[0]?.options ||
+                                        const options = editedData[editKey]?.statement?.options ||
                                           statement.attribute_statement_options.map(opt => ({
                                             id: opt.id,
                                             text: opt.option_text,
@@ -1467,14 +1764,14 @@ export default function AttributeManagement() {
 
                                         setEditedData(prev => ({
                                           ...prev,
-                                          [attribute.id]: {
-                                            ...prev[attribute.id],
-                                            statements: [{
-                                              ...(prev[attribute.id]?.statements?.[0] || statement),
+                                          [editKey]: {
+                                            ...prev[editKey],
+                                            statement: {
+                                              ...(prev[editKey]?.statement || statement),
                                               options: options.map((opt, i) =>
                                                 i === index ? { ...opt, weight: parseInt(e.target.value) } : opt
                                               )
-                                            }]
+                                            }
                                           }
                                         }));
                                       }}
@@ -1508,45 +1805,31 @@ export default function AttributeManagement() {
                                 <div key={industry.id} className="flex items-center space-x-2">
                                   <Checkbox
                                     id={`industry-${attribute.id}-${industry.id}`}
-                                    checked={(editedData[attribute.id]?.attribute?.selectedIndustries ||
-                                      attribute.attribute_industry_mapping?.map(m => m.industry_id) || [])
-                                      .includes(industry.id)}
-                                    onCheckedChange={(checked) => {
-                                      const currentSelected = editedData[attribute.id]?.attribute?.selectedIndustries ||
-                                        attribute.attribute_industry_mapping?.map(m => m.industry_id) || [];
-
-                                      const newSelected = checked
-                                        ? [...currentSelected, industry.id]
-                                        : currentSelected.filter(id => id !== industry.id);
-
-                                      setEditedData(prev => ({
-                                        ...prev,
-                                        [attribute.id]: {
-                                          ...prev[attribute.id],
-                                          attribute: {
-                                            ...(prev[attribute.id]?.attribute || {
-                                              ...attribute,
-                                              selectedIndustries: attribute.attribute_industry_mapping?.map(m => m.industry_id) || []
-                                            }),
-                                            selectedIndustries: newSelected
-                                          }
-                                        }
-                                      }));
-                                    }}
+                                    checked={editedData[editKey]?.statement?.selectedIndustries !== undefined
+                                      ? editedData[editKey]?.statement?.selectedIndustries?.includes(industry.id)
+                                      : statement.industries?.includes(industry.id)}
+                                    onCheckedChange={() => handleIndustryChange(editKey, industry.id)}
                                   />
-                                  <Label htmlFor={`industry-${attribute.id}-${industry.id}`} className="text-sm">
+                                  <Label
+                                    htmlFor={`industry-${attribute.id}-${industry.id}`}
+                                    className="text-sm"
+                                  >
                                     {industry.name}
                                   </Label>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            attribute.attribute_industry_mapping?.map((mapping, idx) => (
-                              <div key={mapping.industry_id} className="text-sm">
-                                {mapping.industries?.name}
-                                {idx < attribute.attribute_industry_mapping.length - 1 ? ', ' : ''}
-                              </div>
-                            ))
+                            <div className="text-sm">
+                              {(statement.industries || []).map((industryId) => {
+                                const industry = industries.find(i => i.id === industryId);
+                                return industry ? (
+                                  <div key={industryId} className="mb-1">
+                                    {industry.name}
+                                  </div>
+                                ) : null;
+                              })}
+                            </div>
                           )}
                         </TableCell>
                         <TableCell className="align-top">
@@ -1554,35 +1837,69 @@ export default function AttributeManagement() {
                             {isEditing ? (
                               <>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleSaveEdit(attribute.id, statement.id)}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingRows({});
+                                    setEditedData({});
+                                  }}
+                                  disabled={loading}
                                 >
-                                  <Check className="h-4 w-4" />
+                                  Cancel
                                 </Button>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleCancelEdit(attribute.id, statement.id)}
+                                  size="sm"
+                                  onClick={() => handleEditSubmit(editKey)}
+                                  disabled={loading}
                                 >
-                                  <X className="h-4 w-4" />
+                                  {loading ? 'Saving...' : 'Save'}
                                 </Button>
                               </>
                             ) : (
                               <>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleEdit(attribute, statement)}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (loading) return;
+                                    // Don't allow edit if another row is being edited
+                                    if (Object.values(editingRows).some(Boolean)) {
+                                      toast.error('Please save or cancel the current edit first');
+                                      return;
+                                    }
+                                    setEditingRows({ [editKey]: true });
+                                    setEditedData({
+                                      [editKey]: {
+                                        attribute: {
+                                          ...attribute,
+                                          selectedIndustries: attribute.attribute_industry_mapping?.map(m => m.industry_id) || [],
+                                          selectedAnalysisTypes: attribute.attribute_analysis_types?.map(at => at.analysis_type_id) || []
+                                        },
+                                        statement: {
+                                          ...statement,
+                                          options: statement.attribute_statement_options?.map(opt => ({
+                                            id: opt.id,
+                                            text: opt.option_text,
+                                            weight: opt.weight
+                                          }))
+                                        }
+                                      }
+                                    });
+                                  }}
+                                  disabled={loading || Object.values(editingRows).some(Boolean)}
                                 >
-                                  <Pencil className="h-4 w-4" />
+                                  Edit
                                 </Button>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setStatementToDelete(statement)}
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (loading || Object.values(editingRows).some(Boolean)) return;
+                                    setAttributeToDelete(attribute);
+                                  }}
+                                  disabled={loading || Object.values(editingRows).some(Boolean)}
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  Delete
                                 </Button>
                               </>
                             )}
