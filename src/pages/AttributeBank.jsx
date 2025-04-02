@@ -59,8 +59,7 @@ export default function AttributeBank() {
   const [newBank, setNewBank] = useState({
     name: '',
     description: '',
-    analysis_type: '',
-    is_industry_standard: false,
+    analysis_type_id: '',
     status: 'active',
     company_id: null
   });
@@ -102,21 +101,24 @@ export default function AttributeBank() {
 
   const fetchanalysis = async () => {
     try {
-      const { data, error } = await supabase.from('analysis_type').select("*");
-      
+      const { data, error } = await supabase
+        .from('analysis_types')
+        .select('id, name')
+        .order('name');
+
       if (error) throw error;
-      
-      // Filter out any items with empty or null analysis_type
-      const validAnalysisTypes = data?.filter(item => 
-        item && 
-        item.analysis_type && 
-        typeof item.analysis_type === 'string' && 
-        item.analysis_type.trim() !== ''
-      ) || [];
-      
-      setAnalysisTypeList(validAnalysisTypes);
-    } catch (e) {
-      console.error('Error fetching analysis types:', e);
+
+      // Transform data for UI
+      const transformedData = data
+        .filter(item => item.name && typeof item.name === 'string' && item.name.trim() !== '')
+        .map(item => ({
+          value: item.id,  // Use ID as the value
+          label: item.name // Use name as the label
+        }));
+
+      setAnalysisTypeList(transformedData);
+    } catch (error) {
+      console.error('Error fetching analysis types:', error);
       toast.error('Failed to fetch analysis types');
     }
   };
@@ -132,8 +134,11 @@ export default function AttributeBank() {
           name,
           description,
           status,
-          created_at,
           company_id,
+          analysis_type_id,
+          analysis_types (
+            name
+          ),
           companies (
             id,
             name
@@ -141,13 +146,6 @@ export default function AttributeBank() {
           attribute_statements (
             id,
             statement,
-            attribute_id,
-            attributes (
-              id,
-              name,
-              description,
-              analysis_type
-            ),
             attribute_statement_options (
               id,
               option_text,
@@ -159,7 +157,11 @@ export default function AttributeBank() {
 
       if (error) throw error;
       console.log('Fetched banks:', data); // Debug log
-      setBanks(data || []);
+
+      setBanks(data.map(bank => ({
+        ...bank,
+        analysis_type: bank.analysis_types?.name || 'Unknown'
+      })));
     } catch (error) {
       console.error('Error fetching banks:', error);
       toast.error('Failed to fetch banks');
@@ -171,7 +173,7 @@ export default function AttributeBank() {
   const fetchAttributes = async () => {
     try {
       // Get analysis type from the first statement's attribute if available
-      const analysisType = selectedBank?.attribute_statements?.[0]?.attributes?.analysis_type || 'behavior';
+      const analysisTypeId = selectedBank?.attribute_statements?.[0]?.attributes?.analysis_type_id || 'behavior';
 
       // First fetch attributes that have the selected analysis type
       const { data: attributesData, error: attributesError } = await supabase
@@ -180,20 +182,24 @@ export default function AttributeBank() {
           id,
           name,
           description,
-          is_industry_standard,
-          attribute_analysis_types (
-            analysis_type
-          ),
           attribute_industry_mapping (
-            industry_id,
-            industries (
+            industry_id
+          ),
+          attribute_analysis_types!inner (
+            analysis_type_id
+          ),
+          attribute_statements (
+            id,
+            statement,
+            attribute_statement_options (
               id,
-              name
+              option_text,
+              weight
             )
           )
         `)
-        .eq('attribute_analysis_types.analysis_type', analysisType) // Filter by analysis type through the junction table
-        .order('name', { ascending: true });
+        .eq('attribute_analysis_types.analysis_type_id', analysisTypeId) // Filter by analysis type through the junction table
+        .order('name');
 
       if (attributesError) throw attributesError;
 
@@ -224,7 +230,7 @@ export default function AttributeBank() {
 
         return {
           ...attr,
-          analysis_type: attr.attribute_analysis_types?.[0]?.analysis_type, // Get analysis type from junction table
+          analysis_type_id: attr.attribute_analysis_types?.[0]?.analysis_type_id, // Get analysis type from junction table
           attribute_statements: statements?.map(stmt => ({
             ...stmt,
             attribute_statement_options: (stmt.attribute_statement_options || [])
@@ -277,62 +283,76 @@ export default function AttributeBank() {
     });
   }, []);
 
-  const handleAnalysisTypeChange = (value) => {
+  const handleAnalysisTypeChange = async (value) => {
     setAnalysisType(value);
-    setNewBank(prev => ({ ...prev, analysis_type: value }));
+    setNewBank(prev => ({ ...prev, analysis_type_id: value }));
+    await fetchAttributesForType(value);
   };
 
   const handleCreateBank = async () => {
     try {
-      if (!newBank.name || !analysisType) {
-        toast.error('Please fill in all required fields');
+      setLoading(true);
+
+      // Validate required fields
+      if (!newBank.name) {
+        toast.error('Bank name is required');
         return;
       }
 
-      const { data, error } = await supabase
+      // Get analysis type ID from name
+      const { data: analysisTypeData, error: analysisTypeError } = await supabase
+        .from('analysis_types')
+        .select('id')
+        .eq('name', analysisType)
+        .single();
+
+      if (analysisTypeError) {
+        console.error('Error getting analysis type:', analysisTypeError);
+        toast.error('Failed to get analysis type');
+        return;
+      }
+
+      // Create bank with analysis type ID
+      const { data: bankData, error: bankError } = await supabase
         .from('attribute_banks')
-        .insert([{
+        .insert({
           name: newBank.name,
-          description: newBank.description,
-          analysis_type: analysisType,
-          is_industry_standard: false,
+          description: newBank.description || '',
+          analysis_type_id: analysisTypeData.id,
           status: 'active',
-          company_id: selectedCompany
-        }])
+          company_id: selectedCompany === 'all' ? null : selectedCompany
+        })
         .select()
         .single();
 
-      if (error) throw error;
+      if (bankError) {
+        console.error('Error creating bank:', bankError);
+        toast.error('Failed to create bank');
+        return;
+      }
 
-      // Now add the selected statements
+      // Update selected statements with bank ID
       if (selectedStatements.length > 0) {
-        const bankStatements = selectedStatements.map(statement => ({
-          bank_id: data.id,
-          statement_id: statement.id
-        }));
+        const { error: stmtError } = await supabase
+          .from('attribute_statements')
+          .update({ attribute_bank_id: bankData.id })
+          .in('id', selectedStatements.map(s => s.id));
 
-        const { error: statementsError } = await supabase
-          .from('bank_statements')
-          .insert(bankStatements);
-
-        if (statementsError) throw statementsError;
+        if (stmtError) {
+          console.error('Error updating statements:', stmtError);
+          toast.error('Failed to update statements');
+          return;
+        }
       }
 
       toast.success('Bank created successfully');
-      setNewBank({
-        name: '',
-        description: '',
-        analysis_type: '',
-        is_industry_standard: false,
-        status: 'active',
-        company_id: null
-      });
-      setSelectedStatements([]);
-      setAnalysisType('');
+      setView('list');
       fetchBanks();
     } catch (error) {
       console.error('Error creating bank:', error);
       toast.error('Failed to create bank');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -477,8 +497,8 @@ export default function AttributeBank() {
             if (optionsError) throw optionsError;
           }
         }
-      } else if (updatedData.analysis_type) {
-        // If no statements but analysis_type changed, create a dummy attribute to store the type
+      } else if (updatedData.analysis_type_id) {
+        // If no statements but analysis_type_id changed, create a dummy attribute to store the type
         const { data: dummyAttr, error: attrError } = await supabase
           .from('attributes')
           .insert({
@@ -496,7 +516,7 @@ export default function AttributeBank() {
           .from('attribute_analysis_types')
           .insert({
             attribute_id: dummyAttr.id,
-            analysis_type: updatedData.analysis_type
+            analysis_type_id: updatedData.analysis_type_id
           });
 
         if (typeError) throw typeError;
@@ -554,23 +574,34 @@ export default function AttributeBank() {
     }
   };
 
-  const handleEditClick = (bank) => {
-    console.log('Bank from list:', bank);
-    console.log('Bank statements:', bank.attribute_statements);
-    console.log('First statement:', bank.attribute_statements?.[0]);
-    console.log('First statement attribute:', bank.attribute_statements?.[0]?.attributes);
-    console.log('Analysis type:', bank.attribute_statements?.[0]?.attributes?.analysis_type);
-    
-    setSelectedBank(bank);
-    setIsEditDialogOpen(true);
+  const handleEditClick = async (bank) => {
+    try {
+      // Get the analysis type name from ID
+      const { data: analysisTypeData, error: analysisTypeError } = await supabase
+        .from('analysis_types')
+        .select('name')
+        .eq('id', bank.analysis_type_id)
+        .single();
+
+      if (analysisTypeError) throw analysisTypeError;
+
+      setSelectedBank({
+        ...bank,
+        analysis_type: analysisTypeData.name
+      });
+      setIsEditDialogOpen(true);
+    } catch (error) {
+      console.error('Error preparing bank edit:', error);
+      toast.error('Failed to prepare bank edit');
+    }
   };
 
   // Effects
   useEffect(() => {
+    fetchanalysis();
     fetchIndustries();
     fetchBanks();
-    fetchanalysis();
-    fetchCompanies(); // Add this line to fetch companies
+    fetchCompanies();
   }, []);
 
   useEffect(() => {
@@ -579,46 +610,31 @@ export default function AttributeBank() {
 
   const fetchAttributesForType = async (type) => {
     try {
-      console.log('Fetching attributes for type:', type);
       setLoading(true);
-      
-      // First try old column
-      const { data: oldData, error: oldError } = await supabase
+
+      // First get the analysis type ID from the name
+      const { data: analysisTypeData, error: analysisTypeError } = await supabase
+        .from('analysis_types')
+        .select('id')
+        .eq('name', type)
+        .single();
+
+      if (analysisTypeError) throw analysisTypeError;
+
+      const analysisTypeId = analysisTypeData.id;
+
+      // Fetch attributes with all their relationships
+      const { data, error } = await supabase
         .from('attributes')
         .select(`
           id,
           name,
           description,
-          is_industry_standard,
-          analysis_type,
-          attribute_analysis_types (
-            analysis_type
+          attribute_industry_mapping (
+            industry_id
           ),
-          attribute_statements (
-            id,
-            statement,
-            attribute_statement_options (
-              id,
-              option_text,
-              weight
-            )
-          )
-        `)
-        .eq('analysis_type', type);
-
-      if (oldError) throw oldError;
-
-      // Then try junction table
-      const { data: junctionData, error: junctionError } = await supabase
-        .from('attributes')
-        .select(`
-          id,
-          name,
-          description,
-          is_industry_standard,
-          analysis_type,
           attribute_analysis_types!inner (
-            analysis_type
+            analysis_type_id
           ),
           attribute_statements (
             id,
@@ -630,16 +646,13 @@ export default function AttributeBank() {
             )
           )
         `)
-        .eq('attribute_analysis_types.analysis_type', type);
+        .eq('attribute_analysis_types.analysis_type_id', analysisTypeId)
+        .order('name');
 
-      if (junctionError) throw junctionError;
+      if (error) throw error;
 
-      // Combine and deduplicate results
-      const allAttributes = [...(oldData || []), ...(junctionData || [])];
-      const uniqueAttributes = Array.from(new Map(allAttributes.map(item => [item.id, item])).values());
-      
-      console.log('Fetched attributes:', uniqueAttributes);
-      setAttributes(uniqueAttributes);
+      console.log('Fetched attributes:', data);
+      setAttributes(data || []);
     } catch (error) {
       console.error('Error fetching attributes:', error);
       toast.error('Failed to fetch attributes');
@@ -703,12 +716,12 @@ export default function AttributeBank() {
                       </SelectTrigger>
                       <SelectContent>
                         {analysisTypeList?.map((item) => (
-                          item?.id && item?.analysis_type ? (
+                          item?.value && item?.label ? (
                             <SelectItem 
-                              key={item.id} 
-                              value={item.analysis_type}
+                              key={item.value} 
+                              value={item.value}
                             >
-                              {item.analysis_type}
+                              {item.label}
                             </SelectItem>
                           ) : null
                         ))}
@@ -836,28 +849,13 @@ export default function AttributeBank() {
                 </CardHeader>
                 <CardContent>
                   <CreateAttributeBank
-                    {...{
-                      attributes,
-                      selectedStatements,
-                      onStatementSelect: handleStatementSelect,
-                      industries,
-                      selectedIndustry: selectedIndustryFilter,
-                      onIndustryChange: (value) => setSelectedIndustryFilter(value),
-                      includeCustomStatements: true,
-                      onCustomStatementsChange: () => {},
-                      loading,
-                      analysisType,
-                      onAnalysisTypeChange: (value) => {
-                        console.log('Analysis type changed in AttributeBank:', value);
-                        setAnalysisType(value);
-                        setNewBank(prev => ({
-                          ...prev,
-                          analysis_type: value
-                        }));
-                        // Fetch attributes for this analysis type
-                        fetchAttributesForType(value);
-                      }
-                    }}
+                    attributes={attributes}
+                    selectedItems={selectedStatements}
+                    onSelectedItemsChange={setSelectedStatements}
+                    selectedIndustryFilter={selectedIndustryFilter}
+                    onIndustryFilterChange={setSelectedIndustryFilter}
+                    attributeSearchQuery={attributeSearchQuery}
+                    onAttributeSearchQueryChange={setAttributeSearchQuery}
                   />
                 </CardContent>
               </Card>
@@ -869,7 +867,7 @@ export default function AttributeBank() {
                 </Button>
                 <Button 
                   onClick={handleCreateBank} 
-                  disabled={loading || selectedStatements.length === 0}
+                  disabled={loading || selectedStatements.length === 0 || !newBank.name}
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Bank
@@ -919,8 +917,7 @@ export default function AttributeBank() {
                   id: selectedBank.id,
                   name: selectedBank.name,
                   description: selectedBank.description,
-                  analysis_type: selectedBank.analysis_type,
-                  is_industry_standard: selectedBank.is_industry_standard,
+                  analysis_type_id: selectedBank.analysis_type_id,
                   status: selectedBank.status,
                   company_id: selectedBank.company_id,
                   statements: selectedBank.attribute_statements?.map(stmt => ({
@@ -972,8 +969,7 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
             id,
             name,
             description,
-            analysis_type,
-            is_industry_standard
+            analysis_type_id
           ),
           attribute_statement_options (
             id,
@@ -990,11 +986,10 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
         id: stmt.id,
         attributeName: stmt.attributes?.name,
         attributeDescription: stmt.attributes?.description,
-        analysisType: stmt.attributes?.analysis_type,
+        analysisType: stmt.attributes?.analysis_type_id,
         statement: stmt.statement,
         options: (stmt.attribute_statement_options || [])
           .sort((a, b) => b.weight - a.weight),
-        isIndustryStandard: stmt.attributes?.is_industry_standard
       })) || [];
 
       setStatements(transformedStatements);
@@ -1045,7 +1040,6 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
                 <TableHead>Analysis Type</TableHead>
                 <TableHead>Statement</TableHead>
                 <TableHead>Options & Weights</TableHead>
-                <TableHead>Industry Standard</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1069,7 +1063,6 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{statement.isIndustryStandard ? "Yes" : "No"}</TableCell>
                   </TableRow>
                 ))
               ) : (
@@ -1131,7 +1124,7 @@ function BankList({ banks, onBankSelect, onRefresh, setSelectedBank, setIsEditDi
           name: editedBankData.name,
           description: editedBankData.description,
           status: editedBankData.status,
-          analysis_type: editedBankData.analysis_type
+          analysis_type_id: editedBankData.analysis_type_id
         })
         .eq('id', editingBank.id);
 
@@ -1235,8 +1228,8 @@ function BankList({ banks, onBankSelect, onRefresh, setSelectedBank, setIsEditDi
                 <div>
                   <Label>Analysis Type</Label>
                   <Select
-                    value={editedBankData.analysis_type}
-                    onValueChange={(value) => setEditedBankData(prev => ({ ...prev, analysis_type: value }))}
+                    value={editedBankData.analysis_type_id}
+                    onValueChange={(value) => setEditedBankData(prev => ({ ...prev, analysis_type_id: value }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select analysis type" />
@@ -1286,8 +1279,8 @@ function BankList({ banks, onBankSelect, onRefresh, setSelectedBank, setIsEditDi
                     <span className={cn(
                       'inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
                       {
-                        'bg-blue-100 text-blue-700': bank.analysis_type === 'behavior',
-                        'bg-purple-100 text-purple-700': bank.analysis_type === 'performance'
+                        'bg-blue-100 text-blue-700': bank.analysis_type_id === 'behavior',
+                        'bg-purple-100 text-purple-700': bank.analysis_type_id === 'performance'
                       }
                     )}>
                       {bank.analysis_type}
