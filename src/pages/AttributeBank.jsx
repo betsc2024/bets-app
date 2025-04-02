@@ -172,10 +172,6 @@ export default function AttributeBank() {
 
   const fetchAttributes = async () => {
     try {
-      // Get analysis type from the first statement's attribute if available
-      const analysisTypeId = selectedBank?.attribute_statements?.[0]?.attributes?.analysis_type_id || 'behavior';
-
-      // First fetch attributes that have the selected analysis type
       const { data: attributesData, error: attributesError } = await supabase
         .from('attributes')
         .select(`
@@ -185,8 +181,11 @@ export default function AttributeBank() {
           attribute_industry_mapping (
             industry_id
           ),
-          attribute_analysis_types!inner (
-            analysis_type_id
+          attribute_analysis_types (
+            analysis_types (
+              id,
+              name
+            )
           ),
           attribute_statements (
             id,
@@ -198,56 +197,89 @@ export default function AttributeBank() {
             )
           )
         `)
-        .eq('attribute_analysis_types.analysis_type_id', analysisTypeId) // Filter by analysis type through the junction table
         .order('name');
 
       if (attributesError) throw attributesError;
 
-      // Then fetch statements that are either:
-      // 1. Not associated with any bank (attribute_bank_id is null)
-      // 2. Associated with the currently selected bank (if editing)
-      const bankId = selectedBank?.id;
-      const processedAttributes = await Promise.all(attributesData.map(async (attr) => {
-        const query = supabase
-          .from('attribute_statements')
-          .select(`
-            id,
-            statement,
-            attribute_id,
-            attribute_bank_id,
-            attribute_statement_options (
-              id,
-              option_text,
-              weight
-            )
-          `)
-          .eq('attribute_id', attr.id)
-          .or(`attribute_bank_id.is.null${bankId ? ',attribute_bank_id.eq.' + bankId : ''}`);
-
-        const { data: statements, error: stmtError } = await query;
-
-        if (stmtError) throw stmtError;
+      const transformedAttributes = attributesData?.map(attr => {
+        const statements = attr.attribute_statements?.map(stmt => ({
+          ...stmt,
+          attribute_statement_options: (stmt.attribute_statement_options || [])
+            .sort((a, b) => b.weight - a.weight)
+        })) || [];
 
         return {
           ...attr,
-          analysis_type_id: attr.attribute_analysis_types?.[0]?.analysis_type_id, // Get analysis type from junction table
-          attribute_statements: statements?.map(stmt => ({
-            ...stmt,
-            attribute_statement_options: (stmt.attribute_statement_options || [])
-              .sort((a, b) => b.weight - a.weight)
-          })) || []
+          attribute_statements: statements,
+          selectedIndustries: attr.attribute_industry_mapping?.map(m => m.industry_id) || []
         };
-      }));
+      }) || [];
 
-      setAttributes(processedAttributes);
+      setAttributes(transformedAttributes);
     } catch (error) {
       console.error('Error fetching attributes:', error);
       toast.error('Failed to fetch attributes');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchBankStatements = async (bank) => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('attribute_statements')
+        .select(`
+          id,
+          statement,
+          created_at,
+          attribute_id,
+          attribute_bank_id,
+          attributes!inner (
+            id,
+            name,
+            description,
+            attribute_analysis_types (
+              analysis_types (
+                id,
+                name
+              )
+            )
+          ),
+          attribute_statement_options (
+            id,
+            option_text,
+            weight
+          )
+        `)
+        .eq('attribute_bank_id', bank.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const transformedStatements = data?.map(stmt => ({
+        id: stmt.id,
+        attributeName: stmt.attributes?.name,
+        attributeDescription: stmt.attributes?.description,
+        analysisType: stmt.attributes?.attribute_analysis_types?.[0]?.analysis_types?.name,
+        statement: stmt.statement,
+        options: (stmt.attribute_statement_options || [])
+          .sort((a, b) => b.weight - a.weight),
+      })) || [];
+
+      setStatements(transformedStatements);
+    } catch (error) {
+      console.error('Error fetching statements:', error);
+      toast.error('Failed to fetch bank statements');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAttributes();
+    if (selectedBank?.id) {
+      fetchAttributes();
+    }
   }, [selectedBank?.id]);
 
   // Memoized functions
@@ -286,7 +318,10 @@ export default function AttributeBank() {
   const handleAnalysisTypeChange = async (value) => {
     setAnalysisType(value);
     setNewBank(prev => ({ ...prev, analysis_type_id: value }));
-    await fetchAttributesForType(value);
+    // Only fetch attributes if we have a valid UUID
+    if (value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+      await fetchAttributesForType(value, true);
+    }
   };
 
   const handleCreateBank = async () => {
@@ -299,26 +334,18 @@ export default function AttributeBank() {
         return;
       }
 
-      // Get analysis type ID from name
-      const { data: analysisTypeData, error: analysisTypeError } = await supabase
-        .from('analysis_types')
-        .select('id')
-        .eq('name', analysisType)
-        .single();
-
-      if (analysisTypeError) {
-        console.error('Error getting analysis type:', analysisTypeError);
-        toast.error('Failed to get analysis type');
+      if (!newBank.analysis_type_id) {
+        toast.error('Analysis type is required');
         return;
       }
 
-      // Create bank with analysis type ID
+      // Create bank with analysis type ID that we already have
       const { data: bankData, error: bankError } = await supabase
         .from('attribute_banks')
         .insert({
           name: newBank.name,
           description: newBank.description || '',
-          analysis_type_id: analysisTypeData.id,
+          analysis_type_id: newBank.analysis_type_id,
           status: 'active',
           company_id: selectedCompany === 'all' ? null : selectedCompany
         })
@@ -605,26 +632,29 @@ export default function AttributeBank() {
   }, []);
 
   useEffect(() => {
-    fetchAttributes();
+    if (selectedBank?.id) {
+      fetchAttributes();
+    }
   }, [selectedBank?.id]);
 
-  const fetchAttributesForType = async (type) => {
+  const fetchAttributesForType = async (type, isId = false) => {
     try {
       setLoading(true);
 
-      // First get the analysis type ID from the name
-      const { data: analysisTypeData, error: analysisTypeError } = await supabase
-        .from('analysis_types')
-        .select('id')
-        .eq('name', type)
-        .single();
+      // If we're passed an ID directly, use it, otherwise look up by name
+      let analysisTypeId = type;
+      if (!isId) {
+        const { data: analysisTypeData, error: analysisTypeError } = await supabase
+          .from('analysis_types')
+          .select('id')
+          .eq('name', type)
+          .single();
 
-      if (analysisTypeError) throw analysisTypeError;
+        if (analysisTypeError) throw analysisTypeError;
+        analysisTypeId = analysisTypeData.id;
+      }
 
-      const analysisTypeId = analysisTypeData.id;
-
-      // Fetch attributes with all their relationships
-      const { data, error } = await supabase
+      const { data: attributesData, error: attributesError } = await supabase
         .from('attributes')
         .select(`
           id,
@@ -634,7 +664,11 @@ export default function AttributeBank() {
             industry_id
           ),
           attribute_analysis_types!inner (
-            analysis_type_id
+            analysis_type_id,
+            analysis_types!inner (
+              id,
+              name
+            )
           ),
           attribute_statements (
             id,
@@ -649,10 +683,24 @@ export default function AttributeBank() {
         .eq('attribute_analysis_types.analysis_type_id', analysisTypeId)
         .order('name');
 
-      if (error) throw error;
+      if (attributesError) throw attributesError;
 
-      console.log('Fetched attributes:', data);
-      setAttributes(data || []);
+      // Transform the data
+      const transformedAttributes = attributesData?.map(attr => {
+        const statements = attr.attribute_statements?.map(stmt => ({
+          ...stmt,
+          attribute_statement_options: (stmt.attribute_statement_options || [])
+            .sort((a, b) => b.weight - a.weight)
+        })) || [];
+
+        return {
+          ...attr,
+          attribute_statements: statements,
+          selectedIndustries: attr.attribute_industry_mapping?.map(m => m.industry_id) || []
+        };
+      }) || [];
+
+      setAttributes(transformedAttributes);
     } catch (error) {
       console.error('Error fetching attributes:', error);
       toast.error('Failed to fetch attributes');
@@ -969,7 +1017,12 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
             id,
             name,
             description,
-            analysis_type_id
+            attribute_analysis_types (
+              analysis_types (
+                id,
+                name
+              )
+            )
           ),
           attribute_statement_options (
             id,
@@ -986,7 +1039,7 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
         id: stmt.id,
         attributeName: stmt.attributes?.name,
         attributeDescription: stmt.attributes?.description,
-        analysisType: stmt.attributes?.analysis_type_id,
+        analysisType: stmt.attributes?.attribute_analysis_types?.[0]?.analysis_types?.name,
         statement: stmt.statement,
         options: (stmt.attribute_statement_options || [])
           .sort((a, b) => b.weight - a.weight),
