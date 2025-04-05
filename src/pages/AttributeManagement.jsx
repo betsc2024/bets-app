@@ -174,7 +174,6 @@ export default function AttributeManagement() {
           id,
           name,
           description,
-          is_industry_standard,
           attribute_industry_mapping (
             industry_id,
             industries (
@@ -215,7 +214,7 @@ export default function AttributeManagement() {
             name: im.industries?.name
           })) || [],
           attribute_statements: (attr.attribute_statements || [])
-            .filter(stmt => !stmt.attribute_bank_id) 
+            .filter(stmt => stmt.attribute_bank_id === null)  // Only show template statements
             .map(stmt => ({
               ...stmt,
               analysisTypes: stmt.statement_analysis_types?.map(sat => ({
@@ -224,8 +223,8 @@ export default function AttributeManagement() {
               })) || []
             }))
         }))
-        // Removing this filter so we show all attributes, even those without statements
-        // .filter(attr => attr.attribute_statements.length > 0)
+        // Only show attributes that have template statements
+        .filter(attr => attr.attribute_statements.length > 0);
 
       // Sort the transformed data alphabetically by name
       const sortedData = transformedData.sort((a, b) => 

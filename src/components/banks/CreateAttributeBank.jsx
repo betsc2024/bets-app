@@ -37,18 +37,20 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 
-const ITEMS_PER_PAGE = 10;
-
 export default function CreateAttributeBank({
   attributes = [],
-  selectedItems = [],
+  selectedItems = [], 
   onSelectedItemsChange,
   selectedIndustryFilter = 'all',
   onIndustryFilterChange,
   attributeSearchQuery = '',
   onAttributeSearchQueryChange,
+  isViewMode = false,
+  industries = [],
+  selectedStatements = new Set()
 }) {
   const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   // Filter attributes based on search query and selected industry
   const filteredAttributes = useMemo(() => {
@@ -66,40 +68,52 @@ export default function CreateAttributeBank({
     // Filter by industry
     if (selectedIndustryFilter !== 'all') {
       filtered = filtered.filter(attr => 
-        attr.selectedIndustries?.includes(selectedIndustryFilter)
+        attr.attribute_industry_mapping?.some(
+          mapping => mapping.industry_id === selectedIndustryFilter
+        )
       );
     }
 
     return filtered;
   }, [attributes, attributeSearchQuery, selectedIndustryFilter]);
 
-  // All statements from filtered attributes
-  const allStatements = useMemo(() => {
-    return filteredAttributes.reduce((acc, attr) => {
-      return acc.concat(attr.attribute_statements || []);
-    }, []);
-  }, [filteredAttributes]);
+  // Paginate attributes
+  const paginatedAttributes = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    return filteredAttributes.slice(start, end);
+  }, [filteredAttributes, currentPage]);
 
   // Check if a statement is selected
   const isStatementSelected = useCallback((statementId) => {
-    return selectedItems.some(item => item.id === statementId);
-  }, [selectedItems]);
+    return Array.isArray(selectedItems) && selectedItems.some(item => item.id === statementId) || 
+           (selectedStatements instanceof Set && selectedStatements.has(statementId));
+  }, [selectedItems, selectedStatements]);
 
   // Handle statement selection/deselection
   const handleStatementToggle = (statement, attribute) => {
-    const isSelected = selectedItems.some(s => s.id === statement.id);
-    let newSelectedItems;
+    if (isViewMode) return;
+
+    const isSelected = isStatementSelected(statement.id);
+    let newSelectedItems = Array.isArray(selectedItems) ? selectedItems : [];
 
     if (isSelected) {
-      newSelectedItems = selectedItems.filter(s => s.id !== statement.id);
+      newSelectedItems = newSelectedItems.filter(s => s.id !== statement.id);
+      if (selectedStatements instanceof Set) {
+        selectedStatements.delete(statement.id);
+      }
     } else {
       const newStatement = {
         id: statement.id,
         statement: statement.statement,
+        attribute_id: attribute.id,
         attribute: attribute.name,
-        options: statement.attribute_statement_options || []
+        attribute_statement_options: statement.attribute_statement_options || []
       };
-      newSelectedItems = [...selectedItems, newStatement];
+      newSelectedItems = [...newSelectedItems, newStatement];
+      if (selectedStatements instanceof Set) {
+        selectedStatements.add(statement.id);
+      }
     }
 
     onSelectedItemsChange?.(newSelectedItems);
@@ -107,177 +121,127 @@ export default function CreateAttributeBank({
 
   return (
     <div className="space-y-4">
-      {/* Selected Statements Section */}
-      <Card className="border-purple-200">
-        <CardHeader>
-          <CardTitle className="text-lg font-medium text-purple-800">Selected Statements</CardTitle>
-          <CardDescription>
-            {selectedItems.length} statements selected
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {selectedItems.length > 0 ? (
-            <div className="space-y-2">
-              {selectedItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-2 bg-purple-50 rounded-md"
-                >
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">{item.statement}</span>
-                    <span className="text-xs text-muted-foreground">{item.attribute}</span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleStatementToggle({ id: item.id })}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-4 text-muted-foreground">
-              No statements selected. Select statements from the list below.
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Available Statements Section */}
-      <div className="space-y-4">
-        <div className="border-b border-purple-200 pb-4">
-          <h3 className="text-lg font-medium text-purple-800">Available Attributes</h3>
-          <p className="text-sm text-muted-foreground">Select attributes to include in your bank</p>
+      {!isViewMode && (
+        <div className="flex gap-4 mb-4">
+          <div className="flex-1">
+            <Label>Filter by Industry</Label>
+            <Select value={selectedIndustryFilter} onValueChange={onIndustryFilterChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select industry" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="all">All Industries</SelectItem>
+                  {industries.map(industry => (
+                    <SelectItem key={industry.id} value={industry.id}>
+                      {industry.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1">
+            <Label>Search Attributes</Label>
+            <Input
+              placeholder="Search by name or description..."
+              value={attributeSearchQuery}
+              onChange={(e) => onAttributeSearchQueryChange(e.target.value)}
+            />
+          </div>
         </div>
+      )}
 
-        {/* Search and Filters */}
-        <Card className="border-purple-200">
-          <CardContent className="pt-6">
-            <div className="border-b border-purple-200 pb-4 mb-4">
-              <h4 className="text-sm font-medium text-purple-800">Search and Filters</h4>
-              <p className="text-xs text-muted-foreground">
-                {filteredAttributes.length} attributes • {allStatements.length} statements
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              {/* Industry Filter */}
-              <div>
-                <Label className="text-xs mb-1 text-purple-800">Filter by Industry</Label>
-                <Select value={selectedIndustryFilter} onValueChange={onIndustryFilterChange}>
-                  <SelectTrigger className="border-purple-200">
-                    <SelectValue placeholder="All Industries" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Industries</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Search Input */}
-              <div>
-                <Label className="text-xs mb-1 text-purple-800">Search Statements</Label>
-                <Input
-                  placeholder="Search statements..."
-                  value={attributeSearchQuery}
-                  onChange={(e) => onAttributeSearchQueryChange?.(e.target.value)}
-                  className="border-purple-200"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Attributes Table */}
-        <div className="border border-purple-200 rounded-md overflow-hidden">
-          <Table>
-            <TableHeader className="bg-purple-50">
-              <TableRow>
-                <TableHead className="w-[40px]"></TableHead>
-                <TableHead className="text-purple-800 font-bold">Attribute</TableHead>
-                <TableHead className="text-purple-800 font-bold">Statement</TableHead>
-                <TableHead className="text-purple-800 font-bold">Options & Weights</TableHead>
-                <TableHead className="text-purple-800 font-bold">Industry</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredAttributes.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map(attribute => (
-                attribute.attribute_statements?.map(statement => (
-                  <TableRow key={statement.id}>
-                    <TableCell className="w-[40px]">
+      <Table className="border">
+        <TableHeader>
+          <TableRow className="border-b">
+            {!isViewMode && <TableHead className="w-[50px]"></TableHead>}
+            <TableHead>Attribute</TableHead>
+            <TableHead>Statement</TableHead>
+            <TableHead>Options & Weights</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {paginatedAttributes.length > 0 ? (
+            paginatedAttributes.map((attr) => (
+              attr.attribute_statements?.map((stmt) => (
+                <TableRow key={stmt.id} className="border-b">
+                  {!isViewMode && (
+                    <TableCell className="border-r">
                       <Checkbox
-                        checked={isStatementSelected(statement.id)}
-                        onCheckedChange={() => handleStatementToggle(statement, attribute)}
+                        checked={isStatementSelected(stmt.id)}
+                        onCheckedChange={() => handleStatementToggle(stmt, attr)}
                       />
                     </TableCell>
-                    <TableCell>
-                      <div className="font-medium text-purple-800">{attribute.name}</div>
-                      {attribute.description && (
-                        <div className="text-sm text-muted-foreground mt-1">
-                          {attribute.description}
-                        </div>
+                  )}
+                  <TableCell className="border-r">
+                    <div>
+                      <div className="font-medium">{attr.name}</div>
+                      {attr.description && (
+                        <div className="text-sm text-muted-foreground">{attr.description}</div>
                       )}
-                    </TableCell>
-                    <TableCell>{statement.statement}</TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        {statement.attribute_statement_options?.map(option => (
-                          <div key={option.id} className="flex justify-between text-sm">
-                            <span>{option.option_text}</span>
-                            <span className="text-muted-foreground">{option.weight}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {attribute.attribute_industry_mapping?.map(mapping => (
-                        <Badge key={mapping.industry_id} variant="outline" className="mr-1">
-                          {mapping.industries?.name}
-                        </Badge>
-                      ))}
-                    </TableCell>
-                  </TableRow>
-                ))
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="border-r">{stmt.statement}</TableCell>
+                  <TableCell>
+                    <div className="space-y-2">
+                      {stmt.attribute_statement_options?.length > 0 ? (
+                        stmt.attribute_statement_options
+                          .sort((a, b) => b.weight - a.weight)
+                          .map((option) => (
+                            <div key={option.id} className="flex justify-between items-center text-sm">
+                              <span className="font-medium">{option.option_text}</span>
+                              <span className="text-muted-foreground ml-2">{option.weight}</span>
+                            </div>
+                          ))
+                      ) : (
+                        <span className="text-muted-foreground">No options defined</span>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={isViewMode ? 3 : 4} className="text-center py-4">
+                No statements found
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
 
-        {/* Pagination */}
-        {Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE) > 1 && (
-          <div className="flex justify-center mt-4">
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                  />
+      {!isViewMode && filteredAttributes.length > ITEMS_PER_PAGE && (
+        <div className="flex justify-center mt-4">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                />
+              </PaginationItem>
+              {Array.from({ length: Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE) }).map((_, i) => (
+                <PaginationItem key={i}>
+                  <PaginationLink
+                    onClick={() => setCurrentPage(i + 1)}
+                    isActive={currentPage === i + 1}
+                  >
+                    {i + 1}
+                  </PaginationLink>
                 </PaginationItem>
-                {Array.from({ length: Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE) }).map((_, i) => (
-                  <PaginationItem key={i}>
-                    <PaginationLink
-                      onClick={() => setCurrentPage(i + 1)}
-                      isActive={currentPage === i + 1}
-                    >
-                      {i + 1}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE), p + 1))}
-                    disabled={currentPage === Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE)}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          </div>
-        )}
-      </div>
+              ))}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE), p + 1))}
+                  disabled={currentPage === Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE)}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
     </div>
   );
 }

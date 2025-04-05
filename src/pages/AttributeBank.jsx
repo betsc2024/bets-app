@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from 'react-router-dom';
 import {
   Card,
   CardContent,
@@ -9,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, Trash2, Plus, Loader2, ChevronDown, ChevronLeft } from "lucide-react";
+import { Eye, Pencil, Trash2, Plus, Loader2, ChevronDown, ChevronLeft, Check } from "lucide-react";
 import { toast } from 'sonner';
 import CreateAttributeBank from "@/components/banks/CreateAttributeBank";
 import {
@@ -41,7 +42,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import cn from 'classnames';
-import { useNavigate } from 'react-router-dom';
 
 export default function AttributeBank() {
   const { user } = useAuth();
@@ -63,24 +63,22 @@ export default function AttributeBank() {
     status: 'active',
     company_id: null
   });
-  const [selectedStatements, setSelectedStatements] = useState([]);
+  const [selectedStatements, setSelectedStatements] = useState(new Set()); // Initialize as empty Set
   const [availableStatements, setAvailableStatements] = useState([]);
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [companySearchQuery, setCompanySearchQuery] = useState('');
-  const [companyDialogOpen, setCompanyDialogOpen] = useState(false);
-  const [industryDialogOpen, setIndustryDialogOpen] = useState(false);
-  const [attributeDialogOpen, setAttributeDialogOpen] = useState(false);
-  const [statementDialogOpen, setStatementDialogOpen] = useState(false);
-  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState('all');
-  const [selectedAttributeFilter, setSelectedAttributeFilter] = useState('all');
-  const [selectedStatementFilter, setSelectedStatementFilter] = useState('all');
   const [industrySearchQuery, setIndustrySearchQuery] = useState('');
   const [attributeSearchQuery, setAttributeSearchQuery] = useState('');
   const [statementSearchQuery, setStatementSearchQuery] = useState('');
   const [selectedBank, setSelectedBank] = useState(null);
   const [industries, setIndustries] = useState([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [companyDialogOpen, setCompanyDialogOpen] = useState(false);
+  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState('all');
+  const [selectedAttributeFilter, setSelectedAttributeFilter] = useState('all');
+  const [selectedStatementFilter, setSelectedStatementFilter] = useState('all');
   const itemsPerPage = 10;
 
   // API functions
@@ -112,9 +110,10 @@ export default function AttributeBank() {
       const transformedData = data
         .filter(item => item.name && typeof item.name === 'string' && item.name.trim() !== '')
         .map(item => ({
-          value: item.id,  // Use ID as the value
-          label: item.name // Use name as the label
-        }));
+          value: item.id,
+          label: item.name.trim() // Trim to ensure clean sorting
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)); // Ensure client-side sorting matches server-side
 
       setAnalysisTypeList(transformedData);
     } catch (error) {
@@ -181,15 +180,17 @@ export default function AttributeBank() {
           attribute_industry_mapping (
             industry_id
           ),
-          attribute_analysis_types (
-            analysis_types (
-              id,
-              name
-            )
-          ),
           attribute_statements (
             id,
             statement,
+            attribute_bank_id,
+            statement_analysis_types (
+              analysis_type_id,
+              analysis_types (
+                id,
+                name
+              )
+            ),
             attribute_statement_options (
               id,
               option_text,
@@ -235,16 +236,17 @@ export default function AttributeBank() {
           created_at,
           attribute_id,
           attribute_bank_id,
+          statement_analysis_types (
+            analysis_type_id,
+            analysis_types (
+              id,
+              name
+            )
+          ),
           attributes!inner (
             id,
             name,
-            description,
-            attribute_analysis_types (
-              analysis_types (
-                id,
-                name
-              )
-            )
+            description
           ),
           attribute_statement_options (
             id,
@@ -257,22 +259,105 @@ export default function AttributeBank() {
 
       if (error) throw error;
 
-      const transformedStatements = data?.map(stmt => ({
-        id: stmt.id,
-        attributeName: stmt.attributes?.name,
-        attributeDescription: stmt.attributes?.description,
-        analysisType: stmt.attributes?.attribute_analysis_types?.[0]?.analysis_types?.name,
-        statement: stmt.statement,
-        options: (stmt.attribute_statement_options || [])
-          .sort((a, b) => b.weight - a.weight),
-      })) || [];
+      // Transform statements into the format expected by CreateAttributeBank
+      const transformedAttributes = {};
+      data?.forEach(stmt => {
+        const attr = stmt.attributes;
+        if (!transformedAttributes[attr.id]) {
+          transformedAttributes[attr.id] = {
+            ...attr,
+            attribute_statements: []
+          };
+        }
+        transformedAttributes[attr.id].attribute_statements.push({
+          id: stmt.id,
+          statement: stmt.statement,
+          statement_analysis_types: stmt.statement_analysis_types,
+          attribute_statement_options: (stmt.attribute_statement_options || [])
+            .sort((a, b) => b.weight - a.weight)
+        });
+      });
 
-      setStatements(transformedStatements);
+      setAttributes(Object.values(transformedAttributes));
+      setSelectedStatements(new Set(data?.map(s => s.id) || []));
     } catch (error) {
       console.error('Error fetching statements:', error);
       toast.error('Failed to fetch bank statements');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAvailableAttributes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('attributes')
+        .select(`
+          id,
+          name,
+          description,
+          attribute_industry_mapping (
+            industry_id
+          ),
+          attribute_statements (
+            id,
+            statement,
+            attribute_bank_id,
+            statement_analysis_types (
+              analysis_type_id,
+              analysis_types (
+                id,
+                name
+              )
+            ),
+            attribute_statement_options (
+              id,
+              option_text,
+              weight
+            )
+          )
+        `)
+        .order('name');
+
+      if (error) throw error;
+
+      // Filter out statements that are already linked to other banks
+      // except for statements linked to the current bank
+      const transformedAttributes = data
+        .map(attr => {
+          // Group statements by their text content to remove duplicates
+          const statementsMap = new Map();
+          
+          (attr.attribute_statements || []).forEach(stmt => {
+            // If statement is already linked to this bank, always include it
+            // For template statements, only include if linked to bank's analysis type
+            const isLinkedToBank = stmt.attribute_bank_id === selectedBank?.id;
+            const isTemplate = !stmt.attribute_bank_id;
+            const isLinkedToAnalysisType = stmt.statement_analysis_types?.some(
+              sat => sat.analysis_type_id === selectedBank?.analysis_type_id
+            );
+
+            if (isLinkedToBank || (isTemplate && isLinkedToAnalysisType)) {
+              // Prefer the bank's version over template if both exist
+              if (!statementsMap.has(stmt.statement) || stmt.attribute_bank_id === selectedBank?.id) {
+                statementsMap.set(stmt.statement, stmt);
+              }
+            }
+          });
+
+          return {
+            ...attr,
+            attribute_statements: Array.from(statementsMap.values())
+              .sort((a, b) => a.statement.localeCompare(b.statement))
+          };
+        })
+        .filter(attr => attr.attribute_statements.length > 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setAvailableAttributes(transformedAttributes);
+    } catch (error) {
+      console.error('Error fetching attributes:', error);
+      toast.error('Failed to fetch attributes');
     }
   };
 
@@ -305,6 +390,12 @@ export default function AttributeBank() {
   };
 
   const handleStatementSelect = useCallback((statement) => {
+    // Don't allow selecting statements that are already in another bank
+    if (statement.attribute_bank_id && statement.attribute_bank_id !== selectedBank?.id) {
+      toast.error('This statement is already assigned to another bank');
+      return;
+    }
+
     setSelectedStatements(prev => {
       const exists = prev.find(s => s.id === statement.id);
       if (exists) {
@@ -313,7 +404,7 @@ export default function AttributeBank() {
         return [...prev, statement];
       }
     });
-  }, []);
+  }, [selectedBank]);
 
   const handleAnalysisTypeChange = async (value) => {
     setAnalysisType(value);
@@ -339,7 +430,21 @@ export default function AttributeBank() {
         return;
       }
 
-      // Create bank with analysis type ID that we already have
+      if (selectedStatements.length === 0) {
+        toast.error('Please select at least one statement');
+        return;
+      }
+
+      // Validate that no selected statements are already in other banks
+      const invalidStatements = selectedStatements.filter(
+        s => s.attribute_bank_id && s.attribute_bank_id !== selectedBank?.id
+      );
+      if (invalidStatements.length > 0) {
+        toast.error('Some selected statements are already assigned to other banks');
+        return;
+      }
+
+      // Create bank with analysis type ID
       const { data: bankData, error: bankError } = await supabase
         .from('attribute_banks')
         .insert({
@@ -353,30 +458,72 @@ export default function AttributeBank() {
         .single();
 
       if (bankError) {
-        console.error('Error creating bank:', bankError);
+        console.error('❌ Error creating bank:', bankError);
         toast.error('Failed to create bank');
         return;
       }
 
-      // Update selected statements with bank ID
-      if (selectedStatements.length > 0) {
-        const { error: stmtError } = await supabase
-          .from('attribute_statements')
-          .update({ attribute_bank_id: bankData.id })
-          .in('id', selectedStatements.map(s => s.id));
+      console.log('✅ Bank created:', bankData);
 
-        if (stmtError) {
-          console.error('Error updating statements:', stmtError);
-          toast.error('Failed to update statements');
-          return;
+      // Create copies of selected statements with bank ID
+      const statementCopies = selectedStatements.map(stmt => ({
+        attribute_id: stmt.attribute_id,
+        statement: stmt.statement,
+        attribute_bank_id: bankData.id
+      }));
+
+      const { data: newStatements, error: stmtError } = await supabase
+        .from('attribute_statements')
+        .insert(statementCopies)
+        .select();
+
+      if (stmtError) {
+        console.error('❌ Error creating statement copies:', stmtError);
+        // Cleanup: Delete the bank since statement creation failed
+        await supabase
+          .from('attribute_banks')
+          .delete()
+          .eq('id', bankData.id);
+        toast.error('Failed to create statement copies');
+        return;
+      }
+
+      // Copy options for each statement
+      for (let i = 0; i < selectedStatements.length; i++) {
+        const originalStmt = selectedStatements[i];
+        const newStmt = newStatements[i];
+        
+        // Get original options
+        const { data: originalOptions } = await supabase
+          .from('attribute_statement_options')
+          .select('*')
+          .eq('statement_id', originalStmt.id);
+
+        if (originalOptions?.length > 0) {
+          // Create copies of options for new statement
+          const optionCopies = originalOptions.map(opt => ({
+            statement_id: newStmt.id,
+            option_text: opt.option_text,
+            weight: opt.weight
+          }));
+
+          const { error: optError } = await supabase
+            .from('attribute_statement_options')
+            .insert(optionCopies);
+
+          if (optError) {
+            console.error('❌ Error copying options:', optError);
+            // Continue anyway, not critical
+          }
         }
       }
 
+      console.log('✅ Created statement copies with options');
       toast.success('Bank created successfully');
       setView('list');
       fetchBanks();
     } catch (error) {
-      console.error('Error creating bank:', error);
+      console.error('❌ Error in handleCreateBank:', error);
       toast.error('Failed to create bank');
     } finally {
       setLoading(false);
@@ -473,7 +620,7 @@ export default function AttributeBank() {
       const updateFields = {
         name: updatedData.name,
         description: updatedData.description,
-        company_id: updatedData.company_id === 'null' ? null : updatedData.company_id,
+        company_id: updatedData.company_id === 'null' ? null : updatedData.company_id, // Don't convert to number, keep as UUID string
         status: updatedData.status
       };
       console.log('Update fields:', updateFields); // Debug log
@@ -524,53 +671,6 @@ export default function AttributeBank() {
             if (optionsError) throw optionsError;
           }
         }
-      } else if (updatedData.analysis_type_id) {
-        // If no statements but analysis_type_id changed, create a dummy attribute to store the type
-        const { data: dummyAttr, error: attrError } = await supabase
-          .from('attributes')
-          .insert({
-            name: `Bank Type - ${updatedData.name}`,
-            description: 'Analysis type holder',
-            is_industry_standard: false
-          })
-          .select('id')
-          .single();
-
-        if (attrError) throw attrError;
-
-        // Link the analysis type
-        const { error: typeError } = await supabase
-          .from('attribute_analysis_types')
-          .insert({
-            attribute_id: dummyAttr.id,
-            analysis_type_id: updatedData.analysis_type_id
-          });
-
-        if (typeError) throw typeError;
-
-        // Create a dummy statement
-        const { error: stmtError } = await supabase
-          .from('attribute_statements')
-          .insert({
-            attribute_bank_id: selectedBank.id,
-            statement: 'Bank Type',
-            attribute_id: dummyAttr.id
-          });
-
-        if (stmtError) throw stmtError;
-      }
-
-      // Get the updated company data if a company is selected
-      let updatedCompany = null;
-      if (updatedData.company_id && updatedData.company_id !== 'null') {
-        const { data: companyData, error: companyError } = await supabase
-          .from('companies')
-          .select('id, name')
-          .eq('id', updatedData.company_id)
-          .single();
-        
-        if (companyError) throw companyError;
-        updatedCompany = companyData;
       }
 
       // Update the banks state with the new data
@@ -582,8 +682,8 @@ export default function AttributeBank() {
                 name: updatedData.name,
                 description: updatedData.description,
                 status: updatedData.status,
-                company_id: updatedData.company_id === 'null' ? null : updatedData.company_id,
-                companies: updatedCompany,
+                company_id: updatedData.company_id === 'null' ? null : updatedData.company_id, // Don't convert to number, keep as UUID string
+                companies: updatedData.company_id === 'null' ? null : updatedData.companies,
                 attribute_statements: updatedData.statements
               }
             : bank
@@ -637,24 +737,13 @@ export default function AttributeBank() {
     }
   }, [selectedBank?.id]);
 
-  const fetchAttributesForType = async (type, isId = false) => {
+  const fetchAttributesForType = async (analysisTypeId) => {
     try {
       setLoading(true);
+      console.log('🔍 Fetching attributes for analysis type:', analysisTypeId);
 
-      // If we're passed an ID directly, use it, otherwise look up by name
-      let analysisTypeId = type;
-      if (!isId) {
-        const { data: analysisTypeData, error: analysisTypeError } = await supabase
-          .from('analysis_types')
-          .select('id')
-          .eq('name', type)
-          .single();
-
-        if (analysisTypeError) throw analysisTypeError;
-        analysisTypeId = analysisTypeData.id;
-      }
-
-      const { data: attributesData, error: attributesError } = await supabase
+      // STEP 1: Get all attributes that have statements for this analysis type
+      const { data: matchingAttributes, error: matchError } = await supabase
         .from('attributes')
         .select(`
           id,
@@ -663,16 +752,17 @@ export default function AttributeBank() {
           attribute_industry_mapping (
             industry_id
           ),
-          attribute_analysis_types!inner (
-            analysis_type_id,
-            analysis_types!inner (
-              id,
-              name
-            )
-          ),
-          attribute_statements (
+          attribute_statements!inner (
             id,
             statement,
+            attribute_bank_id,
+            statement_analysis_types!inner (
+              analysis_type_id,
+              analysis_types (
+                id,
+                name
+              )
+            ),
             attribute_statement_options (
               id,
               option_text,
@@ -680,33 +770,180 @@ export default function AttributeBank() {
             )
           )
         `)
-        .eq('attribute_analysis_types.analysis_type_id', analysisTypeId)
+        .eq('attribute_statements.statement_analysis_types.analysis_type_id', analysisTypeId)
+        .is('attribute_statements.attribute_bank_id', null)  // Only get statements not linked to any bank
         .order('name');
 
-      if (attributesError) throw attributesError;
+      if (matchError) {
+        console.error('❌ Error fetching attributes:', matchError);
+        throw matchError;
+      }
 
-      // Transform the data
-      const transformedAttributes = attributesData?.map(attr => {
-        const statements = attr.attribute_statements?.map(stmt => ({
-          ...stmt,
-          attribute_statement_options: (stmt.attribute_statement_options || [])
-            .sort((a, b) => b.weight - a.weight)
-        })) || [];
-
-        return {
+      // Transform and set the data
+      const transformedAttributes = (matchingAttributes || [])
+        .sort((a, b) => a.name.localeCompare(b.name)) // Sort attributes A-Z
+        .map(attr => ({
           ...attr,
-          attribute_statements: statements,
-          selectedIndustries: attr.attribute_industry_mapping?.map(m => m.industry_id) || []
-        };
-      }) || [];
+          // Only include statements that match this analysis type and are not in any bank
+          attribute_statements: attr.attribute_statements
+            .filter(stmt => 
+              stmt.statement_analysis_types.some(sat => sat.analysis_type_id === analysisTypeId) && 
+              !stmt.attribute_bank_id  // Double check to ensure statement is not in any bank
+            )
+            .sort((a, b) => a.statement.localeCompare(b.statement)) // Sort statements A-Z
+            .map(stmt => ({
+              ...stmt,
+              attribute_statement_options: (stmt.attribute_statement_options || [])
+                .sort((a, b) => b.weight - a.weight) // Keep options sorted by weight descending
+            }))
+        }))
+        .filter(attr => attr.attribute_statements.length > 0);
 
+      console.log('✅ Final filtered attributes:', transformedAttributes.length);
       setAttributes(transformedAttributes);
     } catch (error) {
-      console.error('Error fetching attributes:', error);
+      console.error('❌ Error in fetchAttributesForType:', error);
       toast.error('Failed to fetch attributes');
+      setAttributes([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      console.log('Saving with editedBank:', editedBank); // Debug log
+
+      // Update bank details
+      const { data: updatedBank, error: bankUpdateError } = await supabase
+        .from('attribute_banks')
+        .update({
+          name: editedBank.name,
+          status: editedBank.status,
+          company_id: editedBank.company_id === 'none' ? null : editedBank.company_id // Don't convert to number, keep as UUID string
+        })
+        .eq('id', bank.id)
+        .select(`
+          *,
+          companies (
+            id,
+            name
+          ),
+          analysis_types (
+            id,
+            name
+          )
+        `)
+        .single();
+
+      if (bankUpdateError) {
+        console.error('Bank update error:', bankUpdateError); // Debug log
+        throw bankUpdateError;
+      }
+
+      console.log('Updated bank:', updatedBank); // Debug log
+
+      // Get current statements in the bank
+      const { data: currentStatements, error: fetchError } = await supabase
+        .from('attribute_statements')
+        .select('id')
+        .eq('attribute_bank_id', bank.id);
+
+      if (fetchError) throw fetchError;
+
+      // Create sets for efficient comparison
+      const currentIds = new Set(currentStatements.map(s => s.id));
+      const newIds = new Set(statements.map(s => s.id));
+
+      // Find statements to delete (in current but not in new)
+      const statementsToDelete = currentStatements
+        .filter(s => !newIds.has(s.id))
+        .map(s => s.id);
+
+      // Find statements to add (in new but not in current)
+      const statementsToAdd = statements.filter(s => !currentIds.has(s.id));
+
+      // Delete removed statements
+      if (statementsToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('attribute_statements')
+          .delete()
+          .in('id', statementsToDelete);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // Add new statements
+      if (statementsToAdd.length > 0) {
+        // Insert statements first
+        const newStatements = statementsToAdd.map(stmt => ({
+          attribute_id: stmt.attribute_id,
+          attribute_bank_id: bank.id,
+          statement: stmt.statement
+        }));
+
+        const { data: insertedStatements, error: insertError } = await supabase
+          .from('attribute_statements')
+          .insert(newStatements)
+          .select('id');
+
+        if (insertError) throw insertError;
+
+        // Now insert options for each statement
+        const optionsToInsert = [];
+        insertedStatements.forEach((stmt, index) => {
+          const originalStatement = statementsToAdd[index];
+          if (originalStatement.attribute_statement_options) {
+            originalStatement.attribute_statement_options.forEach(opt => {
+              optionsToInsert.push({
+                statement_id: stmt.id,
+                option_text: opt.option_text,
+                weight: opt.weight
+              });
+            });
+          }
+        });
+
+        if (optionsToInsert.length > 0) {
+          const { error: optionsError } = await supabase
+            .from('attribute_statement_options')
+            .insert(optionsToInsert);
+
+          if (optionsError) throw optionsError;
+        }
+      }
+
+      toast.success('Bank updated successfully');
+      setIsEditMode(false);
+      setAvailableAttributes([]);
+      setSelectedStatements(new Set());
+      
+      // Update the bank object with new data
+      const updatedBankWithMeta = {
+        ...updatedBank,
+        analysis_type: updatedBank.analysis_types?.name || 'Unknown'
+      };
+      console.log('Setting bank to:', updatedBankWithMeta); // Debug log
+      setSelectedBank(updatedBankWithMeta);
+      onRefresh?.();
+      
+      // Fetch updated statements
+      fetchBankStatements(updatedBankWithMeta);
+    } catch (error) {
+      console.error('Error updating bank:', error);
+      toast.error('Failed to update bank');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setIsEditMode(false);
+    setAvailableAttributes([]);
+    setSelectedStatements(new Set());
+    // Reset to original state
+    fetchBankStatements(selectedBank);
   };
 
   return (
@@ -904,6 +1141,8 @@ export default function AttributeBank() {
                     onIndustryFilterChange={setSelectedIndustryFilter}
                     attributeSearchQuery={attributeSearchQuery}
                     onAttributeSearchQueryChange={setAttributeSearchQuery}
+                    industries={industries}
+                    selectedStatements={selectedStatements}
                   />
                 </CardContent>
               </Card>
@@ -927,14 +1166,14 @@ export default function AttributeBank() {
       )}
 
       {view === 'details' && selectedBank && (
-        <div>
+        <div className="mt-8">
           <div className="flex items-center gap-4 mb-6">
             <Button
               variant="outline"
               className="flex items-center gap-2"
               onClick={() => {
-                setView('list');
                 setSelectedBank(null);
+                navigate('/attribute-bank');
               }}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -945,7 +1184,7 @@ export default function AttributeBank() {
             bank={selectedBank} 
             onRefresh={fetchBanks} 
             setSelectedBank={setSelectedBank}
-            setIsEditDialogOpen={setIsEditDialogOpen}
+            industries={industries}
           />
         </div>
       )}
@@ -981,7 +1220,8 @@ export default function AttributeBank() {
                 companies={companies}
                 selectedIndustry={selectedIndustryFilter}
                 onIndustryChange={setSelectedIndustryFilter}
-                onUpdate={handleBankUpdate}
+                onUpdate={handleSave}
+                selectedStatements={selectedStatements}
               />
             )}
           </DialogContent>
@@ -991,16 +1231,53 @@ export default function AttributeBank() {
   );
 }
 
-function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) {
-  const [statements, setStatements] = useState([]);
-  const [loading, setLoading] = useState(true);
+function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
+  const [loading, setLoading] = useState(false);
+  const [statements, setStatements] = useState([]); // Initialize as empty array
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [attributes, setAttributes] = useState([]);
+  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState('all');
+  const [attributeSearchQuery, setAttributeSearchQuery] = useState('');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [availableAttributes, setAvailableAttributes] = useState([]);
+  const [selectedStatements, setSelectedStatements] = useState(new Set()); // Initialize as empty Set
+  const [companies, setCompanies] = useState([]);
+  const [editedBank, setEditedBank] = useState({
+    name: '',
+    status: '',
+    company_id: 'none'
+  });
 
   useEffect(() => {
     if (bank?.id) {
       fetchBankStatements(bank);
+      setEditedBank({
+        name: bank.name || '',
+        status: bank.status || 'draft',
+        company_id: bank.company_id || 'none' // Keep UUID string as is
+      });
     }
   }, [bank?.id]);
+
+  useEffect(() => {
+    fetchCompanies();
+  }, []);
+
+  const fetchCompanies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, name')
+        .order('name');
+
+      if (error) throw error;
+      setCompanies(data || []);
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      toast.error('Failed to fetch companies');
+    }
+  };
 
   const fetchBankStatements = async (bank) => {
     try {
@@ -1013,16 +1290,17 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
           created_at,
           attribute_id,
           attribute_bank_id,
+          statement_analysis_types (
+            analysis_type_id,
+            analysis_types (
+              id,
+              name
+            )
+          ),
           attributes!inner (
             id,
             name,
-            description,
-            attribute_analysis_types (
-              analysis_types (
-                id,
-                name
-              )
-            )
+            description
           ),
           attribute_statement_options (
             id,
@@ -1035,17 +1313,28 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
 
       if (error) throw error;
 
-      const transformedStatements = data?.map(stmt => ({
-        id: stmt.id,
-        attributeName: stmt.attributes?.name,
-        attributeDescription: stmt.attributes?.description,
-        analysisType: stmt.attributes?.attribute_analysis_types?.[0]?.analysis_types?.name,
-        statement: stmt.statement,
-        options: (stmt.attribute_statement_options || [])
-          .sort((a, b) => b.weight - a.weight),
-      })) || [];
+      // Transform statements into the format expected by CreateAttributeBank
+      const transformedAttributes = {};
+      data?.forEach(stmt => {
+        const attr = stmt.attributes;
+        if (!transformedAttributes[attr.id]) {
+          transformedAttributes[attr.id] = {
+            ...attr,
+            attribute_statements: []
+          };
+        }
+        transformedAttributes[attr.id].attribute_statements.push({
+          id: stmt.id,
+          statement: stmt.statement,
+          statement_analysis_types: stmt.statement_analysis_types,
+          attribute_statement_options: (stmt.attribute_statement_options || [])
+            .sort((a, b) => b.weight - a.weight)
+        });
+      });
 
-      setStatements(transformedStatements);
+      setAttributes(Object.values(transformedAttributes));
+      setStatements(data || []); // Ensure we pass an array
+      setSelectedStatements(new Set(data?.map(s => s.id) || []));
     } catch (error) {
       console.error('Error fetching statements:', error);
       toast.error('Failed to fetch bank statements');
@@ -1054,30 +1343,369 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
     }
   };
 
+  const fetchAvailableAttributes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('attributes')
+        .select(`
+          id,
+          name,
+          description,
+          attribute_industry_mapping (
+            industry_id
+          ),
+          attribute_statements (
+            id,
+            statement,
+            attribute_bank_id,
+            statement_analysis_types (
+              analysis_type_id,
+              analysis_types (
+                id,
+                name
+              )
+            ),
+            attribute_statement_options (
+              id,
+              option_text,
+              weight
+            )
+          )
+        `)
+        .order('name');
+
+      if (error) throw error;
+
+      // Filter out statements that are already linked to other banks
+      // except for statements linked to the current bank
+      const transformedAttributes = data
+        .map(attr => {
+          // Group statements by their text content to remove duplicates
+          const statementsMap = new Map();
+          
+          (attr.attribute_statements || []).forEach(stmt => {
+            // If statement is already linked to this bank, always include it
+            // For template statements, only include if linked to bank's analysis type
+            const isLinkedToBank = stmt.attribute_bank_id === bank.id;
+            const isTemplate = !stmt.attribute_bank_id;
+            const isLinkedToAnalysisType = stmt.statement_analysis_types?.some(
+              sat => sat.analysis_type_id === bank.analysis_type_id
+            );
+
+            if (isLinkedToBank || (isTemplate && isLinkedToAnalysisType)) {
+              // Prefer the bank's version over template if both exist
+              if (!statementsMap.has(stmt.statement) || stmt.attribute_bank_id === bank.id) {
+                statementsMap.set(stmt.statement, stmt);
+              }
+            }
+          });
+
+          return {
+            ...attr,
+            attribute_statements: Array.from(statementsMap.values())
+              .sort((a, b) => a.statement.localeCompare(b.statement))
+          };
+        })
+        .filter(attr => attr.attribute_statements.length > 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setAvailableAttributes(transformedAttributes);
+    } catch (error) {
+      console.error('Error fetching attributes:', error);
+      toast.error('Failed to fetch attributes');
+    }
+  };
+
+  const handleEdit = async () => {
+    setIsEditMode(true);
+    await fetchAvailableAttributes();
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      console.log('Saving with editedBank:', editedBank); // Debug log
+
+      // Update bank details
+      const { data: updatedBank, error: bankUpdateError } = await supabase
+        .from('attribute_banks')
+        .update({
+          name: editedBank.name,
+          status: editedBank.status,
+          company_id: editedBank.company_id === 'none' ? null : editedBank.company_id // Don't convert to number, keep as UUID string
+        })
+        .eq('id', bank.id)
+        .select(`
+          *,
+          companies (
+            id,
+            name
+          ),
+          analysis_types (
+            id,
+            name
+          )
+        `)
+        .single();
+
+      if (bankUpdateError) {
+        console.error('Bank update error:', bankUpdateError); // Debug log
+        throw bankUpdateError;
+      }
+
+      console.log('Updated bank:', updatedBank); // Debug log
+
+      // Get current statements in the bank
+      const { data: currentStatements, error: fetchError } = await supabase
+        .from('attribute_statements')
+        .select('id')
+        .eq('attribute_bank_id', bank.id);
+
+      if (fetchError) throw fetchError;
+
+      // Create sets for efficient comparison
+      const currentIds = new Set(currentStatements.map(s => s.id));
+      const newIds = new Set(statements.map(s => s.id));
+
+      // Find statements to delete (in current but not in new)
+      const statementsToDelete = currentStatements
+        .filter(s => !newIds.has(s.id))
+        .map(s => s.id);
+
+      // Find statements to add (in new but not in current)
+      const statementsToAdd = statements.filter(s => !currentIds.has(s.id));
+
+      // Delete removed statements
+      if (statementsToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('attribute_statements')
+          .delete()
+          .in('id', statementsToDelete);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // Add new statements
+      if (statementsToAdd.length > 0) {
+        // Insert statements first
+        const newStatements = statementsToAdd.map(stmt => ({
+          attribute_id: stmt.attribute_id,
+          attribute_bank_id: bank.id,
+          statement: stmt.statement
+        }));
+
+        const { data: insertedStatements, error: insertError } = await supabase
+          .from('attribute_statements')
+          .insert(newStatements)
+          .select('id');
+
+        if (insertError) throw insertError;
+
+        // Now insert options for each statement
+        const optionsToInsert = [];
+        insertedStatements.forEach((stmt, index) => {
+          const originalStatement = statementsToAdd[index];
+          if (originalStatement.attribute_statement_options) {
+            originalStatement.attribute_statement_options.forEach(opt => {
+              optionsToInsert.push({
+                statement_id: stmt.id,
+                option_text: opt.option_text,
+                weight: opt.weight
+              });
+            });
+          }
+        });
+
+        if (optionsToInsert.length > 0) {
+          const { error: optionsError } = await supabase
+            .from('attribute_statement_options')
+            .insert(optionsToInsert);
+
+          if (optionsError) throw optionsError;
+        }
+      }
+
+      toast.success('Bank updated successfully');
+      setIsEditMode(false);
+      setAvailableAttributes([]);
+      setSelectedStatements(new Set());
+      
+      // Update the bank object with new data
+      const updatedBankWithMeta = {
+        ...updatedBank,
+        analysis_type: updatedBank.analysis_types?.name || 'Unknown'
+      };
+      console.log('Setting bank to:', updatedBankWithMeta); // Debug log
+      setSelectedBank(updatedBankWithMeta);
+      onRefresh?.();
+      
+      // Fetch updated statements
+      fetchBankStatements(updatedBankWithMeta);
+    } catch (error) {
+      console.error('Error updating bank:', error);
+      toast.error('Failed to update bank');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setIsEditMode(false);
+    setAvailableAttributes([]);
+    setSelectedStatements(new Set());
+    fetchBankStatements(bank);
+  };
+
+  const handleDelete = async () => {
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('attribute_banks')
+        .delete()
+        .eq('id', bank.id);
+
+      if (error) throw error;
+
+      toast.success('Bank deleted successfully');
+      onRefresh?.();
+      setSelectedBank(null);
+    } catch (error) {
+      console.error('Error deleting bank:', error);
+      toast.error('Failed to delete bank');
+    } finally {
+      setLoading(false);
+      setShowDeleteDialog(false);
+    }
+  };
+
   if (!bank) return null;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">{bank.name}</h2>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Company: {bank.companies?.name || 'No Company'}</span>
-            <span>•</span>
-            <span>Status: {bank.status}</span>
-            <span>•</span>
-            <span>Created: {new Date(bank.created_at).toLocaleDateString()}</span>
-          </div>
+        <div className="space-y-4 flex-1 mr-4">
+          {isEditMode ? (
+            <>
+              <div>
+                <Label>Bank Name</Label>
+                <Input
+                  value={editedBank.name}
+                  onChange={(e) => setEditedBank(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Enter bank name"
+                />
+              </div>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <Label>Company</Label>
+                  <Select
+                    value={editedBank.company_id}
+                    onValueChange={(value) => {
+                      console.log('Company selected:', value); // Debug log
+                      setEditedBank(prev => {
+                        const updated = { ...prev, company_id: value };
+                        console.log('Updated editedBank:', updated); // Debug log
+                        return updated;
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select company" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="none">No Company</SelectItem>
+                        {companies?.map(company => (
+                          <SelectItem key={company.id} value={String(company.id)}>
+                            {company.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1">
+                  <Label>Status</Label>
+                  <Select
+                    value={editedBank.status}
+                    onValueChange={(value) => setEditedBank(prev => ({ ...prev, status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="draft">Draft</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="text-2xl font-bold">{bank.name}</h2>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Company: {bank.companies?.name || 'No Company'}</span>
+                <span>•</span>
+                <span>Analysis Type: {bank.analysis_types?.name || 'Not Set'}</span>
+                <span>•</span>
+                <span>Status: {bank.status}</span>
+                <span>•</span>
+                <span>Created: {new Date(bank.created_at).toLocaleDateString()}</span>
+              </div>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
+          {isEditMode ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancel}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEdit}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1086,70 +1714,34 @@ function BankDetails({ bank, onRefresh, setSelectedBank, setIsEditDialogOpen }) 
         {loading ? (
           <div className="text-center py-4">Loading statements...</div>
         ) : (
-          <Table className="border">
-            <TableHeader>
-              <TableRow className="border-b">
-                <TableHead>Attribute Name</TableHead>
-                <TableHead>Analysis Type</TableHead>
-                <TableHead>Statement</TableHead>
-                <TableHead>Options & Weights</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {statements.length > 0 ? (
-                statements.map((statement) => (
-                  <TableRow key={statement.id} className="border-b">
-                    <TableCell className="border-r">{statement.attributeName}</TableCell>
-                    <TableCell className="border-r capitalize">{statement.analysisType}</TableCell>
-                    <TableCell className="border-r">{statement.statement}</TableCell>
-                    <TableCell className="border-r">
-                      <div className="space-y-2">
-                        {statement.options?.length > 0 ? (
-                          statement.options.map((option) => (
-                            <div key={option.id} className="flex justify-between items-center text-sm">
-                              <span className="font-medium">{option.option_text}</span>
-                              <span className="text-muted-foreground ml-2">{option.weight}</span>
-                            </div>
-                          ))
-                        ) : (
-                          <span className="text-muted-foreground">No options defined</span>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-4">
-                    No statements found in this bank
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <CreateAttributeBank
+            attributes={isEditMode ? availableAttributes : attributes}
+            selectedItems={statements || []} // Ensure we pass an array
+            onSelectedItemsChange={isEditMode ? (items) => setStatements(items || []) : undefined}
+            selectedIndustryFilter={selectedIndustryFilter}
+            onIndustryFilterChange={setSelectedIndustryFilter}
+            attributeSearchQuery={attributeSearchQuery}
+            onAttributeSearchQueryChange={setAttributeSearchQuery}
+            isViewMode={!isEditMode}
+            industries={industries}
+            selectedStatements={selectedStatements}
+          />
         )}
       </div>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Bank</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{bank.name}"? This will permanently delete the bank and all its statements. This action cannot be undone.
+              Are you sure you want to delete this bank? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                handleDelete();
-                setShowDeleteDialog(false);
-              }}
-            >
+            <Button variant="destructive" onClick={handleDelete}>
               Delete
             </Button>
           </DialogFooter>
@@ -1352,15 +1944,6 @@ function BankList({ banks, onBankSelect, onRefresh, setSelectedBank, setIsEditDi
                     className="p-2 hover:bg-accent/50 rounded-md cursor-pointer"
                   >
                     <Eye className="h-4 w-4" />
-                  </div>
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEditClick(bank);
-                    }}
-                    className="p-2 hover:bg-accent/50 rounded-md cursor-pointer"
-                  >
-                    <Pencil className="h-4 w-4" />
                   </div>
                   <div
                     onClick={(e) => {
