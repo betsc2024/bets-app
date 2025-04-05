@@ -91,7 +91,7 @@ export default function AttributeManagement() {
   const [currentStatement, setCurrentStatement] = useState({
     text: '',
     attribute_bank_id: null,
-    analysisType: null,
+    analysisTypes: [], // Changed from analysisType to analysisTypes array
     options: [
       { text: 'Excellent', weight: 100 },
       { text: 'Very Good', weight: 80 },
@@ -596,7 +596,7 @@ export default function AttributeManagement() {
 
   const addStatement = async () => {
     try {
-      if (!selectedAttributeId || !currentStatement.text.trim() || !currentStatement.analysisType) {
+      if (!selectedAttributeId || !currentStatement.text.trim() || currentStatement.analysisTypes.length === 0) {
         toast.error('Please fill in all required fields');
         return;
       }
@@ -613,13 +613,15 @@ export default function AttributeManagement() {
 
       if (statementError) throw statementError;
 
-      // Create analysis type mapping
+      // Create analysis type mappings
+      const analysisTypeMappings = currentStatement.analysisTypes.map(typeId => ({
+        statement_id: statementData.id,
+        analysis_type_id: typeId
+      }));
+
       const { error: analysisTypeError } = await supabase
         .from('statement_analysis_types')
-        .insert([{
-          statement_id: statementData.id,
-          analysis_type_id: currentStatement.analysisType
-        }]);
+        .insert(analysisTypeMappings);
 
       if (analysisTypeError) throw analysisTypeError;
 
@@ -644,7 +646,7 @@ export default function AttributeManagement() {
       setCurrentStatement({
         text: '',
         attribute_bank_id: null,
-        analysisType: null,
+        analysisTypes: [],
         options: [
           { text: 'Excellent', weight: 100 },
           { text: 'Very Good', weight: 80 },
@@ -1027,29 +1029,26 @@ export default function AttributeManagement() {
 
             {/* Analysis Type Selection */}
             <div className="mb-6">
-              <Label>Select Analysis Type</Label>
-              <Select
-                value={currentStatement.analysisType}
-                onValueChange={(value) => {
-                  setCurrentStatement({
-                    ...currentStatement,
-                    analysisType: value,
-                    attribute_bank_id: null
-                  });
-                  setSelectedAttributeId(null);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an analysis type..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {analysisTypeList.map((type) => (
-                    <SelectItem key={type.id} value={type.id}>
-                      {type.analysis_type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Analysis Types</Label>
+              <div className="space-y-2 mt-2 border rounded-md p-4 max-h-[200px] overflow-y-auto">
+                {analysisTypeList.map(type => (
+                  <div key={type.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`analysis-type-${type.id}`}
+                      checked={currentStatement.analysisTypes.includes(type.id)}
+                      onCheckedChange={(checked) => {
+                        setCurrentStatement(prev => ({
+                          ...prev,
+                          analysisTypes: checked
+                            ? [...prev.analysisTypes, type.id]
+                            : prev.analysisTypes.filter(id => id !== type.id)
+                        }));
+                      }}
+                    />
+                    <Label htmlFor={`analysis-type-${type.id}`}>{type.analysis_type}</Label>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Attribute Selection */}
@@ -1058,10 +1057,10 @@ export default function AttributeManagement() {
               <Select
                 value={selectedAttributeId}
                 onValueChange={setSelectedAttributeId}
-                disabled={!currentStatement.analysisType}
+                disabled={!currentStatement.analysisTypes.length > 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={currentStatement.analysisType ? "Search or select an attribute..." : "Select an analysis type first"} />
+                  <SelectValue placeholder={currentStatement.analysisTypes.length > 0 ? "Search or select an attribute..." : "Select an analysis type first"} />
                 </SelectTrigger>
                 <SelectContent>
                   <div className="p-2">
@@ -1169,6 +1168,7 @@ export default function AttributeManagement() {
                 disabled={
                   !selectedAttributeId ||
                   !currentStatement.text.trim() ||
+                  currentStatement.analysisTypes.length === 0 ||
                   currentStatement.options.length === 0 ||
                   currentStatement.options.some(opt => !opt.text.trim() || opt.weight === undefined || opt.weight === null)
                 }
