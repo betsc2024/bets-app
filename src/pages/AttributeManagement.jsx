@@ -510,46 +510,129 @@ export default function AttributeManagement() {
     });
   };
 
+  const handleEditIndustryChange = (attribute, editKey, industryId, checked) => {
+    setEditedData(prev => {
+      const currentEdit = prev[editKey] || {};
+      const currentIndustries = currentEdit.attribute?.industries || attribute.industries || [];
+      
+      const newIndustries = checked
+        ? [...currentIndustries, industries.find(i => i.id === industryId)]
+        : currentIndustries.filter(i => i.id !== industryId);
+
+      return {
+        ...prev,
+        [editKey]: {
+          ...currentEdit,
+          attribute: {
+            ...(currentEdit.attribute || attribute),
+            industries: newIndustries
+          }
+        }
+      };
+    });
+  };
+
   const handleSaveEdit = async (editKey) => {
     try {
       setLoading(true);
       const editedDataItem = editedData[editKey];
-      if (!editedDataItem?.statement) return;
+      if (!editedDataItem) return;
 
       const { statement, attribute } = editedDataItem;
 
-      // 1. Update attribute basic info
-      const { error: attributeError } = await supabase
-        .from('attributes')
-        .update({
-          name: attribute.name,
-          description: attribute.description,
-          is_industry_standard: attribute.is_industry_standard
-        })
-        .eq('id', attribute.id);
+      // 1. Update attribute basic info if changed
+      if (attribute?.name || attribute?.description || attribute?.is_industry_standard) {
+        const { error: attributeError } = await supabase
+          .from('attributes')
+          .update({
+            name: attribute.name,
+            description: attribute.description,
+            is_industry_standard: attribute.is_industry_standard
+          })
+          .eq('id', attribute.id);
 
-      if (attributeError) throw attributeError;
+        if (attributeError) throw attributeError;
+      }
 
-      // 2. Delete existing analysis types for this statement
-      const { error: deleteError } = await supabase
-        .from('statement_analysis_types')
-        .delete()
-        .eq('statement_id', statement.id);
+      // 2. Update statement text if changed
+      if (statement?.statement) {
+        const { error: statementError } = await supabase
+          .from('attribute_statements')
+          .update({ statement: statement.statement })
+          .eq('id', statement.id);
 
-      if (deleteError) throw deleteError;
+        if (statementError) throw statementError;
+      }
 
-      // 3. Create new analysis types
-      if (statement.analysisTypes?.length > 0) {
-        const analysisTypeMappings = statement.analysisTypes.map(type => ({
-          statement_id: statement.id,
-          analysis_type_id: type.id
+      // 3. Update options if changed
+      if (statement?.attribute_statement_options) {
+        const updates = statement.attribute_statement_options.map(option => ({
+          id: option.id,
+          option_text: option.option_text,
+          weight: option.weight
         }));
 
-        const { error: analysisTypeError } = await supabase
-          .from('statement_analysis_types')
-          .insert(analysisTypeMappings);
+        for (const update of updates) {
+          const { error: optionError } = await supabase
+            .from('attribute_statement_options')
+            .update({
+              option_text: update.option_text,
+              weight: update.weight
+            })
+            .eq('id', update.id);
 
-        if (analysisTypeError) throw analysisTypeError;
+          if (optionError) throw optionError;
+        }
+      }
+
+      // 4. Update analysis types if changed
+      if (statement?.analysisTypes) {
+        // First delete existing mappings
+        const { error: deleteAnalysisTypeError } = await supabase
+          .from('statement_analysis_types')
+          .delete()
+          .eq('statement_id', statement.id);
+
+        if (deleteAnalysisTypeError) throw deleteAnalysisTypeError;
+
+        // Then insert new mappings
+        if (statement.analysisTypes.length > 0) {
+          const analysisTypeMappings = statement.analysisTypes.map(type => ({
+            statement_id: statement.id,
+            analysis_type_id: type.id
+          }));
+
+          const { error: analysisTypeError } = await supabase
+            .from('statement_analysis_types')
+            .insert(analysisTypeMappings);
+
+          if (analysisTypeError) throw analysisTypeError;
+        }
+      }
+
+      // 5. Update industry mappings if changed
+      if (attribute?.industries) {
+        // First delete existing mappings
+        const { error: deleteIndustryError } = await supabase
+          .from('attribute_industry_mapping')
+          .delete()
+          .eq('attribute_id', attribute.id);
+
+        if (deleteIndustryError) throw deleteIndustryError;
+
+        // Then insert new mappings
+        if (attribute.industries.length > 0) {
+          const industryMappings = attribute.industries.map(industry => ({
+            attribute_id: attribute.id,
+            industry_id: industry.id
+          }));
+
+          const { error: industryMappingError } = await supabase
+            .from('attribute_industry_mapping')
+            .insert(industryMappings);
+
+          if (industryMappingError) throw industryMappingError;
+        }
       }
 
       setEditingRows(prev => {
@@ -557,6 +640,7 @@ export default function AttributeManagement() {
         delete newState[editKey];
         return newState;
       });
+
       setEditedData(prev => {
         const newState = { ...prev };
         delete newState[editKey];
@@ -566,7 +650,7 @@ export default function AttributeManagement() {
       toast.success('Changes saved successfully');
       await fetchAttributes();
     } catch (error) {
-      console.error('Error updating:', error);
+      console.error('Error saving changes:', error);
       toast.error('Failed to save changes');
     } finally {
       setLoading(false);
@@ -1538,10 +1622,7 @@ export default function AttributeManagement() {
                                 <div key={analysisType.id} className="flex items-center space-x-2">
                                   <Checkbox
                                     id={`analysis-type-${statement.id}-${analysisType.id}`}
-                                    checked={
-                                      editedData[editKey]?.statement?.analysisTypes?.some(at => at.id === analysisType.id) ||
-                                      statement.analysisTypes?.some(at => at.id === analysisType.id)
-                                    }
+                                    checked={(editedData[editKey]?.statement?.analysisTypes || statement.analysisTypes)?.some(at => at.id === analysisType.id)}
                                     onCheckedChange={(checked) => 
                                       handleEditAnalysisTypeChange(
                                         attribute,
@@ -1619,52 +1700,170 @@ export default function AttributeManagement() {
                           )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300">
-                          <div className="whitespace-pre-wrap break-words max-w-[300px]">
-                            {statement.statement}
-                          </div>
+                          {isEditing ? (
+                            <div className="p-2">
+                              <Textarea
+                                value={editedData[editKey]?.statement?.statement || statement.statement}
+                                onChange={(e) => {
+                                  setEditedData(prev => ({
+                                    ...prev,
+                                    [editKey]: {
+                                      ...prev[editKey],
+                                      statement: {
+                                        ...(prev[editKey]?.statement || statement),
+                                        statement: e.target.value
+                                      }
+                                    }
+                                  }));
+                                }}
+                                className="w-full min-h-[100px]"
+                              />
+                            </div>
+                          ) : (
+                            <div className="whitespace-pre-wrap break-words max-w-[300px]">
+                              {statement.statement}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300 p-0">
-                          {statement.attribute_statement_options?.length > 0 ? (
+                          {isEditing ? (
+                            <div className="divide-y divide-gray-300">
+                              {(editedData[editKey]?.statement?.attribute_statement_options || statement.attribute_statement_options || [])
+                                .sort((a, b) => b.weight - a.weight)
+                                .map((option) => (
+                                  <div key={option.id} className="p-2">
+                                    <Input
+                                      value={option.option_text}
+                                      onChange={(e) => {
+                                        setEditedData(prev => {
+                                          const currentEdit = prev[editKey] || {};
+                                          const currentOptions = currentEdit.statement?.attribute_statement_options || 
+                                            statement.attribute_statement_options || [];
+                                          
+                                          const updatedOptions = currentOptions.map(opt => 
+                                            opt.id === option.id 
+                                              ? { ...opt, option_text: e.target.value }
+                                              : opt
+                                          );
+
+                                          return {
+                                            ...prev,
+                                            [editKey]: {
+                                              ...currentEdit,
+                                              statement: {
+                                                ...(currentEdit.statement || statement),
+                                                attribute_statement_options: updatedOptions
+                                              }
+                                            }
+                                          };
+                                        });
+                                      }}
+                                      className="w-full text-sm"
+                                    />
+                                  </div>
+                                ))}
+                            </div>
+                          ) : (
                             <div className="divide-y divide-gray-300">
                               {statement.attribute_statement_options
-                                .sort((a, b) => b.weight - a.weight)
+                                ?.sort((a, b) => b.weight - a.weight)
                                 .map((option) => (
                                   <div key={option.id} className="text-sm p-2 whitespace-pre-wrap break-words">
                                     {option.option_text}
                                   </div>
                                 ))}
                             </div>
-                          ) : (
-                            <div className="p-2">
-                              <span className="text-muted-foreground">No options</span>
-                            </div>
                           )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300 p-0">
-                          {statement.attribute_statement_options?.length > 0 ? (
+                          {isEditing ? (
+                            <div className="divide-y divide-gray-300">
+                              {(editedData[editKey]?.statement?.attribute_statement_options || statement.attribute_statement_options || [])
+                                .sort((a, b) => b.weight - a.weight)
+                                .map((option) => (
+                                  <div key={option.id} className="p-2">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      value={option.weight}
+                                      onChange={(e) => {
+                                        const weight = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                        setEditedData(prev => {
+                                          const currentEdit = prev[editKey] || {};
+                                          const currentOptions = currentEdit.statement?.attribute_statement_options || 
+                                            statement.attribute_statement_options || [];
+                                          
+                                          const updatedOptions = currentOptions.map(opt => 
+                                            opt.id === option.id 
+                                              ? { ...opt, weight }
+                                              : opt
+                                          );
+
+                                          return {
+                                            ...prev,
+                                            [editKey]: {
+                                              ...currentEdit,
+                                              statement: {
+                                                ...(currentEdit.statement || statement),
+                                                attribute_statement_options: updatedOptions
+                                              }
+                                            }
+                                          };
+                                        });
+                                      }}
+                                      className="w-20 text-sm text-center"
+                                    />
+                                  </div>
+                                ))}
+                            </div>
+                          ) : (
                             <div className="divide-y divide-gray-300">
                               {statement.attribute_statement_options
-                                .sort((a, b) => b.weight - a.weight)
+                                ?.sort((a, b) => b.weight - a.weight)
                                 .map((option) => (
                                   <div key={option.id} className="text-sm p-2 text-center">
                                     {option.weight}
                                   </div>
                                 ))}
                             </div>
-                          ) : (
-                            <div className="p-2 text-center">
-                              <span>-</span>
-                            </div>
                           )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300">
-                          <div className="text-sm">
-                            {attribute.industries?.map(industry => (
-                              <div key={industry.id} className="mb-1">
-                                {industry.name}
-                              </div>
-                            ))}
-                          </div>
+                          {isEditing ? (
+                            <div className="space-y-2 p-2">
+                              {industries.map((industry) => (
+                                <div key={industry.id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`industry-${attribute.id}-${industry.id}`}
+                                    checked={(editedData[editKey]?.attribute?.industries || attribute.industries)?.some(i => i.id === industry.id)}
+                                    onCheckedChange={(checked) => 
+                                      handleEditIndustryChange(
+                                        attribute,
+                                        editKey,
+                                        industry.id,
+                                        checked
+                                      )
+                                    }
+                                  />
+                                  <Label
+                                    htmlFor={`industry-${attribute.id}-${industry.id}`}
+                                    className="text-sm"
+                                  >
+                                    {industry.name}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-sm">
+                              {attribute.industries?.map(industry => (
+                                <div key={industry.id} className="mb-1">
+                                  {industry.name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="align-top">
                           <div className="flex justify-center space-x-2">
@@ -1684,7 +1883,7 @@ export default function AttributeManagement() {
                                 <Button
                                   size="sm"
                                   onClick={() => handleSaveEdit(editKey)}
-                                  disabled={loading}
+                                  disabled={loading || !editedData[editKey]}
                                 >
                                   {loading ? 'Saving...' : 'Save'}
                                 </Button>
