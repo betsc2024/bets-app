@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { toast } from 'sonner';
 import {
@@ -8,6 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Dialog as DialogComponent } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
@@ -52,17 +54,29 @@ export default function AttributeManagement() {
   const [loading, setLoading] = useState(false);
   const [selectedAttribute, setSelectedAttribute] = useState(null);
   const [statements, setStatements] = useState([]);
-  const [newStatement, setNewStatement] = useState({ text: '' });
-  const [statementOptions, setStatementOptions] = useState([]);
-  const [newOption, setNewOption] = useState({ text: '', weight: 0 });
-
   const [newAttribute, setNewAttribute] = useState({
     name: '',
     description: '',
     selectedAnalysisTypes: [],
     is_industry_standard: true,
-    selectedIndustries: []
+    selectedIndustries: [],
+    statement: {
+      text: '',
+      options: [
+        { text: 'Excellent', weight: 100 },
+        { text: 'Very Good', weight: 80 },
+        { text: 'Good', weight: 60 },
+        { text: 'Fair & Satisfactory', weight: 40 },
+        { text: 'Needs Improvement', weight: 20 }
+      ]
+    }
   });
+  const [showStatementForm, setShowStatementForm] = useState(false);
+  const [isAttributeValid, setIsAttributeValid] = useState(false);
+  const [isStatementValid, setIsStatementValid] = useState(false);
+  const [statementOptions, setStatementOptions] = useState([]);
+  const [newOption, setNewOption] = useState({ text: '', weight: 0 });
+
   const [analysisTypeList, setAnalysisTypeList] = useState([]);
   const [industrySearchQuery, setIndustrySearchQuery] = useState('');
   const [attributeSearchQuery, setAttributeSearchQuery] = useState('');
@@ -72,10 +86,12 @@ export default function AttributeManagement() {
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState('all');
   const [selectedAttributeFilter, setSelectedAttributeFilter] = useState('all');
   const [selectedStatementFilter, setSelectedStatementFilter] = useState('all');
+  const [selectedAnalysisTypeFilter, setSelectedAnalysisTypeFilter] = useState('all');
   const [selectedAttributeId, setSelectedAttributeId] = useState(null);
   const [currentStatement, setCurrentStatement] = useState({
     text: '',
     attribute_bank_id: null,
+    analysisType: null,
     options: [
       { text: 'Excellent', weight: 100 },
       { text: 'Very Good', weight: 80 },
@@ -93,6 +109,7 @@ export default function AttributeManagement() {
   const [industryDialogOpen, setIndustryDialogOpen] = useState(false);
   const [attributeDialogOpen, setAttributeDialogOpen] = useState(false);
   const [statementDialogOpen, setStatementDialogOpen] = useState(false);
+  const [analysisTypeDialogOpen, setAnalysisTypeDialogOpen] = useState(false);
 
   // Pagination state
   const [page, setPage] = useState(1);
@@ -150,18 +167,7 @@ export default function AttributeManagement() {
     try {
       setLoading(true);
 
-      // First fetch all industries to have a lookup table
-      const { data: industriesData, error: industriesError } = await supabase
-        .from('industries')
-        .select('*')
-        .order('name');
-
-      if (industriesError) throw industriesError;
-
-      const industriesMap = Object.fromEntries(
-        industriesData.map(industry => [industry.id, industry])
-      );
-
+      // Fetch attributes with their analysis types and statements
       const { data: attributesData, error: attributesError } = await supabase
         .from('attributes')
         .select(`
@@ -170,59 +176,63 @@ export default function AttributeManagement() {
           description,
           is_industry_standard,
           attribute_industry_mapping (
-            industry_id
-          ),
-          attribute_analysis_types (
-            analysis_type_id
+            industry_id,
+            industries (
+              id,
+              name
+            )
           ),
           attribute_statements (
             id,
             statement,
-            analysis_types,
-            industries,
             attribute_bank_id,
+            statement_analysis_types (
+              id,
+              analysis_type:analysis_types (
+                id,
+                name
+              )
+            ),
             attribute_statement_options (
               id,
               option_text,
               weight
             )
           )
-        `)
-        .order('name', { ascending: true });
+        `);
 
-      if (attributesError) throw attributesError;
+      if (attributesError) {
+        console.error('Error details:', attributesError);
+        throw attributesError;
+      }
 
-      console.log('Raw attributes data from DB:', attributesData);
-
-      // Transform the data for the UI and filter out bank-linked statements
-      const transformedData = attributesData.map(attr => {
-        console.log('Processing attribute:', {
-          id: attr.id,
-          name: attr.name,
-          industryMappings: attr.attribute_industry_mapping,
-          analysisTypes: attr.attribute_analysis_types
-        });
-
-        return {
+      // Transform the data to make it easier to work with and filter out bank-linked statements
+      const transformedData = (attributesData || [])
+        .map(attr => ({
           ...attr,
-          analysis_types: attr.attribute_analysis_types?.map(at => at.analysis_type_id) || [],
-          selectedIndustries: attr.attribute_industry_mapping?.map(im => im.industry_id) || [],
-          industryNames: attr.attribute_industry_mapping?.map(im => industriesMap[im.industry_id]?.name || im.industry_id) || [],
+          industries: attr.attribute_industry_mapping?.map(im => ({
+            id: im.industry_id,
+            name: im.industries?.name
+          })) || [],
           attribute_statements: (attr.attribute_statements || [])
-            ?.filter(stmt => stmt.attribute_bank_id === null)
-            ?.map(stmt => ({
+            .filter(stmt => !stmt.attribute_bank_id) // Only include statements not linked to any bank
+            .map(stmt => ({
               ...stmt,
-              analysis_types: stmt.analysis_types || [],
-              industries: stmt.industries || [],
-              industryNames: (stmt.industries || []).map(id => industriesMap[id]?.name || id),
+              analysisTypes: stmt.statement_analysis_types?.map(sat => ({
+                id: sat.analysis_type.id,
+                name: sat.analysis_type.name
+              })) || []
             }))
-            .sort((a, b) => a.statement.localeCompare(b.statement))
-        };
-      });
+        }))
+        // Removing this filter so we show all attributes, even those without statements
+        // .filter(attr => attr.attribute_statements.length > 0)
 
-      console.log('Transformed data:', transformedData);
+      // Sort the transformed data alphabetically by name
+      const sortedData = transformedData.sort((a, b) => 
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+      );
 
-      setAttributes(transformedData);
+      setAttributes(sortedData);
     } catch (error) {
       console.error('Error fetching attributes:', error);
       toast.error('Failed to fetch attributes');
@@ -245,132 +255,15 @@ export default function AttributeManagement() {
     }
   };
 
-  const handleSaveAttribute = async () => {
-    try {
-      console.log('Starting attribute save with data:', newAttribute);
-      
-      if (!newAttribute.name.trim()) {
-        toast.error('Attribute name is required');
-        return;
-      }
+  const [currentStep, setCurrentStep] = useState(1);
 
-      setLoading(true);
-
-      // 1. Check for existing attribute
-      console.log('Checking for existing attribute...');
-      const { data: existingAttributes, error: checkError } = await supabase
-        .from('attributes')
-        .select('*')
-        .filter('name', 'eq', newAttribute.name.trim());
-
-      if (checkError) {
-        console.error('Error checking existing attributes:', checkError);
-        throw checkError;
-      }
-
-      if (existingAttributes && existingAttributes.length > 0) {
-        console.log('Found existing attribute with same name');
-        toast.error(`An attribute named "${newAttribute.name}" already exists`);
-        return;
-      }
-
-      // First create the attribute
-      console.log('About to create attribute with data:', {
-        name: newAttribute.name.trim(),
-        description: newAttribute.description?.trim() || '',
-        is_industry_standard: true
-      });
-
-      const { data: attributeData, error: attributeError } = await supabase
-        .from('attributes')
-        .insert([{
-          name: newAttribute.name.trim(),
-          description: newAttribute.description?.trim() || '',
-          is_industry_standard: true
-        }])
-        .select()
-        .single();
-
-      if (attributeError) {
-        console.error('Error creating attribute:', attributeError);
-        throw attributeError;
-      }
-
-      console.log('Successfully created attribute:', attributeData);
-
-      // Then create the industry mappings
-      if (newAttribute.selectedIndustries.length > 0) {
-        console.log('Creating industry mappings:', {
-          selectedIndustries: newAttribute.selectedIndustries,
-          attributeId: attributeData.id
-        });
-
-        const industryMappings = newAttribute.selectedIndustries.map(industryId => ({
-          attribute_id: attributeData.id,
-          industry_id: industryId
-        }));
-
-        console.log('Prepared industry mappings:', industryMappings);
-
-        const { data: mappingData, error: mappingError } = await supabase
-          .from('attribute_industry_mapping')
-          .insert(industryMappings)
-          .select();
-
-        if (mappingError) {
-          console.error('Error creating industry mappings:', mappingError);
-          throw mappingError;
-        }
-
-        console.log('Successfully created industry mappings:', mappingData);
-      } else {
-        console.log('No industries selected, skipping industry mappings');
-      }
-
-      // 4. Insert analysis type mappings if any
-      if (newAttribute.selectedAnalysisTypes.length > 0) {
-        console.log('Creating analysis type mappings for:', newAttribute.selectedAnalysisTypes);
-        const analysisTypeMappings = newAttribute.selectedAnalysisTypes.map(typeId => ({
-          attribute_id: attributeData.id,
-          analysis_type_id: typeId
-        }));
-
-        console.log('Creating analysis type mappings for:', {
-          selectedTypes: newAttribute.selectedAnalysisTypes,
-          mappings: analysisTypeMappings
-        });
-
-        const { error: analysisTypeError } = await supabase
-          .from('attribute_analysis_types')  // Changed back to the correct table name
-          .insert(analysisTypeMappings);
-
-        if (analysisTypeError) {
-          console.error('Error creating analysis type mappings:', analysisTypeError);
-          throw analysisTypeError;
-        }
-        console.log('Successfully created analysis type mappings');
-      }
-
-      toast.success('Attribute added successfully');  // Changed message from 'saved' to 'added'
-
-      // Reset form
-      console.log('Resetting form...');
-      setNewAttribute({
-        name: '',
-        description: '',
-        selectedAnalysisTypes: [],
-        selectedIndustries: []
-      });
-
-      // Refresh attributes list
-      console.log('Fetching updated attributes...');
-      await fetchAttributes();
-      console.log('Attribute creation process completed successfully');
-    } catch (error) {
-      console.error('Error in attribute creation process:', error);
-      toast.error('Failed to add attribute');  // Changed message from 'save' to 'add'
-    } finally {
-      setLoading(false);
+  const handleNameChange = (value) => {
+    setNewAttribute(prev => ({ ...prev, name: value }));
+    setIsAttributeValid(!!value.trim());
+    if (value.trim()) {
+      setShowStatementForm(true);
+    } else {
+      setShowStatementForm(false);
     }
   };
 
@@ -378,124 +271,144 @@ export default function AttributeManagement() {
     e.preventDefault();
     setLoading(true);
     try {
-      console.log('Starting attribute creation with data:', newAttribute);
-
-      const { data: existingAttributes, error: checkError } = await supabase
-        .from('attributes')
-        .select('*')
-        .filter('name', 'eq', newAttribute.name);
-
-      if (checkError) {
-        console.error('Error checking existing attributes:', checkError);
-        throw checkError;
-      }
-
-      console.log('Existing attributes check result:', existingAttributes);
-
-      if (existingAttributes && existingAttributes.length > 0) {
-        console.log('Found existing attribute with same name');
-        toast.error(`An attribute named "${newAttribute.name}" already exists`);
+      if (!newAttribute.name.trim() || !newAttribute.statement.text.trim()) {
+        toast.error('Both attribute and statement details are required');
         return;
       }
 
-      console.log('Attempting to insert new attribute...');
+      // 1. Create attribute
       const { data: attributeData, error: attributeError } = await supabase
         .from('attributes')
         .insert([{
           name: newAttribute.name,
           description: newAttribute.description,
-          analysis_type: newAttribute.selectedAnalysisTypes,
           is_industry_standard: newAttribute.is_industry_standard
         }])
         .select()
         .single();
 
-      if (attributeError) {
-        console.error('Error creating attribute:', attributeError);
-        throw attributeError;
-      }
+      if (attributeError) throw attributeError;
 
-      console.log('Successfully created attribute:', attributeData);
-
+      // 2. Create industry mappings
       if (newAttribute.selectedIndustries.length > 0) {
-        console.log('Creating industry mappings for:', newAttribute.selectedIndustries);
         const industryMappings = newAttribute.selectedIndustries.map(industryId => ({
           attribute_id: attributeData.id,
           industry_id: industryId
         }));
 
-        console.log('Creating industry mappings for:', {
-          selectedIndustries: newAttribute.selectedIndustries,
-          mappings: industryMappings
-        });
-
         const { error: mappingError } = await supabase
           .from('attribute_industry_mapping')
           .insert(industryMappings);
 
-        if (mappingError) {
-          console.error('Error creating industry mappings:', mappingError);
-          throw mappingError;
-        }
-        console.log('Successfully created industry mappings');
+        if (mappingError) throw mappingError;
       }
 
-      toast.success('Attribute added successfully');
-      console.log('Resetting form...');
+      // 3. Create statement
+      const { data: statementData, error: statementError } = await supabase
+        .from('attribute_statements')
+        .insert([{
+          attribute_id: attributeData.id,
+          statement: newAttribute.statement.text
+        }])
+        .select()
+        .single();
+
+      if (statementError) throw statementError;
+
+      // 4. Create statement analysis type mappings
+      if (newAttribute.selectedAnalysisTypes.length > 0) {
+        const analysisTypeMappings = newAttribute.selectedAnalysisTypes.map(typeId => ({
+          statement_id: statementData.id,
+          analysis_type_id: typeId
+        }));
+
+        const { error: analysisTypeError } = await supabase
+          .from('statement_analysis_types')
+          .insert(analysisTypeMappings);
+
+        if (analysisTypeError) throw analysisTypeError;
+      }
+
+      // 5. Create statement options
+      const optionsMappings = newAttribute.statement.options.map(option => ({
+        statement_id: statementData.id,
+        option_text: option.text,
+        weight: option.weight
+      }));
+
+      const { error: optionsError } = await supabase
+        .from('attribute_statement_options')
+        .insert(optionsMappings);
+
+      if (optionsError) throw optionsError;
+
+      toast.success('Attribute created successfully');
+      
+      // Reset forms
       setNewAttribute({
         name: '',
         description: '',
         selectedAnalysisTypes: [],
-        selectedIndustries: []
+        is_industry_standard: true,
+        selectedIndustries: [],
+        statement: {
+          text: '',
+          options: [
+            { text: 'Excellent', weight: 100 },
+            { text: 'Very Good', weight: 80 },
+            { text: 'Good', weight: 60 },
+            { text: 'Fair & Satisfactory', weight: 40 },
+            { text: 'Needs Improvement', weight: 20 }
+          ]
+        }
       });
-      console.log('Fetching updated attributes...');
+      setShowStatementForm(false);
+      setCurrentStep(1);
       await fetchAttributes();
-      console.log('Attribute creation process completed successfully');
+      const addAttributeDialogRef = document.querySelector('#add-attribute-dialog-ref');
+      if (addAttributeDialogRef) {
+        addAttributeDialogRef.click();
+      }
     } catch (error) {
       console.error('Error in attribute creation process:', error);
-      toast.error('Failed to add attribute');
+      toast.error('Failed to create attribute');
     } finally {
       setLoading(false);
     }
   };
 
-  const deleteAttribute = async () => {
-    if (!attributeToDelete) return;
-
+  const deleteAttribute = async (attributeId) => {
     try {
-      // 1. Delete industry mappings
-      console.log('Deleting industry mappings...');
-      const { error: industryMappingError } = await supabase
-        .from('attribute_industry_mapping')
-        .delete()
-        .eq('attribute_id', attributeToDelete.id);
+      setLoading(true);
 
-      if (industryMappingError) {
-        console.error('Error deleting industry mappings:', industryMappingError);
-        throw industryMappingError;
+      // 1. First get all statements for this attribute
+      const { data: statements, error: stmtError } = await supabase
+        .from('attribute_statements')
+        .select('id')
+        .eq('attribute_id', attributeId);
+
+      if (stmtError) {
+        console.error('Error fetching statements:', stmtError);
+        throw stmtError;
       }
 
-      // 2. Delete analysis type mappings
-      console.log('Deleting analysis type mappings...');
-      const { error: analysisTypeMappingError } = await supabase
-        .from('attribute_analysis_types')
-        .delete()
-        .eq('attribute_id', attributeToDelete.id);
+      const statementIds = statements?.map(s => s.id) || [];
 
-      if (analysisTypeMappingError) {
-        console.error('Error deleting analysis type mappings:', analysisTypeMappingError);
-        throw analysisTypeMappingError;
+      // 2. Delete statement analysis type mappings
+      if (statementIds.length > 0) {
+        const { error: analysisTypeError } = await supabase
+          .from('statement_analysis_types')
+          .delete()
+          .in('statement_id', statementIds);
+
+        if (analysisTypeError) {
+          console.error('Error deleting analysis type mappings:', analysisTypeError);
+          throw analysisTypeError;
+        }
       }
 
       // 3. Delete statement options
-      console.log('Deleting statement options...');
-      const { data: statements } = await supabase
-        .from('attribute_statements')
-        .select('id')
-        .eq('attribute_id', attributeToDelete.id);
-
-      if (statements && statements.length > 0) {
-        const statementIds = statements.map(s => s.id);
+      if (statementIds.length > 0) {
         const { error: optionsError } = await supabase
           .from('attribute_statement_options')
           .delete()
@@ -508,23 +421,32 @@ export default function AttributeManagement() {
       }
 
       // 4. Delete statements
-      console.log('Deleting statements...');
-      const { error: statementsError } = await supabase
+      const { error: stmtDeleteError } = await supabase
         .from('attribute_statements')
         .delete()
-        .eq('attribute_id', attributeToDelete.id);
+        .eq('attribute_id', attributeId);
 
-      if (statementsError) {
-        console.error('Error deleting statements:', statementsError);
-        throw statementsError;
+      if (stmtDeleteError) {
+        console.error('Error deleting statements:', stmtDeleteError);
+        throw stmtDeleteError;
       }
 
-      // 5. Finally delete the attribute
-      console.log('Deleting attribute...');
+      // 5. Delete industry mappings
+      const { error: industryError } = await supabase
+        .from('attribute_industry_mapping')
+        .delete()
+        .eq('attribute_id', attributeId);
+
+      if (industryError) {
+        console.error('Error deleting industry mappings:', industryError);
+        throw industryError;
+      }
+
+      // 6. Finally delete the attribute
       const { error: attributeError } = await supabase
         .from('attributes')
         .delete()
-        .eq('id', attributeToDelete.id);
+        .eq('id', attributeId);
 
       if (attributeError) {
         console.error('Error deleting attribute:', attributeError);
@@ -532,18 +454,18 @@ export default function AttributeManagement() {
       }
 
       toast.success('Attribute deleted successfully');
-      fetchAttributes();
+      await fetchAttributes();
     } catch (error) {
       console.error('Error in deletion process:', error);
       toast.error('Failed to delete attribute');
     } finally {
-      setAttributeToDelete(null);
+      setLoading(false);
     }
   };
 
   const handleEdit = (attribute, statement) => {
     const editKey = `${attribute.id}-${statement.id}`;
-
+    
     // Initialize edit data with current values
     setEditedData(prev => ({
       ...prev,
@@ -557,13 +479,7 @@ export default function AttributeManagement() {
         statement: {
           id: statement.id,
           statement: statement.statement,
-          selectedAnalysisTypes: statement.analysis_types || [],
-          selectedIndustries: statement.industries || [], // These are the original IDs
-          options: statement.attribute_statement_options?.map(opt => ({
-            id: opt.id,
-            text: opt.option_text,
-            weight: opt.weight
-          })) || []
+          analysisTypes: statement.analysisTypes || []
         }
       }
     }));
@@ -574,192 +490,70 @@ export default function AttributeManagement() {
     }));
   };
 
-  const isEditing = (attributeId, statementId) => {
-    const editKey = `${attributeId}-${statementId}`;
-    return editingRows[editKey] || false;
-  };
-
-  const handleCancelEdit = (attributeId, statementId) => {
-    const editKey = `${attributeId}-${statementId}`;
-    setEditingRows({});
-    setEditedData({});
-    setDeletedOptions(prev => {
-      const newState = { ...prev };
-      delete newState[statementId];
-      return newState;
-    });
-    // Clear search queries when canceling edit
-    setIndustrySearchQuery('');
-    setAttributeSearchQuery('');
-    setStatementSearchQuery('');
-  };
-
-  const addStatement = async () => {
-    try {
-      if (!user) {
-        toast.error('You must be logged in to add statements');
-        return;
-      }
-
-      // Check if user is super_admin
-      const isSuperAdmin = () => {
-        return (
-          user?.app_metadata?.role === 'super_admin' ||
-          user?.role === 'super_admin' ||
-          user?.email?.endsWith('@bets.com')  // Assuming @bets.com emails are super admins
-        );
-      };
-
-      if (!isSuperAdmin()) {
-        toast.error('Only super admins can add statements');
-        return;
-      }
-
-      if (!selectedAttributeId) {
-        toast.error('Please select an attribute');
-        return;
-      }
-
-      if (!currentStatement.text.trim()) {
-        toast.error('Statement text is required');
-        return;
-      }
-      console.log(currentStatement);
-
-      setLoading(true);
-
-      // Get the user's role claim from JWT
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      // 1. Insert the statement
-      const { data: statementData, error: statementError } = await supabase
-        .from('attribute_statements')
-        .insert([{
-          attribute_id: selectedAttributeId,
-          statement: currentStatement.text.trim(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }])
-        .select('*')
-        .single();
-
-      if (statementError) {
-        console.error('Statement Error:', statementError);
-        throw new Error('Failed to create statement/Check it can be duplicate statement');
-      }
-
-      // 2. Insert the options with proper weights
-      const optionsToInsert = currentStatement.options.map(option => ({
-        statement_id: statementData.id,
-        option_text: option.text,
-        weight: option.weight,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }));
-
-      const { error: optionsError } = await supabase
-        .from('attribute_statement_options')
-        .insert(optionsToInsert)
-        .select('*');
-
-      if (optionsError) {
-        console.error('Options Error:', optionsError);
-        // Cleanup the statement if options insertion fails
-        await supabase
-          .from('attribute_statements')
-          .delete()
-          .eq('id', statementData.id);
-        throw new Error('Failed to create options');
-      }
-
-      toast.success('Statement and options added successfully');
-
-      // Reset form
-      setCurrentStatement({
-        text: '',
-        attribute_bank_id: null,
-        options: [
-          { text: 'Excellent', weight: 100 },
-          { text: 'Very Good', weight: 80 },
-          { text: 'Good', weight: 60 },
-          { text: 'Fair & Satisfactory', weight: 40 },
-          { text: 'Needs Improvement', weight: 20 }
-        ]
-      });
-      setSelectedAttributeId(null);
-
-      // Refresh the data
-      await fetchAttributes();
-    } catch (error) {
-      console.error('Error saving statement:', error);
-      toast.error(error.message || 'Failed to save statement');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEditSubmit = async (editKey) => {
-    try {
-      const editedDataItem = editedData[editKey];
-      if (!editedDataItem) {
-        toast.error("No changes to save");
-        return;
-      }
-
-      // Extract IDs from editKey
-      const match = editKey.match(/^([^-]+-[^-]+-[^-]+-[^-]+-[^-]+)-(.+)$/);
-      if (!match) {
-        toast.error("Invalid edit key format");
-        return;
-      }
-      const [_, attributeId, statementId] = match;
+  const handleEditAnalysisTypeChange = (attribute, statement, editKey, analysisType, checked) => {
+    setEditedData(prev => {
+      const currentEdit = prev[editKey] || {};
+      const currentTypes = currentEdit.statement?.analysisTypes || statement.analysisTypes || [];
       
-      setLoading(true);
+      const newTypes = checked
+        ? [...currentTypes, { id: analysisType.id, name: analysisType.analysis_type }]
+        : currentTypes.filter(t => t.id !== analysisType.id);
 
-      // Update attribute details
+      return {
+        ...prev,
+        [editKey]: {
+          ...currentEdit,
+          statement: {
+            ...(currentEdit.statement || statement),
+            analysisTypes: newTypes
+          }
+        }
+      };
+    });
+  };
+
+  const handleSaveEdit = async (editKey) => {
+    try {
+      setLoading(true);
+      const editedDataItem = editedData[editKey];
+      if (!editedDataItem?.statement) return;
+
+      const { statement, attribute } = editedDataItem;
+
+      // 1. Update attribute basic info
       const { error: attributeError } = await supabase
         .from('attributes')
         .update({
-          name: editedDataItem.attribute.name,
-          description: editedDataItem.attribute.description,
-          is_industry_standard: editedDataItem.attribute.is_industry_standard
+          name: attribute.name,
+          description: attribute.description,
+          is_industry_standard: attribute.is_industry_standard
         })
-        .eq('id', attributeId);
+        .eq('id', attribute.id);
 
       if (attributeError) throw attributeError;
 
-      // Update statement with new analysis types and industries
-      const { error: statementError } = await supabase
-        .from('attribute_statements')
-        .update({
-          statement: editedDataItem.statement.statement,
-          analysis_types: editedDataItem.statement.selectedAnalysisTypes,
-          industries: editedDataItem.statement.selectedIndustries
-        })
-        .eq('id', statementId);
+      // 2. Delete existing analysis types for this statement
+      const { error: deleteError } = await supabase
+        .from('statement_analysis_types')
+        .delete()
+        .eq('statement_id', statement.id);
 
-      if (statementError) throw statementError;
+      if (deleteError) throw deleteError;
 
-      // Update options
-      if (editedDataItem.statement.options?.length > 0) {
-        for (const option of editedDataItem.statement.options) {
-          if (option.id) {
-            const { error: optionError } = await supabase
-              .from('attribute_statement_options')
-              .update({
-                option_text: option.text || option.option_text,
-                weight: option.weight
-              })
-              .eq('id', option.id);
+      // 3. Create new analysis types
+      if (statement.analysisTypes?.length > 0) {
+        const analysisTypeMappings = statement.analysisTypes.map(type => ({
+          statement_id: statement.id,
+          analysis_type_id: type.id
+        }));
 
-            if (optionError) throw optionError;
-          }
-        }
+        const { error: analysisTypeError } = await supabase
+          .from('statement_analysis_types')
+          .insert(analysisTypeMappings);
+
+        if (analysisTypeError) throw analysisTypeError;
       }
 
-      // Reset edit states for just this row
       setEditingRows(prev => {
         const newState = { ...prev };
         delete newState[editKey];
@@ -781,90 +575,90 @@ export default function AttributeManagement() {
     }
   };
 
-  const handleAnalysisTypeChange = (editKey, typeId) => {
+  const handleCancelEdit = (attributeId, statementId) => {
+    const editKey = `${attributeId}-${statementId}`;
+    setEditingRows(prev => {
+      const newState = { ...prev };
+      delete newState[editKey];
+      return newState;
+    });
     setEditedData(prev => {
-      const currentEdit = prev[editKey];
-      if (!currentEdit) return prev;
-
-      const currentTypes = [...(currentEdit.statement.selectedAnalysisTypes || [])];
-      const newTypes = currentTypes.includes(typeId)
-        ? currentTypes.filter(id => id !== typeId)
-        : [...currentTypes, typeId];
-
-      return {
-        ...prev,
-        [editKey]: {
-          ...currentEdit,
-          statement: {
-            ...currentEdit.statement,
-            selectedAnalysisTypes: newTypes
-          }
-        }
-      };
+      const newState = { ...prev };
+      delete newState[editKey];
+      return newState;
     });
   };
 
-  const handleIndustryChange = (editKey, industryId) => {
-    setEditedData(prev => {
-      const currentEdit = prev[editKey];
-      if (!currentEdit) return prev;
-
-      const currentIndustries = [...(currentEdit.statement.selectedIndustries || [])];
-      const newIndustries = currentIndustries.includes(industryId)
-        ? currentIndustries.filter(id => id !== industryId)
-        : [...currentIndustries, industryId];
-
-      return {
-        ...prev,
-        [editKey]: {
-          ...currentEdit,
-          statement: {
-            ...currentEdit.statement,
-            selectedIndustries: newIndustries
-          }
-        }
-      };
-    });
+  const isEditing = (attributeId, statementId) => {
+    const editKey = `${attributeId}-${statementId}`;
+    return editingRows[editKey] || false;
   };
 
-  const DeleteStatementDialog = () => (
-    <AlertDialog open={!!statementToDelete} onOpenChange={() => setStatementToDelete(null)}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Are you sure you want to delete this statement?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will permanently delete the statement and all its options. This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => setStatementToDelete(null)}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              if (statementToDelete) {
-                handleDeleteStatement(statementToDelete);
-              }
-            }}
-            className="bg-red-500 hover:bg-red-600"
-          >
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+  const addStatement = async () => {
+    try {
+      if (!selectedAttributeId || !currentStatement.text.trim() || !currentStatement.analysisType) {
+        toast.error('Please fill in all required fields');
+        return;
+      }
 
-  const handleDeleteOption = (attributeId, statementId, optionId) => {
-    setDeletedOptions(prev => ({
-      ...prev,
-      [statementId]: [...(prev[statementId] || []), optionId]
-    }));
+      // Create statement
+      const { data: statementData, error: statementError } = await supabase
+        .from('attribute_statements')
+        .insert([{
+          attribute_id: selectedAttributeId,
+          statement: currentStatement.text
+        }])
+        .select()
+        .single();
 
-    setEditedData(prev => {
-      const newData = { ...prev };
-      const statement = newData[`${attributeId}-${statementId}`].statement;
-      statement.options = statement.options.filter(opt => opt.id !== optionId);
-      return newData;
-    });
+      if (statementError) throw statementError;
+
+      // Create analysis type mapping
+      const { error: analysisTypeError } = await supabase
+        .from('statement_analysis_types')
+        .insert([{
+          statement_id: statementData.id,
+          analysis_type_id: currentStatement.analysisType
+        }]);
+
+      if (analysisTypeError) throw analysisTypeError;
+
+      // Create options
+      const optionsMappings = currentStatement.options
+        .filter(opt => opt.text.trim())
+        .map(option => ({
+          statement_id: statementData.id,
+          option_text: option.text,
+          weight: option.weight
+        }));
+
+      const { error: optionsError } = await supabase
+        .from('attribute_statement_options')
+        .insert(optionsMappings);
+
+      if (optionsError) throw optionsError;
+
+      toast.success('Statement added successfully');
+      
+      // Reset form
+      setCurrentStatement({
+        text: '',
+        attribute_bank_id: null,
+        analysisType: null,
+        options: [
+          { text: 'Excellent', weight: 100 },
+          { text: 'Very Good', weight: 80 },
+          { text: 'Good', weight: 60 },
+          { text: 'Fair & Satisfactory', weight: 40 },
+          { text: 'Needs Improvement', weight: 20 }
+        ]
+      });
+      setSelectedAttributeId(null);
+      await fetchAttributes();
+    } catch (error) {
+      console.error('Error adding statement:', error);
+      toast.error('Failed to add statement');
+    }
   };
 
   const processAttributesForDisplay = (attributes) => {
@@ -876,13 +670,7 @@ export default function AttributeManagement() {
           statement: {
             ...stmt,
             // Use statement's analysis types if present, otherwise use attribute's
-            analysis_types: stmt.analysis_types?.length > 0 
-              ? stmt.analysis_types 
-              : attr.attribute_analysis_types?.map(at => at.analysis_type_id) || [],
-            // Use statement's industries if present, otherwise use attribute's
-            industries: stmt.industries?.length > 0
-              ? stmt.industries
-              : attr.attribute_industry_mapping?.map(im => im.industry_id) || []
+            analysisTypes: stmt.analysisTypes || []
           }
         }));
       }
@@ -892,9 +680,11 @@ export default function AttributeManagement() {
         statement: {
           id: `no-statement-${attr.id}`,
           statement: '',
-          analysis_types: attr.attribute_analysis_types?.map(at => at.analysis_type_id) || [],
-          industries: attr.attribute_industry_mapping?.map(im => im.industry_id) || [],
-          attribute_statement_options: []
+          analysisTypes: attr.attribute_analysis_types?.map(at => ({
+            id: at.analysis_type_id,
+            name: at.analysis_types?.analysis_type
+          })) || [],
+          industries: attr.attribute_industry_mapping?.map(im => im.industry_id) || []
         }
       }];
     });
@@ -907,26 +697,76 @@ export default function AttributeManagement() {
   };
 
   // Filter and paginate the data
-  const filteredAttributes = attributes.filter(attr => {
-    const matchesIndustry = selectedIndustryFilter === 'all' ||
-      attr.attribute_statements?.some(stmt =>
-        stmt.industries?.some(industry => industry === selectedIndustryFilter)
+  const filteredAttributes = useMemo(() => {
+    let filtered = attributes.flatMap(attribute => {
+      const statements = attribute.attribute_statements || [];
+      if (statements.length === 0) {
+        // If no statements, create a placeholder item
+        return [{
+          attribute: {
+            ...attribute,
+            analysis_types: attribute.attribute_analysis_types?.map(at => ({
+              id: at.analysis_type_id,
+              name: at.analysis_types?.analysis_type
+            })) || [],
+            industries: attribute.attribute_industry_mapping?.map(im => ({
+              id: im.industry_id,
+              name: im.industries?.name
+            })) || []
+          },
+          statement: {
+            id: `no-statement-${attribute.id}`,
+            statement: '',
+            attribute_statement_options: []
+          }
+        }];
+      }
+      
+      return statements.map(statement => ({
+        attribute: {
+          ...attribute,
+          analysis_types: attribute.attribute_analysis_types?.map(at => ({
+            id: at.analysis_type_id,
+            name: at.analysis_types?.analysis_type
+          })) || [],
+          industries: attribute.attribute_industry_mapping?.map(im => ({
+            id: im.industry_id,
+            name: im.industries?.name
+          })) || []
+        },
+        statement
+      }));
+    });
+
+    // Apply industry filter
+    if (selectedIndustryFilter !== 'all') {
+      filtered = filtered.filter(item =>
+        item.attribute.industries.some(ind => ind.id === selectedIndustryFilter)
       );
+    }
 
-    const matchesAttribute = selectedAttributeFilter === 'all' ||
-      attr.id === selectedAttributeFilter;
+    // Apply attribute filter
+    if (selectedAttributeFilter !== 'all') {
+      filtered = filtered.filter(item => item.attribute.id === selectedAttributeFilter);
+    }
 
-    const matchesStatement = selectedStatementFilter === 'all' ||
-      attr.attribute_statements?.some(stmt =>
-        stmt.id === selectedStatementFilter
+    // Apply statement filter
+    if (selectedStatementFilter !== 'all') {
+      filtered = filtered.filter(item => item.statement.id === selectedStatementFilter);
+    }
+
+    // Apply analysis type filter
+    if (selectedAnalysisTypeFilter !== 'all') {
+      filtered = filtered.filter(item => 
+        item.attribute.analysis_types.some(at => at.id === selectedAnalysisTypeFilter)
       );
+    }
 
-    return matchesIndustry && matchesAttribute && matchesStatement;
-  });
+    return filtered;
+  }, [attributes, selectedIndustryFilter, selectedAttributeFilter, selectedStatementFilter, selectedAnalysisTypeFilter]);
 
-  const processedItems = processAttributesForDisplay(filteredAttributes);
-  const totalPages = Math.ceil(processedItems.length / itemsPerPage);
-  const paginatedItems = processedItems.slice(
+  const totalPages = Math.ceil(filteredAttributes.length / itemsPerPage);
+  const paginatedItems = filteredAttributes.slice(
     (page - 1) * itemsPerPage,
     page * itemsPerPage
   );
@@ -967,174 +807,250 @@ export default function AttributeManagement() {
     });
   };
 
+  const handleIndustryChange = (editKey, industryId) => {
+    setEditedData(prev => {
+      const currentEdit = prev[editKey];
+      if (!currentEdit) return prev;
+
+      const currentIndustries = [...(currentEdit.statement.selectedIndustries || [])];
+      const newIndustries = currentIndustries.includes(industryId)
+        ? currentIndustries.filter(id => id !== industryId)
+        : [...currentIndustries, industryId];
+
+      return {
+        ...prev,
+        [editKey]: {
+          ...currentEdit,
+          statement: {
+            ...currentEdit.statement,
+            selectedIndustries: newIndustries
+          }
+        }
+      };
+    });
+  };
+
+  const handleAnalysisTypeChange = (selectedTypes) => {
+    setNewAttribute(prev => ({
+      ...prev,
+      selectedAnalysisTypes: selectedTypes
+    }));
+  };
+
   return (
     <div className="flex-1 px-4 sm:px-6 lg:px-8 py-6 lg:py-8 overflow-auto relative">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-primary">Attribute Management</h1>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-primary mb-4">Attribute Management</h1>
         {isSuperAdmin() && (
-          <Button onClick={() => setAttributeDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Attribute
-          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button className="w-[280px] h-12 text-lg font-medium">
+                <Plus className="h-5 w-5 mr-2" /> Add NEW Attribute
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
+              <DialogHeader className="p-6 pb-4 flex-none">
+                <DialogTitle>Add New Attribute</DialogTitle>
+                <DialogDescription>
+                  Create a new attribute with its evaluation statement
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <div className="px-6 pb-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Left Column - Attribute Details */}
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <div>
+                          <Label className="text-sm font-medium">Analysis Types</Label>
+                          <div className="mt-1.5 border rounded-md p-4 max-h-[200px] overflow-y-auto">
+                            {analysisTypeList.map((type) => (
+                              <div key={type.id} className="flex items-center space-x-2 py-1">
+                                <Checkbox
+                                  id={`type-${type.id}`}
+                                  checked={newAttribute.selectedAnalysisTypes.includes(type.id)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setNewAttribute({
+                                        ...newAttribute,
+                                        selectedAnalysisTypes: [...newAttribute.selectedAnalysisTypes, type.id]
+                                      });
+                                    } else {
+                                      setNewAttribute({
+                                        ...newAttribute,
+                                        selectedAnalysisTypes: newAttribute.selectedAnalysisTypes.filter(id => id !== type.id)
+                                      });
+                                    }
+                                  }}
+                                />
+                                <Label htmlFor={`type-${type.id}`} className="text-sm">{type.analysis_type}</Label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="name" className="text-sm font-medium">Attribute Name</Label>
+                          <Input
+                            id="name"
+                            value={newAttribute.name}
+                            onChange={(e) => handleNameChange(e.target.value)}
+                            placeholder="Enter attribute name"
+                            className="mt-1.5"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="description" className="text-sm font-medium">Description</Label>
+                          <Textarea
+                            id="description"
+                            value={newAttribute.description}
+                            onChange={(e) => setNewAttribute({ ...newAttribute, description: e.target.value })}
+                            placeholder="Enter attribute description"
+                            className="mt-1.5"
+                          />
+                        </div>
+
+                        <div>
+                          <Label className="text-sm font-medium">Industries</Label>
+                          <div className="mt-1.5 border rounded-md p-4 max-h-[200px] overflow-y-auto">
+                            {industries.map((industry) => (
+                              <div key={industry.id} className="flex items-center space-x-2 py-1">
+                                <Checkbox
+                                  id={`industry-${industry.id}`}
+                                  checked={newAttribute.selectedIndustries.includes(industry.id)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setNewAttribute({
+                                        ...newAttribute,
+                                        selectedIndustries: [...newAttribute.selectedIndustries, industry.id]
+                                      });
+                                    } else {
+                                      setNewAttribute({
+                                        ...newAttribute,
+                                        selectedIndustries: newAttribute.selectedIndustries.filter(id => id !== industry.id)
+                                      });
+                                    }
+                                  }}
+                                />
+                                <Label htmlFor={`industry-${industry.id}`} className="text-sm">{industry.name}</Label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column - Statement Details */}
+                    <div className="space-y-6">
+                      <div>
+                        <Label htmlFor="statement" className="text-sm font-medium">Evaluation Statement</Label>
+                        <Textarea
+                          id="statement"
+                          value={newAttribute.statement.text}
+                          onChange={(e) => {
+                            setNewAttribute({
+                              ...newAttribute,
+                              statement: { ...newAttribute.statement, text: e.target.value }
+                            });
+                            setIsStatementValid(!!e.target.value.trim());
+                          }}
+                          placeholder="Enter evaluation statement"
+                          className="mt-1.5"
+                        />
+                      </div>
+
+                      <div>
+                        <Label className="text-sm font-medium">Statement Options</Label>
+                        <div className="mt-1.5 space-y-3">
+                          {newAttribute.statement.options.map((option, index) => (
+                            <div key={index} className="flex gap-3 items-center">
+                              <Input
+                                value={option.text}
+                                onChange={(e) => {
+                                  const newOptions = [...newAttribute.statement.options];
+                                  newOptions[index].text = e.target.value;
+                                  setNewAttribute({
+                                    ...newAttribute,
+                                    statement: { ...newAttribute.statement, options: newOptions }
+                                  });
+                                }}
+                                placeholder="Option text"
+                                className="flex-1"
+                              />
+                              <Input
+                                type="number"
+                                value={option.weight}
+                                onChange={(e) => {
+                                  const newOptions = [...newAttribute.statement.options];
+                                  newOptions[index].weight = parseInt(e.target.value);
+                                  setNewAttribute({
+                                    ...newAttribute,
+                                    statement: { ...newAttribute.statement, options: newOptions }
+                                  });
+                                }}
+                                placeholder="Weight"
+                                className="w-24"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="p-6 pt-4 border-t">
+                <DialogClose id="add-attribute-dialog-ref" asChild>
+                  <Button variant="outline">Cancel</Button>
+                </DialogClose>
+                <Button
+                  onClick={addAttribute}
+                  disabled={!newAttribute.name.trim() || !newAttribute.statement.text.trim() || loading}
+                >
+                  {loading ? 'Creating...' : 'Create Attribute'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </div>
 
       {/* Top Section - Split into two cards */}
-      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 mb-6">
-        {/* Left Card - Add Attribute */}
-        {isSuperAdmin() && (
-          <Card className="w-full">
-            <div className="p-6">
-              <h2 className="text-lg font-semibold mb-4">Add Attribute</h2>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="attributeName">Attribute Name</Label>
-                  <Input
-                    id="attributeName"
-                    value={newAttribute.name}
-                    onChange={(e) => setNewAttribute({ ...newAttribute, name: e.target.value })}
-                    placeholder="Enter attribute name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="attributeDescription">Description</Label>
-                  <Textarea
-                    id="attributeDescription"
-                    value={newAttribute.description}
-                    onChange={(e) => setNewAttribute({ ...newAttribute, description: e.target.value })}
-                    placeholder="Enter attribute description"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Analysis Types</Label>
-                  <div className="space-y-2">
-                    <Input
-                      type="text"
-                      placeholder="Search analysis types..."
-                      value={analysisTypeSearchQuery}
-                      onChange={(e) => setAnalysisTypeSearchQuery(e.target.value)}
-                      className="mb-2"
-                    />
-                    <div className="max-h-48 overflow-y-auto border rounded-md p-2">
-                      {analysisTypeList
-                        .filter(type =>
-                          type.analysis_type.toLowerCase().includes(analysisTypeSearchQuery.toLowerCase())
-                        )
-                        .map((type) => (
-                          <div key={type.id} className="flex items-center space-x-2 py-1">
-                            <Checkbox
-                              id={`analysis-type-${type.id}`}
-                              checked={newAttribute.selectedAnalysisTypes.includes(type.id)}
-                              onCheckedChange={(checked) => {
-                                console.log('Analysis Type selection changed:', {
-                                  typeId: type.id,
-                                  checked,
-                                  currentSelection: newAttribute.selectedAnalysisTypes
-                                });
-                                const updatedTypes = checked
-                                  ? [...newAttribute.selectedAnalysisTypes, type.id]
-                                  : newAttribute.selectedAnalysisTypes.filter(id => id !== type.id);
-                                console.log('Updated analysis types:', updatedTypes);
-                                setNewAttribute({ ...newAttribute, selectedAnalysisTypes: updatedTypes });
-                              }}
-                            />
-                            <Label
-                              htmlFor={`analysis-type-${type.id}`}
-                              className="text-sm font-normal cursor-pointer"
-                            >
-                              {type.analysis_type}
-                            </Label>
-                          </div>
-                        ))}
-                    </div>
-                    {newAttribute.selectedAnalysisTypes.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {newAttribute.selectedAnalysisTypes.map(typeId => {
-                          const type = analysisTypeList.find(t => t.id === typeId);
-                          return type ? (
-                            <Badge
-                              key={type.id}
-                              variant="secondary"
-                              className="flex items-center gap-1"
-                            >
-                              {type.analysis_type}
-                              <X
-                                className="h-3 w-3 cursor-pointer"
-                                onClick={() => {
-                                  setNewAttribute({
-                                    ...newAttribute,
-                                    selectedAnalysisTypes: newAttribute.selectedAnalysisTypes.filter(id => id !== type.id)
-                                  });
-                                }}
-                              />
-                            </Badge>
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Industries</Label>
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="Search industries..."
-                      value={industrySearchQuery}
-                      onChange={(e) => setIndustrySearchQuery(e.target.value)}
-                      className="w-full"
-                    />
-                    <div className="border rounded-lg p-4 space-y-2 h-48 overflow-y-auto">
-                      {industries
-                        .filter(industry =>
-                          industry.name.toLowerCase().includes(industrySearchQuery.toLowerCase())
-                        )
-                        .map((industry) => (
-                          <div key={industry.id} className="flex items-center gap-2">
-                            <Checkbox
-                              id={`industry-${industry.id}`}
-                              checked={newAttribute.selectedIndustries.includes(industry.id)}
-                              onCheckedChange={(checked) => {
-                                console.log('Industry selection changed:', {
-                                  industryId: industry.id,
-                                  checked,
-                                  currentSelection: newAttribute.selectedIndustries
-                                });
-                                const updatedIndustries = checked
-                                  ? [...newAttribute.selectedIndustries, industry.id]
-                                  : newAttribute.selectedIndustries.filter(id => id !== industry.id);
-                                console.log('Updated industries:', updatedIndustries);
-                                setNewAttribute(prev => ({
-                                  ...prev,
-                                  selectedIndustries: updatedIndustries
-                                }));
-                              }}
-                            />
-                            <Label
-                              htmlFor={`industry-${industry.id}`}
-                              className="text-sm font-normal"
-                            >
-                              {industry.name}
-                            </Label>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-                <Button
-                  onClick={handleSaveAttribute}
-                  className="w-full"
-                  disabled={!newAttribute.name.trim()}
-                >
-                  Save Attribute
-                </Button>
-              </div>
-            </div>
-          </Card>
-        )}
-        {/* Right Card - Sub-attributes and Options */}
+      <div className="grid grid-cols-1 gap-6 mb-6">
+        {/* Statement Addition Section */}
         <Card className="w-full">
           <div className="p-6">
             <h2 className="text-lg font-semibold mb-4">Add Statement and Options</h2>
+
+            {/* Analysis Type Selection */}
+            <div className="mb-6">
+              <Label>Select Analysis Type</Label>
+              <Select
+                value={currentStatement.analysisType}
+                onValueChange={(value) => {
+                  setCurrentStatement({
+                    ...currentStatement,
+                    analysisType: value,
+                    attribute_bank_id: null
+                  });
+                  setSelectedAttributeId(null);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an analysis type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {analysisTypeList.map((type) => (
+                    <SelectItem key={type.id} value={type.id}>
+                      {type.analysis_type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Attribute Selection */}
             <div className="mb-6">
@@ -1142,9 +1058,10 @@ export default function AttributeManagement() {
               <Select
                 value={selectedAttributeId}
                 onValueChange={setSelectedAttributeId}
+                disabled={!currentStatement.analysisType}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Search or select an attribute..." />
+                  <SelectValue placeholder={currentStatement.analysisType ? "Search or select an attribute..." : "Select an analysis type first"} />
                 </SelectTrigger>
                 <SelectContent>
                   <div className="p-2">
@@ -1265,7 +1182,7 @@ export default function AttributeManagement() {
 
       {/* Bottom Section - Tabular View */}
       <div className="mb-6">
-        <Card>
+        <Card className="w-full">
           <CardHeader>
             <CardTitle>Search and Filters</CardTitle>
             <CardDescription className="text-sm text-muted-foreground">
@@ -1273,7 +1190,7 @@ export default function AttributeManagement() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <Label>Filter by Industry</Label>
                 <DialogComponent open={industryDialogOpen} onOpenChange={setIndustryDialogOpen}>
@@ -1334,13 +1251,6 @@ export default function AttributeManagement() {
                               {industry.name}
                             </div>
                           ))}
-                        {industries.filter(industry =>
-                          industry.name.toLowerCase().includes(industrySearchQuery.toLowerCase())
-                        ).length === 0 && industrySearchQuery && (
-                            <div className="text-sm text-muted-foreground text-center py-6">
-                              No industries found
-                            </div>
-                          )}
                       </div>
                     </ScrollArea>
                   </DialogContent>
@@ -1414,13 +1324,6 @@ export default function AttributeManagement() {
                               </div>
                             </div>
                           ))}
-                        {attributes.filter(attr =>
-                          attr.name.toLowerCase().includes(attributeSearchQuery.toLowerCase())
-                        ).length === 0 && attributeSearchQuery && (
-                            <div className="text-sm text-muted-foreground text-center py-6">
-                              No attributes found
-                            </div>
-                          )}
                       </div>
                     </ScrollArea>
                   </DialogContent>
@@ -1435,9 +1338,7 @@ export default function AttributeManagement() {
                       {selectedStatementFilter === 'all'
                         ? "All Statements"
                         : truncateText(
-                          attributes
-                            .flatMap(attr => attr.attribute_statements || [])
-                            .find(stmt => stmt.id === selectedStatementFilter)?.statement || "Select Statement",
+                          filteredAttributes.find(item => item.statement.id === selectedStatementFilter)?.statement.statement || "Select Statement",
                           40
                         )}
                       <ChevronDown className="h-4 w-4 opacity-50" />
@@ -1473,57 +1374,106 @@ export default function AttributeManagement() {
                         >
                           All Statements
                         </div>
-                        {attributes
-                          .flatMap(attr =>
-                            (attr.attribute_statements || [])
-                              .filter(stmt => stmt.statement &&
-                                stmt.statement.toLowerCase().includes(statementSearchQuery.toLowerCase())
-                              )
-                              .map(stmt => ({
-                                id: stmt.id,
-                                statement: stmt.statement,
-                                attributeName: attr.name
-                              }))
+                        {filteredAttributes
+                          .filter(item => 
+                            item.statement.statement?.toLowerCase().includes(statementSearchQuery.toLowerCase())
                           )
-                          .map((stmt) => (
+                          .map((item) => (
                             <div
-                              key={stmt.id}
+                              key={item.statement.id}
                               className={cn(
                                 "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
-                                selectedStatementFilter === stmt.id && "bg-accent"
+                                selectedStatementFilter === item.statement.id && "bg-accent"
                               )}
                               onClick={() => {
-                                setSelectedStatementFilter(stmt.id);
+                                setSelectedStatementFilter(item.statement.id);
                                 setStatementDialogOpen(false);
                               }}
                             >
                               <div className="flex flex-col gap-0.5">
-                                <span className="truncate" title={stmt.statement}>
-                                  {truncateText(stmt.statement, 60)}
+                                <span className="truncate" title={item.statement.statement}>
+                                  {truncateText(item.statement.statement, 60)}
                                 </span>
                                 <span className="text-xs text-muted-foreground truncate">
-                                  {truncateText(stmt.attributeName, 30)}
+                                  {truncateText(item.attribute.name, 30)}
                                 </span>
                               </div>
                             </div>
                           ))}
-                        {attributes
-                          .flatMap(attr => attr.attribute_statements || [])
-                          .filter(stmt =>
-                            stmt.statement &&
-                            stmt.statement.toLowerCase().includes(statementSearchQuery.toLowerCase())
-                          ).length === 0 && statementSearchQuery && (
-                            <div className="text-sm text-muted-foreground text-center py-6">
-                              No statements found
-                            </div>
+                      </div>
+                    </ScrollArea>
+                  </DialogContent>
+                </DialogComponent>
+              </div>
+
+              <div>
+                <Label>Filter by Analysis Type</Label>
+                <DialogComponent open={analysisTypeDialogOpen} onOpenChange={setAnalysisTypeDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between mt-1">
+                      {selectedAnalysisTypeFilter === 'all'
+                        ? "All Analysis Types"
+                        : analysisTypeList.find(t => t.id === selectedAnalysisTypeFilter)?.analysis_type || "Select Analysis Type"}
+                      <ChevronDown className="h-4 w-4 opacity-50" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>Select Analysis Type</DialogTitle>
+                      <DialogDescription>
+                        Search and select an analysis type to filter by
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="p-2">
+                      <Input
+                        type="text"
+                        placeholder="Search analysis types..."
+                        value={analysisTypeSearchQuery}
+                        onChange={(e) => setAnalysisTypeSearchQuery(e.target.value)}
+                        className="mt-2"
+                      />
+                    </div>
+                    <ScrollArea className="h-[300px] p-4">
+                      <div className="space-y-2">
+                        <div
+                          className={cn(
+                            "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                            selectedAnalysisTypeFilter === 'all' && "bg-accent"
                           )}
+                          onClick={() => {
+                            setSelectedAnalysisTypeFilter('all');
+                            setAnalysisTypeDialogOpen(false);
+                          }}
+                        >
+                          All Analysis Types
+                        </div>
+                        {analysisTypeList
+                          .filter(type =>
+                            type.analysis_type.toLowerCase().includes(analysisTypeSearchQuery.toLowerCase())
+                          )
+                          .map((type) => (
+                            <div
+                              key={type.id}
+                              className={cn(
+                                "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                                selectedAnalysisTypeFilter === type.id && "bg-accent"
+                              )}
+                              onClick={() => {
+                                setSelectedAnalysisTypeFilter(type.id);
+                                setAnalysisTypeDialogOpen(false);
+                              }}
+                            >
+                              {type.analysis_type}
+                            </div>
+                          ))}
                       </div>
                     </ScrollArea>
                   </DialogContent>
                 </DialogComponent>
               </div>
             </div>
-            {(selectedIndustryFilter !== 'all' || selectedAttributeFilter !== 'all' || selectedStatementFilter !== 'all') && (
+            {(selectedIndustryFilter !== 'all' || selectedAttributeFilter !== 'all' || 
+              selectedStatementFilter !== 'all' || selectedAnalysisTypeFilter !== 'all') && (
               <div className="mt-4 flex gap-2">
                 <Button
                   variant="outline"
@@ -1532,12 +1482,13 @@ export default function AttributeManagement() {
                     setSelectedIndustryFilter('all');
                     setSelectedAttributeFilter('all');
                     setSelectedStatementFilter('all');
+                    setSelectedAnalysisTypeFilter('all');
                   }}
                 >
                   Clear Filters
                 </Button>
                 <div className="text-sm text-muted-foreground pt-1.5">
-                  {processedItems.length} results found
+                  {filteredAttributes.length} results found
                 </div>
               </div>
             )}
@@ -1545,15 +1496,15 @@ export default function AttributeManagement() {
         </Card>
       </div>
 
-      <Card className="border rounded-lg">
+      <Card className="border rounded-lg w-full">
         <CardContent className="p-0">
           <div className="relative w-full overflow-auto">
             <Table className="border-2 border-gray-300">
               <TableHeader>
                 <TableRow className="border-b-2 border-gray-300">
                   <TableHead className="w-[100px] border-r-2 border-gray-300 font-semibold">Type</TableHead>
-                  <TableHead className="w-[250px] border-r-2 border-gray-300 font-semibold">Attribute</TableHead>
-                  <TableHead className="w-[250px] border-r-2 border-gray-300 font-semibold">Statement</TableHead>
+                  <TableHead className="w-[200px] border-r-2 border-gray-300 font-semibold">Attribute</TableHead>
+                  <TableHead className="w-[300px] border-r-2 border-gray-300 font-semibold">Statement</TableHead>
                   <TableHead className="w-[200px] border-r-2 border-gray-300 font-semibold">Options</TableHead>
                   <TableHead className="w-[80px] border-r-2 border-gray-300 font-semibold text-center">Weight</TableHead>
                   <TableHead className="w-[150px] border-r-2 border-gray-300 font-semibold">Industry</TableHead>
@@ -1584,41 +1535,41 @@ export default function AttributeManagement() {
                       <TableRow key={editKey} className="border-b border-gray-300">
                         <TableCell className="align-top border-r border-gray-300">
                           {isEditing ? (
-                            <div className="space-y-2">
-                              <div>
-                                <Label>Analysis Types</Label>
-                                <div className="flex flex-wrap gap-2 mt-2">
-                                  {analysisTypeList.map((type) => (
-                                    <div key={type.id} className="flex items-center gap-2">
-                                      <Checkbox
-                                        id={`analysis-type-${type.id}-${editKey}`}
-                                        checked={editedData[editKey]?.statement?.selectedAnalysisTypes !== undefined 
-                                          ? editedData[editKey]?.statement?.selectedAnalysisTypes?.includes(type.id)
-                                          : statement.analysis_types?.includes(type.id)}
-                                        onCheckedChange={() => handleAnalysisTypeChange(editKey, type.id)}
-                                      />
-                                      <Label
-                                        htmlFor={`analysis-type-${type.id}-${editKey}`}
-                                        className="text-sm font-normal"
-                                      >
-                                        {type.analysis_type}
-                                      </Label>
-                                    </div>
-                                  ))}
+                            <div className="space-y-2 p-2">
+                              {analysisTypeList.map((analysisType) => (
+                                <div key={analysisType.id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`analysis-type-${statement.id}-${analysisType.id}`}
+                                    checked={
+                                      editedData[editKey]?.statement?.analysisTypes?.some(at => at.id === analysisType.id) ||
+                                      statement.analysisTypes?.some(at => at.id === analysisType.id)
+                                    }
+                                    onCheckedChange={(checked) => 
+                                      handleEditAnalysisTypeChange(
+                                        attribute,
+                                        statement,
+                                        editKey,
+                                        analysisType,
+                                        checked
+                                      )
+                                    }
+                                  />
+                                  <Label
+                                    htmlFor={`analysis-type-${statement.id}-${analysisType.id}`}
+                                    className="text-sm"
+                                  >
+                                    {analysisType.analysis_type}
+                                  </Label>
                                 </div>
-                              </div>
+                              ))}
                             </div>
                           ) : (
                             <div className="text-sm">
-                              {statement.analysis_types?.map((typeId) => {
-                                const type = analysisTypeList.find(t => t.id === typeId);
-                                return type ? (
-                                  <span key={typeId}>
-                                    {type.analysis_type}
-                                    {', '}
-                                  </span>
-                                ) : null;
-                              })}
+                              {statement.analysisTypes?.map(at => (
+                                <div key={at.id} className="mb-1">
+                                  {at.name}
+                                </div>
+                              ))}
                             </div>
                           )}
                         </TableCell>
@@ -1670,167 +1621,52 @@ export default function AttributeManagement() {
                           )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300">
-                          {isEditing ? (
-                            <Textarea
-                              value={editedData[editKey]?.statement?.statement || statement.statement}
-                              onChange={(e) => {
-                                setEditedData(prev => ({
-                                  ...prev,
-                                  [editKey]: {
-                                    ...prev[editKey],
-                                    statement: {
-                                      ...(prev[editKey]?.statement || statement),
-                                      statement: e.target.value
-                                    }
-                                  }
-                                }));
-                              }}
-                              className="w-full"
-                            />
-                          ) : (
-                            statement.statement
-                          )}
+                          <div className="whitespace-pre-wrap break-words max-w-[300px]">
+                            {statement.statement}
+                          </div>
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300 p-0">
-                          {isEditing ? (
+                          {statement.attribute_statement_options?.length > 0 ? (
                             <div className="divide-y divide-gray-300">
-                              {(editedData[editKey]?.statement?.options || statement.attribute_statement_options)
+                              {statement.attribute_statement_options
                                 .sort((a, b) => b.weight - a.weight)
-                                .map((option, index) => (
-                                  <div key={option.id || index} className="flex items-center p-2">
-                                    <Input
-                                      value={option.text || option.option_text}
-                                      onChange={(e) => {
-                                        const options = editedData[editKey]?.statement?.options ||
-                                          statement.attribute_statement_options.map(opt => ({
-                                            id: opt.id,
-                                            text: opt.option_text,
-                                            weight: opt.weight
-                                          }));
-
-                                        setEditedData(prev => ({
-                                          ...prev,
-                                          [editKey]: {
-                                            ...prev[editKey],
-                                            statement: {
-                                              ...(prev[editKey]?.statement || statement),
-                                              options: options.map((opt, i) =>
-                                                i === index ? { ...opt, text: e.target.value } : opt
-                                              )
-                                            }
-                                          }
-                                        }));
-                                      }}
-                                      className="w-full"
-                                    />
+                                .map((option) => (
+                                  <div key={option.id} className="text-sm p-2 whitespace-pre-wrap break-words">
+                                    {option.option_text}
                                   </div>
                                 ))}
                             </div>
                           ) : (
-                            statement.attribute_statement_options?.length > 0 ? (
-                              <div className="divide-y divide-gray-300">
-                                {statement.attribute_statement_options
-                                  .sort((a, b) => b.weight - a.weight)
-                                  .map((option) => (
-                                    <div key={option.id} className="text-sm p-2">
-                                      {option.option_text}
-                                    </div>
-                                  ))}
-                              </div>
-                            ) : (
-                              <div className="p-2">
-                                <span className="text-muted-foreground">No options</span>
-                              </div>
-                            )
+                            <div className="p-2">
+                              <span className="text-muted-foreground">No options</span>
+                            </div>
                           )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300 p-0">
-                          {isEditing ? (
+                          {statement.attribute_statement_options?.length > 0 ? (
                             <div className="divide-y divide-gray-300">
-                              {(editedData[editKey]?.statement?.options || statement.attribute_statement_options)
+                              {statement.attribute_statement_options
                                 .sort((a, b) => b.weight - a.weight)
-                                .map((option, index) => (
-                                  <div key={option.id || index} className="flex items-center p-2">
-                                    <Input
-                                      type="number"
-                                      value={option.weight}
-                                      onChange={(e) => {
-                                        const options = editedData[editKey]?.statement?.options ||
-                                          statement.attribute_statement_options.map(opt => ({
-                                            id: opt.id,
-                                            text: opt.option_text,
-                                            weight: opt.weight
-                                          }));
-
-                                        setEditedData(prev => ({
-                                          ...prev,
-                                          [editKey]: {
-                                            ...prev[editKey],
-                                            statement: {
-                                              ...(prev[editKey]?.statement || statement),
-                                              options: options.map((opt, i) =>
-                                                i === index ? { ...opt, weight: parseInt(e.target.value) } : opt
-                                              )
-                                            }
-                                          }
-                                        }));
-                                      }}
-                                      className="w-full text-center"
-                                    />
+                                .map((option) => (
+                                  <div key={option.id} className="text-sm p-2 text-center">
+                                    {option.weight}
                                   </div>
                                 ))}
                             </div>
                           ) : (
-                            statement.attribute_statement_options?.length > 0 ? (
-                              <div className="divide-y divide-gray-300">
-                                {statement.attribute_statement_options
-                                  .sort((a, b) => b.weight - a.weight)
-                                  .map((option) => (
-                                    <div key={option.id} className="text-sm p-2 text-center">
-                                      {option.weight}
-                                    </div>
-                                  ))}
-                              </div>
-                            ) : (
-                              <div className="p-2 text-center">
-                                <span>-</span>
-                              </div>
-                            )
+                            <div className="p-2 text-center">
+                              <span>-</span>
+                            </div>
                           )}
                         </TableCell>
                         <TableCell className="align-top border-r border-gray-300">
-                          {isEditing ? (
-                            <div className="space-y-2 p-2 max-h-48 overflow-y-auto">
-                              {industries.map((industry) => (
-                                <div key={industry.id} className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`industry-${attribute.id}-${industry.id}`}
-                                    checked={editedData[editKey]?.statement?.selectedIndustries !== undefined
-                                      ? editedData[editKey]?.statement?.selectedIndustries?.includes(industry.id)
-                                      : statement.industries?.includes(industry.id)}
-                                    onCheckedChange={() => handleIndustryChange(editKey, industry.id)}
-                                  />
-                                  <Label
-                                    htmlFor={`industry-${attribute.id}-${industry.id}`}
-                                    className="text-sm"
-                                  >
-                                    {industry.name}
-                                  </Label>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-sm">
-                              {(statement.industries || []).map((industryId) => {
-                                const industry = industries.find(i => i.id === industryId);
-                                return industry ? (
-                                  <div key={industryId} className="mb-1">
-                                    {industry.name}
-                                  </div>
-                                ) : null;
-                              })}
-                            </div>
-                          )}
+                          <div className="text-sm">
+                            {attribute.industries?.map(industry => (
+                              <div key={industry.id} className="mb-1">
+                                {industry.name}
+                              </div>
+                            ))}
+                          </div>
                         </TableCell>
                         <TableCell className="align-top">
                           <div className="flex justify-center space-x-2">
@@ -1849,7 +1685,7 @@ export default function AttributeManagement() {
                                 </Button>
                                 <Button
                                   size="sm"
-                                  onClick={() => handleEditSubmit(editKey)}
+                                  onClick={() => handleSaveEdit(editKey)}
                                   disabled={loading}
                                 >
                                   {loading ? 'Saving...' : 'Save'}
@@ -1874,14 +1710,6 @@ export default function AttributeManagement() {
                                           ...attribute,
                                           selectedIndustries: attribute.attribute_industry_mapping?.map(m => m.industry_id) || [],
                                           selectedAnalysisTypes: attribute.attribute_analysis_types?.map(at => at.analysis_type_id) || []
-                                        },
-                                        statement: {
-                                          ...statement,
-                                          options: statement.attribute_statement_options?.map(opt => ({
-                                            id: opt.id,
-                                            text: opt.option_text,
-                                            weight: opt.weight
-                                          }))
                                         }
                                       }
                                     });
@@ -1895,7 +1723,7 @@ export default function AttributeManagement() {
                                   size="sm"
                                   onClick={() => {
                                     if (loading || Object.values(editingRows).some(Boolean)) return;
-                                    setAttributeToDelete(attribute);
+                                    setAttributeToDelete(attribute.id);
                                   }}
                                   disabled={loading || Object.values(editingRows).some(Boolean)}
                                 >
@@ -1954,18 +1782,43 @@ export default function AttributeManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the attribute "{attributeToDelete?.name}".
+              This will permanently delete the attribute "{attributeToDelete}".
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={deleteAttribute}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={() => deleteAttribute(attributeToDelete)}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <DeleteStatementDialog />
+      <AlertDialog open={!!statementToDelete} onOpenChange={() => setStatementToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this statement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the statement and all its options. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setStatementToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (statementToDelete) {
+                  handleDeleteStatement(statementToDelete);
+                }
+              }}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add Button - Only enabled when both forms are filled */}
+      {/* Removed */}
     </div>
   );
 }
