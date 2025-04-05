@@ -91,7 +91,7 @@ export default function AttributeManagement() {
   const [currentStatement, setCurrentStatement] = useState({
     text: '',
     attribute_bank_id: null,
-    analysisTypes: [], // Changed from analysisType to analysisTypes array
+    analysisTypes: [],
     options: [
       { text: 'Excellent', weight: 100 },
       { text: 'Very Good', weight: 80 },
@@ -145,7 +145,7 @@ export default function AttributeManagement() {
   const fetchanalysis = async () => {
     try {
       const { data, error } = await supabase
-        .from('analysis_types')  // Changed from analysis_type to analysis_types
+        .from('analysis_types')  
         .select("id, name");
       
       if (error) throw error;
@@ -153,7 +153,7 @@ export default function AttributeManagement() {
       // Transform to match existing UI expectations
       const transformedData = data?.map(item => ({
         id: item.id,
-        analysis_type: item.name  // Map name to analysis_type for UI
+        analysis_type: item.name  
       })) || [];
       
       setAnalysisTypeList(transformedData);
@@ -215,7 +215,7 @@ export default function AttributeManagement() {
             name: im.industries?.name
           })) || [],
           attribute_statements: (attr.attribute_statements || [])
-            .filter(stmt => !stmt.attribute_bank_id) // Only include statements not linked to any bank
+            .filter(stmt => !stmt.attribute_bank_id) 
             .map(stmt => ({
               ...stmt,
               analysisTypes: stmt.statement_analysis_types?.map(sat => ({
@@ -381,40 +381,43 @@ export default function AttributeManagement() {
     try {
       setLoading(true);
 
-      // 1. Delete this specific statement's analysis type mappings
-      const { error: analysisTypeError } = await supabase
-        .from('statement_analysis_types')
-        .delete()
-        .eq('statement_id', statementId);
+      // If there's a valid statement ID, delete statement-related data first
+      if (statementId && !statementId.startsWith('no-statement')) {
+        // 1. Delete this specific statement's analysis type mappings
+        const { error: analysisTypeError } = await supabase
+          .from('statement_analysis_types')
+          .delete()
+          .eq('statement_id', statementId);
 
-      if (analysisTypeError) {
-        console.error('Error deleting analysis type mappings:', analysisTypeError);
-        throw analysisTypeError;
+        if (analysisTypeError) {
+          console.error('Error deleting analysis type mappings:', analysisTypeError);
+          throw analysisTypeError;
+        }
+
+        // 2. Delete this specific statement's options
+        const { error: optionsError } = await supabase
+          .from('attribute_statement_options')
+          .delete()
+          .eq('statement_id', statementId);
+
+        if (optionsError) {
+          console.error('Error deleting statement options:', optionsError);
+          throw optionsError;
+        }
+
+        // 3. Delete this specific statement
+        const { error: stmtDeleteError } = await supabase
+          .from('attribute_statements')
+          .delete()
+          .eq('id', statementId);
+
+        if (stmtDeleteError) {
+          console.error('Error deleting statement:', stmtDeleteError);
+          throw stmtDeleteError;
+        }
       }
 
-      // 2. Delete this specific statement's options
-      const { error: optionsError } = await supabase
-        .from('attribute_statement_options')
-        .delete()
-        .eq('statement_id', statementId);
-
-      if (optionsError) {
-        console.error('Error deleting statement options:', optionsError);
-        throw optionsError;
-      }
-
-      // 3. Delete this specific statement
-      const { error: stmtDeleteError } = await supabase
-        .from('attribute_statements')
-        .delete()
-        .eq('id', statementId);
-
-      if (stmtDeleteError) {
-        console.error('Error deleting statement:', stmtDeleteError);
-        throw stmtDeleteError;
-      }
-
-      // 4. Check if this was the last statement for this attribute
+      // Check if this was the last statement for this attribute or if there are no statements
       const { data: remainingStatements, error: checkError } = await supabase
         .from('attribute_statements')
         .select('id')
@@ -425,9 +428,9 @@ export default function AttributeManagement() {
         throw checkError;
       }
 
-      // Only delete the attribute if this was its last statement
-      if (remainingStatements.length === 0) {
-        // 5. Delete industry mappings
+      // Delete the attribute if it has no statements or this was its last statement
+      if (!remainingStatements || remainingStatements.length === 0) {
+        // 1. Delete industry mappings
         const { error: industryError } = await supabase
           .from('attribute_industry_mapping')
           .delete()
@@ -438,7 +441,7 @@ export default function AttributeManagement() {
           throw industryError;
         }
 
-        // 6. Delete the attribute
+        // 2. Delete the attribute
         const { error: attributeError } = await supabase
           .from('attributes')
           .delete()
@@ -782,72 +785,69 @@ export default function AttributeManagement() {
 
   // Filter and paginate the data
   const filteredAttributes = useMemo(() => {
-    let filtered = attributes.flatMap(attribute => {
-      const statements = attribute.attribute_statements || [];
-      if (statements.length === 0) {
-        // If no statements, create a placeholder item
-        return [{
-          attribute: {
-            ...attribute,
-            analysis_types: attribute.attribute_analysis_types?.map(at => ({
-              id: at.analysis_type_id,
-              name: at.analysis_types?.analysis_type
-            })) || [],
-            industries: attribute.attribute_industry_mapping?.map(im => ({
-              id: im.industry_id,
-              name: im.industries?.name
-            })) || []
-          },
-          statement: {
-            id: `no-statement-${attribute.id}`,
-            statement: '',
-            attribute_statement_options: []
+    return attributes
+      .map(attr => {
+        // Map each attribute's statements
+        const statements = attr.attribute_statements?.map(stmt => ({
+          attribute: attr,
+          statement: stmt,
+          options: stmt.options || []
+        })) || [];
+
+        return statements;
+      })
+      .flat()
+      .filter(item => {
+        if (selectedIndustryFilter !== 'all') {
+          if (!item.attribute.industries.some(ind => ind.id === selectedIndustryFilter)) {
+            return false;
           }
-        }];
-      }
-      
-      return statements.map(statement => ({
-        attribute: {
-          ...attribute,
-          analysis_types: attribute.attribute_analysis_types?.map(at => ({
-            id: at.analysis_type_id,
-            name: at.analysis_types?.analysis_type
-          })) || [],
-          industries: attribute.attribute_industry_mapping?.map(im => ({
-            id: im.industry_id,
-            name: im.industries?.name
-          })) || []
-        },
-        statement
-      }));
-    });
+        }
 
-    // Apply industry filter
-    if (selectedIndustryFilter !== 'all') {
-      filtered = filtered.filter(item =>
-        item.attribute.industries.some(ind => ind.id === selectedIndustryFilter)
-      );
-    }
+        if (selectedAttributeFilter !== 'all') {
+          if (item.attribute.id !== selectedAttributeFilter) {
+            return false;
+          }
+        }
 
-    // Apply attribute filter
-    if (selectedAttributeFilter !== 'all') {
-      filtered = filtered.filter(item => item.attribute.id === selectedAttributeFilter);
-    }
+        if (selectedStatementFilter !== 'all') {
+          if (item.statement.id !== selectedStatementFilter) {
+            return false;
+          }
+        }
 
-    // Apply statement filter
-    if (selectedStatementFilter !== 'all') {
-      filtered = filtered.filter(item => item.statement.id === selectedStatementFilter);
-    }
+        if (selectedAnalysisTypeFilter !== 'all') {
+          if (!item.statement.analysisTypes?.some(at => at.id === selectedAnalysisTypeFilter)) {
+            return false;
+          }
+        }
 
-    // Apply analysis type filter
-    if (selectedAnalysisTypeFilter !== 'all') {
-      filtered = filtered.filter(item => 
-        item.statement.analysisTypes?.some(at => at.id === selectedAnalysisTypeFilter)
-      );
-    }
-
-    return filtered;
+        return true;
+      })
+      .sort((a, b) => {
+        // First sort by attribute name
+        const attrCompare = a.attribute.name.localeCompare(b.attribute.name);
+        if (attrCompare !== 0) return attrCompare;
+        
+        // Then by statement text if attribute names are same
+        return a.statement.statement.localeCompare(b.statement.statement);
+      });
   }, [attributes, selectedIndustryFilter, selectedAttributeFilter, selectedStatementFilter, selectedAnalysisTypeFilter]);
+
+  // Sort industries alphabetically
+  const sortedIndustries = useMemo(() => {
+    return [...industries].sort((a, b) => a.name.localeCompare(b.name));
+  }, [industries]);
+
+  // Sort analysis types alphabetically
+  const sortedAnalysisTypes = useMemo(() => {
+    return [...analysisTypeList].sort((a, b) => a.analysis_type.localeCompare(b.analysis_type));
+  }, [analysisTypeList]);
+
+  // Sort attributes alphabetically
+  const sortedAttributes = useMemo(() => {
+    return [...attributes].sort((a, b) => a.name.localeCompare(b.name));
+  }, [attributes]);
 
   const totalPages = Math.ceil(filteredAttributes.length / itemsPerPage);
   const paginatedItems = filteredAttributes.slice(
@@ -859,7 +859,7 @@ export default function AttributeManagement() {
     return (
       user?.app_metadata?.role === 'super_admin' ||
       user?.role === 'super_admin' ||
-      user?.email?.endsWith('@bets.com')  // Assuming @bets.com emails are super admins
+      user?.email?.endsWith('@bets.com')  
     );
   };
 
@@ -949,7 +949,7 @@ export default function AttributeManagement() {
                         <div>
                           <Label className="text-sm font-medium">Analysis Types</Label>
                           <div className="mt-1.5 border rounded-md p-4 max-h-[200px] overflow-y-auto">
-                            {analysisTypeList.map((type) => (
+                            {sortedAnalysisTypes.map((type) => (
                               <div key={type.id} className="flex items-center space-x-2 py-1">
                                 <Checkbox
                                   id={`type-${type.id}`}
@@ -999,7 +999,7 @@ export default function AttributeManagement() {
                         <div>
                           <Label className="text-sm font-medium">Industries</Label>
                           <div className="mt-1.5 border rounded-md p-4 max-h-[200px] overflow-y-auto">
-                            {industries.map((industry) => (
+                            {sortedIndustries.map((industry) => (
                               <div key={industry.id} className="flex items-center space-x-2 py-1">
                                 <Checkbox
                                   id={`industry-${industry.id}`}
@@ -1113,7 +1113,7 @@ export default function AttributeManagement() {
             <div className="mb-6">
               <Label>Analysis Types</Label>
               <div className="space-y-2 mt-2 border rounded-md p-4 max-h-[200px] overflow-y-auto">
-                {analysisTypeList.map(type => (
+                {sortedAnalysisTypes.map(type => (
                   <div key={type.id} className="flex items-center space-x-2">
                     <Checkbox
                       id={`analysis-type-${type.id}`}
@@ -1154,13 +1154,13 @@ export default function AttributeManagement() {
                     />
                   </div>
                   <div className="max-h-[200px] overflow-y-auto">
-                    {attributes
+                    {sortedAttributes
                       .filter(attr =>
                         attr.name.toLowerCase().includes(attributeSearchQuery.toLowerCase())
                       )
                       .map((attr) => (
                         <SelectItem key={attr.id} value={attr.id}>
-                          {attr.name}
+                          <div className="truncate" title={attr.name}>{attr.name}</div>
                         </SelectItem>
                       ))}
                   </div>
@@ -1274,29 +1274,29 @@ export default function AttributeManagement() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <Label>Filter by Industry</Label>
-                <DialogComponent open={industryDialogOpen} onOpenChange={setIndustryDialogOpen}>
+                <Label>Filter by Analysis Type</Label>
+                <DialogComponent open={analysisTypeDialogOpen} onOpenChange={setAnalysisTypeDialogOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline" className="w-full justify-between mt-1">
-                      {selectedIndustryFilter === 'all'
-                        ? "All Industries"
-                        : industries.find(i => i.id === selectedIndustryFilter)?.name || "Select Industry"}
+                      {selectedAnalysisTypeFilter === 'all'
+                        ? "All Analysis Types"
+                        : <div className="truncate" title={sortedAnalysisTypes.find(at => at.id === selectedAnalysisTypeFilter)?.analysis_type || "Select Analysis Type"}>{sortedAnalysisTypes.find(at => at.id === selectedAnalysisTypeFilter)?.analysis_type || "Select Analysis Type"}</div>}
                       <ChevronDown className="h-4 w-4 opacity-50" />
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
+                  <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[800px] w-[90vw]">
                     <DialogHeader>
-                      <DialogTitle>Select Industry</DialogTitle>
+                      <DialogTitle>Select Analysis Type</DialogTitle>
                       <DialogDescription>
-                        Search and select an industry to filter by
+                        Search and select an analysis type to filter by
                       </DialogDescription>
                     </DialogHeader>
                     <div className="p-2">
                       <Input
                         type="text"
-                        placeholder="Search industries..."
-                        value={industrySearchQuery}
-                        onChange={(e) => setIndustrySearchQuery(e.target.value)}
+                        placeholder="Search analysis types..."
+                        value={analysisTypeSearchQuery}
+                        onChange={(e) => setAnalysisTypeSearchQuery(e.target.value)}
                         className="mt-2"
                       />
                     </div>
@@ -1305,32 +1305,32 @@ export default function AttributeManagement() {
                         <div
                           className={cn(
                             "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
-                            selectedIndustryFilter === 'all' && "bg-accent"
+                            selectedAnalysisTypeFilter === 'all' && "bg-accent"
                           )}
                           onClick={() => {
-                            setSelectedIndustryFilter('all');
-                            setIndustryDialogOpen(false);
+                            setSelectedAnalysisTypeFilter('all');
+                            setAnalysisTypeDialogOpen(false);
                           }}
                         >
-                          All Industries
+                          All Analysis Types
                         </div>
-                        {industries
-                          .filter(industry =>
-                            industry.name.toLowerCase().includes(industrySearchQuery.toLowerCase())
+                        {sortedAnalysisTypes
+                          .filter(at =>
+                            at.analysis_type.toLowerCase().includes(analysisTypeSearchQuery.toLowerCase())
                           )
-                          .map((industry) => (
+                          .map((analysisType) => (
                             <div
-                              key={industry.id}
+                              key={analysisType.id}
                               className={cn(
                                 "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
-                                selectedIndustryFilter === industry.id && "bg-accent"
+                                selectedAnalysisTypeFilter === analysisType.id && "bg-accent"
                               )}
                               onClick={() => {
-                                setSelectedIndustryFilter(industry.id);
-                                setIndustryDialogOpen(false);
+                                setSelectedAnalysisTypeFilter(analysisType.id);
+                                setAnalysisTypeDialogOpen(false);
                               }}
                             >
-                              {industry.name}
+                              <div className="truncate" title={analysisType.analysis_type}>{analysisType.analysis_type}</div>
                             </div>
                           ))}
                       </div>
@@ -1346,11 +1346,11 @@ export default function AttributeManagement() {
                     <Button variant="outline" className="w-full justify-between mt-1">
                       {selectedAttributeFilter === 'all'
                         ? "All Attributes"
-                        : attributes.find(a => a.id === selectedAttributeFilter)?.name || "Select Attribute"}
+                        : <div className="truncate" title={sortedAttributes.find(a => a.id === selectedAttributeFilter)?.name || "Select Attribute"}>{sortedAttributes.find(a => a.id === selectedAttributeFilter)?.name || "Select Attribute"}</div>}
                       <ChevronDown className="h-4 w-4 opacity-50" />
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
+                  <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[800px] w-[90vw]">
                     <DialogHeader>
                       <DialogTitle>Select Attribute</DialogTitle>
                       <DialogDescription>
@@ -1380,30 +1380,23 @@ export default function AttributeManagement() {
                         >
                           All Attributes
                         </div>
-                        {attributes
+                        {sortedAttributes
                           .filter(attr =>
                             attr.name.toLowerCase().includes(attributeSearchQuery.toLowerCase())
                           )
-                          .map((attr) => (
+                          .map((attribute) => (
                             <div
-                              key={attr.id}
+                              key={attribute.id}
                               className={cn(
                                 "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
-                                selectedAttributeFilter === attr.id && "bg-accent"
+                                selectedAttributeFilter === attribute.id && "bg-accent"
                               )}
                               onClick={() => {
-                                setSelectedAttributeFilter(attr.id);
+                                setSelectedAttributeFilter(attribute.id);
                                 setAttributeDialogOpen(false);
                               }}
                             >
-                              <div className="flex flex-col">
-                                <span className="truncate" title={attr.name}>
-                                  {truncateText(attr.name, 40)}
-                                </span>
-                                <span className="text-xs text-muted-foreground truncate" title={attr.description}>
-                                  {truncateText(attr.description, 60)}
-                                </span>
-                              </div>
+                              <div className="truncate" title={attribute.name}>{attribute.name}</div>
                             </div>
                           ))}
                       </div>
@@ -1419,14 +1412,11 @@ export default function AttributeManagement() {
                     <Button variant="outline" className="w-full justify-between mt-1">
                       {selectedStatementFilter === 'all'
                         ? "All Statements"
-                        : truncateText(
-                          filteredAttributes.find(item => item.statement.id === selectedStatementFilter)?.statement.statement || "Select Statement",
-                          40
-                        )}
+                        : <div className="truncate" title={filteredAttributes.find(item => item.statement.id === selectedStatementFilter)?.statement.statement || "Select Statement"}>{filteredAttributes.find(item => item.statement.id === selectedStatementFilter)?.statement.statement || "Select Statement"}</div>}
                       <ChevronDown className="h-4 w-4 opacity-50" />
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
+                  <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[800px] w-[90vw]">
                     <DialogHeader>
                       <DialogTitle>Select Statement</DialogTitle>
                       <DialogDescription>
@@ -1457,9 +1447,10 @@ export default function AttributeManagement() {
                           All Statements
                         </div>
                         {filteredAttributes
-                          .filter(item => 
+                          .filter(item =>
                             item.statement.statement?.toLowerCase().includes(statementSearchQuery.toLowerCase())
                           )
+                          .sort((a, b) => a.statement.statement.localeCompare(b.statement.statement))
                           .map((item) => (
                             <div
                               key={item.statement.id}
@@ -1472,13 +1463,13 @@ export default function AttributeManagement() {
                                 setStatementDialogOpen(false);
                               }}
                             >
-                              <div className="flex flex-col gap-0.5">
-                                <span className="truncate" title={item.statement.statement}>
-                                  {truncateText(item.statement.statement, 60)}
-                                </span>
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {truncateText(item.attribute.name, 30)}
-                                </span>
+                              <div className="flex flex-col gap-1 py-1">
+                                <div className="whitespace-pre-wrap break-words" title={item.statement.statement}>
+                                  {item.statement.statement}
+                                </div>
+                                <div className="text-sm text-muted-foreground font-medium">
+                                  Attribute: {item.attribute.name}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -1489,29 +1480,29 @@ export default function AttributeManagement() {
               </div>
 
               <div>
-                <Label>Filter by Analysis Type</Label>
-                <DialogComponent open={analysisTypeDialogOpen} onOpenChange={setAnalysisTypeDialogOpen}>
+                <Label>Filter by Industry</Label>
+                <DialogComponent open={industryDialogOpen} onOpenChange={setIndustryDialogOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline" className="w-full justify-between mt-1">
-                      {selectedAnalysisTypeFilter === 'all'
-                        ? "All Analysis Types"
-                        : analysisTypeList.find(t => t.id === selectedAnalysisTypeFilter)?.analysis_type || "Select Analysis Type"}
+                      {selectedIndustryFilter === 'all'
+                        ? "All Industries"
+                        : <div className="truncate" title={sortedIndustries.find(i => i.id === selectedIndustryFilter)?.name || "Select Industry"}>{sortedIndustries.find(i => i.id === selectedIndustryFilter)?.name || "Select Industry"}</div>}
                       <ChevronDown className="h-4 w-4 opacity-50" />
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
+                  <DialogContent className="sm:max-w-[425px] md:max-w-[600px] lg:max-w-[800px] w-[90vw]">
                     <DialogHeader>
-                      <DialogTitle>Select Analysis Type</DialogTitle>
+                      <DialogTitle>Select Industry</DialogTitle>
                       <DialogDescription>
-                        Search and select an analysis type to filter by
+                        Search and select an industry to filter by
                       </DialogDescription>
                     </DialogHeader>
                     <div className="p-2">
                       <Input
                         type="text"
-                        placeholder="Search analysis types..."
-                        value={analysisTypeSearchQuery}
-                        onChange={(e) => setAnalysisTypeSearchQuery(e.target.value)}
+                        placeholder="Search industries..."
+                        value={industrySearchQuery}
+                        onChange={(e) => setIndustrySearchQuery(e.target.value)}
                         className="mt-2"
                       />
                     </div>
@@ -1520,32 +1511,32 @@ export default function AttributeManagement() {
                         <div
                           className={cn(
                             "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
-                            selectedAnalysisTypeFilter === 'all' && "bg-accent"
+                            selectedIndustryFilter === 'all' && "bg-accent"
                           )}
                           onClick={() => {
-                            setSelectedAnalysisTypeFilter('all');
-                            setAnalysisTypeDialogOpen(false);
+                            setSelectedIndustryFilter('all');
+                            setIndustryDialogOpen(false);
                           }}
                         >
-                          All Analysis Types
+                          All Industries
                         </div>
-                        {analysisTypeList
-                          .filter(type =>
-                            type.analysis_type.toLowerCase().includes(analysisTypeSearchQuery.toLowerCase())
+                        {sortedIndustries
+                          .filter(industry =>
+                            industry.name.toLowerCase().includes(industrySearchQuery.toLowerCase())
                           )
-                          .map((type) => (
+                          .map((industry) => (
                             <div
-                              key={type.id}
+                              key={industry.id}
                               className={cn(
                                 "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
-                                selectedAnalysisTypeFilter === type.id && "bg-accent"
+                                selectedIndustryFilter === industry.id && "bg-accent"
                               )}
                               onClick={() => {
-                                setSelectedAnalysisTypeFilter(type.id);
-                                setAnalysisTypeDialogOpen(false);
+                                setSelectedIndustryFilter(industry.id);
+                                setIndustryDialogOpen(false);
                               }}
                             >
-                              {type.analysis_type}
+                              <div className="truncate" title={industry.name}>{industry.name}</div>
                             </div>
                           ))}
                       </div>
@@ -1618,7 +1609,7 @@ export default function AttributeManagement() {
                         <TableCell className="align-top border-r border-gray-300">
                           {isEditing ? (
                             <div className="space-y-2 p-2">
-                              {analysisTypeList.map((analysisType) => (
+                              {sortedAnalysisTypes.map((analysisType) => (
                                 <div key={analysisType.id} className="flex items-center space-x-2">
                                   <Checkbox
                                     id={`analysis-type-${statement.id}-${analysisType.id}`}
@@ -1729,30 +1720,32 @@ export default function AttributeManagement() {
                           {isEditing ? (
                             <div className="divide-y divide-gray-300">
                               {(editedData[editKey]?.statement?.attribute_statement_options || statement.attribute_statement_options || [])
-                                .sort((a, b) => b.weight - a.weight)
                                 .map((option) => (
                                   <div key={option.id} className="p-2">
                                     <Input
-                                      value={option.option_text}
+                                      type="text"
+                                      value={option.option_text || ''}
                                       onChange={(e) => {
                                         setEditedData(prev => {
                                           const currentEdit = prev[editKey] || {};
-                                          const currentOptions = currentEdit.statement?.attribute_statement_options || 
-                                            statement.attribute_statement_options || [];
+                                          const currentStatement = currentEdit.statement || {};
+                                          const currentOptions = currentStatement.attribute_statement_options || [...statement.attribute_statement_options];
+                                          const optionIndex = currentOptions.findIndex(o => o.id === option.id);
                                           
-                                          const updatedOptions = currentOptions.map(opt => 
-                                            opt.id === option.id 
-                                              ? { ...opt, option_text: e.target.value }
-                                              : opt
-                                          );
+                                          if (optionIndex > -1) {
+                                            currentOptions[optionIndex] = {
+                                              ...currentOptions[optionIndex],
+                                              option_text: e.target.value
+                                            };
+                                          }
 
                                           return {
                                             ...prev,
                                             [editKey]: {
                                               ...currentEdit,
                                               statement: {
-                                                ...(currentEdit.statement || statement),
-                                                attribute_statement_options: updatedOptions
+                                                ...currentStatement,
+                                                attribute_statement_options: currentOptions
                                               }
                                             }
                                           };
@@ -1765,8 +1758,7 @@ export default function AttributeManagement() {
                             </div>
                           ) : (
                             <div className="divide-y divide-gray-300">
-                              {statement.attribute_statement_options
-                                ?.sort((a, b) => b.weight - a.weight)
+                              {(statement.attribute_statement_options || [])
                                 .map((option) => (
                                   <div key={option.id} className="text-sm p-2 whitespace-pre-wrap break-words">
                                     {option.option_text}
@@ -1779,48 +1771,47 @@ export default function AttributeManagement() {
                           {isEditing ? (
                             <div className="divide-y divide-gray-300">
                               {(editedData[editKey]?.statement?.attribute_statement_options || statement.attribute_statement_options || [])
-                                .sort((a, b) => b.weight - a.weight)
                                 .map((option) => (
                                   <div key={option.id} className="p-2">
                                     <Input
                                       type="number"
                                       min={0}
                                       max={100}
-                                      value={option.weight}
+                                      value={option.weight || 0}
                                       onChange={(e) => {
                                         const weight = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
                                         setEditedData(prev => {
                                           const currentEdit = prev[editKey] || {};
-                                          const currentOptions = currentEdit.statement?.attribute_statement_options || 
-                                            statement.attribute_statement_options || [];
+                                          const currentStatement = currentEdit.statement || {};
+                                          const currentOptions = currentStatement.attribute_statement_options || [...statement.attribute_statement_options];
+                                          const optionIndex = currentOptions.findIndex(o => o.id === option.id);
                                           
-                                          const updatedOptions = currentOptions.map(opt => 
-                                            opt.id === option.id 
-                                              ? { ...opt, weight }
-                                              : opt
-                                          );
+                                          if (optionIndex > -1) {
+                                            currentOptions[optionIndex] = {
+                                              ...currentOptions[optionIndex],
+                                              weight
+                                            };
+                                          }
 
                                           return {
                                             ...prev,
                                             [editKey]: {
                                               ...currentEdit,
                                               statement: {
-                                                ...(currentEdit.statement || statement),
-                                                attribute_statement_options: updatedOptions
+                                                ...currentStatement,
+                                                attribute_statement_options: currentOptions
                                               }
                                             }
                                           };
                                         });
                                       }}
-                                      className="w-20 text-sm text-center"
                                     />
                                   </div>
                                 ))}
                             </div>
                           ) : (
                             <div className="divide-y divide-gray-300">
-                              {statement.attribute_statement_options
-                                ?.sort((a, b) => b.weight - a.weight)
+                              {(statement.attribute_statement_options || [])
                                 .map((option) => (
                                   <div key={option.id} className="text-sm p-2 text-center">
                                     {option.weight}
@@ -1832,7 +1823,7 @@ export default function AttributeManagement() {
                         <TableCell className="align-top border-r border-gray-300">
                           {isEditing ? (
                             <div className="space-y-2 p-2">
-                              {industries.map((industry) => (
+                              {sortedIndustries.map((industry) => (
                                 <div key={industry.id} className="flex items-center space-x-2">
                                   <Checkbox
                                     id={`industry-${attribute.id}-${industry.id}`}
