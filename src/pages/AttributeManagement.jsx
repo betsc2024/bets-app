@@ -758,7 +758,7 @@ export default function AttributeManagement() {
     // Apply analysis type filter
     if (selectedAnalysisTypeFilter !== 'all') {
       filtered = filtered.filter(item => 
-        item.attribute.analysis_types.some(at => at.id === selectedAnalysisTypeFilter)
+        item.statement.analysisTypes?.some(at => at.id === selectedAnalysisTypeFilter)
       );
     }
 
