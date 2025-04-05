@@ -377,89 +377,87 @@ export default function AttributeManagement() {
     }
   };
 
-  const deleteAttribute = async (attributeId) => {
+  const deleteAttribute = async (attributeId, statementId) => {
     try {
       setLoading(true);
 
-      // 1. First get all statements for this attribute
-      const { data: statements, error: stmtError } = await supabase
+      // 1. Delete this specific statement's analysis type mappings
+      const { error: analysisTypeError } = await supabase
+        .from('statement_analysis_types')
+        .delete()
+        .eq('statement_id', statementId);
+
+      if (analysisTypeError) {
+        console.error('Error deleting analysis type mappings:', analysisTypeError);
+        throw analysisTypeError;
+      }
+
+      // 2. Delete this specific statement's options
+      const { error: optionsError } = await supabase
+        .from('attribute_statement_options')
+        .delete()
+        .eq('statement_id', statementId);
+
+      if (optionsError) {
+        console.error('Error deleting statement options:', optionsError);
+        throw optionsError;
+      }
+
+      // 3. Delete this specific statement
+      const { error: stmtDeleteError } = await supabase
+        .from('attribute_statements')
+        .delete()
+        .eq('id', statementId);
+
+      if (stmtDeleteError) {
+        console.error('Error deleting statement:', stmtDeleteError);
+        throw stmtDeleteError;
+      }
+
+      // 4. Check if this was the last statement for this attribute
+      const { data: remainingStatements, error: checkError } = await supabase
         .from('attribute_statements')
         .select('id')
         .eq('attribute_id', attributeId);
 
-      if (stmtError) {
-        console.error('Error fetching statements:', stmtError);
-        throw stmtError;
+      if (checkError) {
+        console.error('Error checking remaining statements:', checkError);
+        throw checkError;
       }
 
-      const statementIds = statements?.map(s => s.id) || [];
-
-      // 2. Delete statement analysis type mappings
-      if (statementIds.length > 0) {
-        const { error: analysisTypeError } = await supabase
-          .from('statement_analysis_types')
+      // Only delete the attribute if this was its last statement
+      if (remainingStatements.length === 0) {
+        // 5. Delete industry mappings
+        const { error: industryError } = await supabase
+          .from('attribute_industry_mapping')
           .delete()
-          .in('statement_id', statementIds);
+          .eq('attribute_id', attributeId);
 
-        if (analysisTypeError) {
-          console.error('Error deleting analysis type mappings:', analysisTypeError);
-          throw analysisTypeError;
+        if (industryError) {
+          console.error('Error deleting industry mappings:', industryError);
+          throw industryError;
+        }
+
+        // 6. Delete the attribute
+        const { error: attributeError } = await supabase
+          .from('attributes')
+          .delete()
+          .eq('id', attributeId);
+
+        if (attributeError) {
+          console.error('Error deleting attribute:', attributeError);
+          throw attributeError;
         }
       }
 
-      // 3. Delete statement options
-      if (statementIds.length > 0) {
-        const { error: optionsError } = await supabase
-          .from('attribute_statement_options')
-          .delete()
-          .in('statement_id', statementIds);
-
-        if (optionsError) {
-          console.error('Error deleting statement options:', optionsError);
-          throw optionsError;
-        }
-      }
-
-      // 4. Delete statements
-      const { error: stmtDeleteError } = await supabase
-        .from('attribute_statements')
-        .delete()
-        .eq('attribute_id', attributeId);
-
-      if (stmtDeleteError) {
-        console.error('Error deleting statements:', stmtDeleteError);
-        throw stmtDeleteError;
-      }
-
-      // 5. Delete industry mappings
-      const { error: industryError } = await supabase
-        .from('attribute_industry_mapping')
-        .delete()
-        .eq('attribute_id', attributeId);
-
-      if (industryError) {
-        console.error('Error deleting industry mappings:', industryError);
-        throw industryError;
-      }
-
-      // 6. Finally delete the attribute
-      const { error: attributeError } = await supabase
-        .from('attributes')
-        .delete()
-        .eq('id', attributeId);
-
-      if (attributeError) {
-        console.error('Error deleting attribute:', attributeError);
-        throw attributeError;
-      }
-
-      toast.success('Attribute deleted successfully');
+      toast.success('Deleted successfully');
       await fetchAttributes();
     } catch (error) {
       console.error('Error in deletion process:', error);
-      toast.error('Failed to delete attribute');
+      toast.error('Failed to delete');
     } finally {
       setLoading(false);
+      setAttributeToDelete(null);
     }
   };
 
@@ -1723,7 +1721,7 @@ export default function AttributeManagement() {
                                   size="sm"
                                   onClick={() => {
                                     if (loading || Object.values(editingRows).some(Boolean)) return;
-                                    setAttributeToDelete(attribute.id);
+                                    setAttributeToDelete({ attributeId: attribute.id, statementId: statement.id });
                                   }}
                                   disabled={loading || Object.values(editingRows).some(Boolean)}
                                 >
@@ -1782,37 +1780,13 @@ export default function AttributeManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the attribute "{attributeToDelete}".
+              This will delete the statement and if this is the last statement, the attribute will also be deleted.
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteAttribute(attributeToDelete)}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!statementToDelete} onOpenChange={() => setStatementToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure you want to delete this statement?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the statement and all its options. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setStatementToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (statementToDelete) {
-                  handleDeleteStatement(statementToDelete);
-                }
-              }}
-              className="bg-red-500 hover:bg-red-600"
-            >
-              Delete
-            </AlertDialogAction>
+            <AlertDialogAction onClick={() => deleteAttribute(attributeToDelete.attributeId, attributeToDelete.statementId)}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
