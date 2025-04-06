@@ -41,12 +41,7 @@ export default function CreateAttributeBank({
   attributes = [],
   selectedItems = [], 
   onSelectedItemsChange,
-  selectedIndustryFilter = 'all',
-  onIndustryFilterChange,
-  attributeSearchQuery = '',
-  onAttributeSearchQueryChange,
   isViewMode = false,
-  industries = [],
   selectedStatements = new Set()
 }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -54,35 +49,36 @@ export default function CreateAttributeBank({
 
   // Filter attributes based on search query and selected industry
   const filteredAttributes = useMemo(() => {
-    let filtered = [...attributes];
+    return [...attributes];
+  }, [attributes]);
 
-    // Filter by search query
-    if (attributeSearchQuery) {
-      const query = attributeSearchQuery.toLowerCase();
-      filtered = filtered.filter(attr => 
-        attr.name.toLowerCase().includes(query) ||
-        attr.description?.toLowerCase().includes(query)
-      );
-    }
+  // Get counts
+  const counts = useMemo(() => {
+    const totalAttributes = filteredAttributes.length;
+    const totalStatements = filteredAttributes.reduce((acc, attr) => 
+      acc + (attr.attribute_statements?.length || 0), 0
+    );
+    return { totalAttributes, totalStatements };
+  }, [filteredAttributes]);
 
-    // Filter by industry
-    if (selectedIndustryFilter !== 'all') {
-      filtered = filtered.filter(attr => 
-        attr.attribute_industry_mapping?.some(
-          mapping => mapping.industry_id === selectedIndustryFilter
-        )
-      );
-    }
+  // Flatten all statements from filtered attributes
+  const allStatements = useMemo(() => {
+    return filteredAttributes.flatMap(attr => 
+      (attr.attribute_statements || []).map(stmt => ({
+        ...stmt,
+        attribute: attr
+      }))
+    );
+  }, [filteredAttributes]);
 
-    return filtered;
-  }, [attributes, attributeSearchQuery, selectedIndustryFilter]);
-
-  // Paginate attributes
-  const paginatedAttributes = useMemo(() => {
+  // Paginate statements
+  const paginatedStatements = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     const end = start + ITEMS_PER_PAGE;
-    return filteredAttributes.slice(start, end);
-  }, [filteredAttributes, currentPage]);
+    return allStatements.slice(start, end);
+  }, [allStatements, currentPage]);
+
+  const totalPages = Math.ceil(allStatements.length / ITEMS_PER_PAGE);
 
   // Check if a statement is selected
   const isStatementSelected = useCallback((statementId) => {
@@ -122,32 +118,10 @@ export default function CreateAttributeBank({
   return (
     <div className="space-y-4">
       {!isViewMode && (
-        <div className="flex gap-4 mb-4">
-          <div className="flex-1">
-            <Label>Filter by Industry</Label>
-            <Select value={selectedIndustryFilter} onValueChange={onIndustryFilterChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select industry" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">All Industries</SelectItem>
-                  {industries.map(industry => (
-                    <SelectItem key={industry.id} value={industry.id}>
-                      {industry.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1">
-            <Label>Search Attributes</Label>
-            <Input
-              placeholder="Search by name or description..."
-              value={attributeSearchQuery}
-              onChange={(e) => onAttributeSearchQueryChange(e.target.value)}
-            />
+        <div className="flex justify-between items-center mb-4">
+          <div className="text-sm text-muted-foreground">
+            <span className="font-medium">{counts.totalAttributes}</span> attributes, 
+            <span className="font-medium ml-1">{counts.totalStatements}</span> statements available
           </div>
         </div>
       )}
@@ -162,45 +136,43 @@ export default function CreateAttributeBank({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {paginatedAttributes.length > 0 ? (
-            paginatedAttributes.map((attr) => (
-              attr.attribute_statements?.map((stmt) => (
-                <TableRow key={stmt.id} className="border-b">
-                  {!isViewMode && (
-                    <TableCell className="border-r">
-                      <Checkbox
-                        checked={isStatementSelected(stmt.id)}
-                        onCheckedChange={() => handleStatementToggle(stmt, attr)}
-                      />
-                    </TableCell>
-                  )}
+          {paginatedStatements.length > 0 ? (
+            paginatedStatements.map((stmt) => (
+              <TableRow key={stmt.id} className="border-b">
+                {!isViewMode && (
                   <TableCell className="border-r">
-                    <div>
-                      <div className="font-medium">{attr.name}</div>
-                      {attr.description && (
-                        <div className="text-sm text-muted-foreground">{attr.description}</div>
-                      )}
-                    </div>
+                    <Checkbox
+                      checked={isStatementSelected(stmt.id)}
+                      onCheckedChange={() => handleStatementToggle(stmt, stmt.attribute)}
+                    />
                   </TableCell>
-                  <TableCell className="border-r">{stmt.statement}</TableCell>
-                  <TableCell>
-                    <div className="space-y-2">
-                      {stmt.attribute_statement_options?.length > 0 ? (
-                        stmt.attribute_statement_options
-                          .sort((a, b) => b.weight - a.weight)
-                          .map((option) => (
-                            <div key={option.id} className="flex justify-between items-center text-sm">
-                              <span className="font-medium">{option.option_text}</span>
-                              <span className="text-muted-foreground ml-2">{option.weight}</span>
-                            </div>
-                          ))
-                      ) : (
-                        <span className="text-muted-foreground">No options defined</span>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                )}
+                <TableCell className="border-r">
+                  <div>
+                    <div className="font-medium">{stmt.attribute.name}</div>
+                    {stmt.attribute.description && (
+                      <div className="text-sm text-muted-foreground">{stmt.attribute.description}</div>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="border-r">{stmt.statement}</TableCell>
+                <TableCell>
+                  <div className="space-y-2">
+                    {stmt.attribute_statement_options?.length > 0 ? (
+                      stmt.attribute_statement_options
+                        .sort((a, b) => b.weight - a.weight)
+                        .map((option) => (
+                          <div key={option.id} className="flex justify-between items-center text-sm">
+                            <span className="font-medium">{option.option_text}</span>
+                            <span className="text-muted-foreground ml-2">{option.weight}</span>
+                          </div>
+                        ))
+                    ) : (
+                      <span className="text-muted-foreground">No options defined</span>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
             ))
           ) : (
             <TableRow>
@@ -212,7 +184,7 @@ export default function CreateAttributeBank({
         </TableBody>
       </Table>
 
-      {!isViewMode && filteredAttributes.length > ITEMS_PER_PAGE && (
+      {allStatements.length > ITEMS_PER_PAGE && (
         <div className="flex justify-center mt-4">
           <Pagination>
             <PaginationContent>
@@ -222,7 +194,7 @@ export default function CreateAttributeBank({
                   disabled={currentPage === 1}
                 />
               </PaginationItem>
-              {Array.from({ length: Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE) }).map((_, i) => (
+              {Array.from({ length: totalPages }).map((_, i) => (
                 <PaginationItem key={i}>
                   <PaginationLink
                     onClick={() => setCurrentPage(i + 1)}
@@ -234,8 +206,8 @@ export default function CreateAttributeBank({
               ))}
               <PaginationItem>
                 <PaginationNext
-                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE), p + 1))}
-                  disabled={currentPage === Math.ceil(filteredAttributes.length / ITEMS_PER_PAGE)}
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
                 />
               </PaginationItem>
             </PaginationContent>
