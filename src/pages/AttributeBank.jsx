@@ -135,6 +135,7 @@ export default function AttributeBank() {
           status,
           company_id,
           analysis_type_id,
+          created_at,
           analysis_types (
             name
           ),
@@ -152,14 +153,17 @@ export default function AttributeBank() {
             )
           )
         `)
-        .order('created_at', { ascending: false });
+        .order('name', { ascending: true });  // Sort by name alphabetically
 
       if (error) throw error;
       console.log('Fetched banks:', data); // Debug log
 
       setBanks(data.map(bank => ({
         ...bank,
-        analysis_type: bank.analysis_types?.name || 'Unknown'
+        analysis_type: bank.analysis_types?.name || 'Unknown',
+        attribute_statements: (bank.attribute_statements || []).sort((a, b) => 
+          a.statement.localeCompare(b.statement)
+        )
       })));
     } catch (error) {
       console.error('Error fetching banks:', error);
@@ -255,7 +259,7 @@ export default function AttributeBank() {
           )
         `)
         .eq('attribute_bank_id', bank.id)
-        .order('created_at', { ascending: true });
+        .order('statement', { ascending: true });  // Sort statements alphabetically
 
       if (error) throw error;
 
@@ -278,8 +282,21 @@ export default function AttributeBank() {
         });
       });
 
-      setAttributes(Object.values(transformedAttributes));
+      // Sort statements within each attribute
+      Object.values(transformedAttributes).forEach(attr => {
+        attr.attribute_statements.sort((a, b) => 
+          a.statement.localeCompare(b.statement)
+        );
+      });
+
+      // Sort attributes by name
+      const sortedAttributes = Object.values(transformedAttributes)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setAttributes(sortedAttributes);
+      setStatements(data || []); // Keep the original data for reference
       setSelectedStatements(new Set(data?.map(s => s.id) || []));
+
     } catch (error) {
       console.error('Error fetching statements:', error);
       toast.error('Failed to fetch bank statements');
@@ -948,14 +965,23 @@ export default function AttributeBank() {
 
   return (
     <div className="container mx-auto py-10">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="mb-8">
         <h1 className="text-3xl font-bold">Attribute Banks</h1>
-        <Button onClick={() => setView('create')}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Bank
+      </div>
+
+      {/* Create Bank Button */}
+      <div className="mb-6 max-w-[280px]">
+        <Button 
+          onClick={() => setView('create')} 
+          className="gap-2 bg-[#733E93] hover:bg-[#633383] text-white font-inter text-[18px] h-12 w-full"
+        >
+          <Plus className="h-5 w-5" />
+          Add NEW Bank
         </Button>
       </div>
 
+      {/* Bank List */}
       {view === 'list' && (
         <BankList
           banks={banks}
@@ -968,221 +994,272 @@ export default function AttributeBank() {
       )}
 
       {view === 'create' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Create New Attribute Bank</CardTitle>
-            <CardDescription>
-              Configure your bank and select attributes
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {/* Steps Section */}
-              <div className="grid grid-cols-3 gap-4">
-                {/* Step 1: Analysis Type */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <div className="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-sm">
-                        1
-                      </div>
-                      Analysis Type
-                      <span className="text-red-500">*</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Select
-                      value={analysisType}
-                      onValueChange={handleAnalysisTypeChange}
-                      required
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select analysis type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {analysisTypeList?.map((item) => (
-                          item?.value && item?.label ? (
-                            <SelectItem 
-                              key={item.value} 
-                              value={item.value}
-                            >
-                              {item.label}
-                            </SelectItem>
-                          ) : null
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </CardContent>
-                </Card>
-
-                {/* Step 2: Company */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <div className="bg-muted text-muted-foreground w-6 h-6 rounded-full flex items-center justify-center text-sm">
-                        2
-                      </div>
-                      Company
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Dialog open={companyDialogOpen} onOpenChange={setCompanyDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full justify-between"
-                          role="combobox"
-                          onClick={() => setCompanyDialogOpen(true)}
-                        >
-                          {selectedCompany === 'all' 
-                            ? "No Company"
-                            : (companies.find(c => c.id === selectedCompany)?.name || 'Select Company')}
-                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-[425px]">
-                        <DialogHeader>
-                          <DialogTitle>Select Company</DialogTitle>
-                          <DialogDescription>
-                            Choose a company to associate with this bank or search for a specific one.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="p-2">
-                          <Input
-                            type="text"
-                            placeholder="Search companies..."
-                            value={companySearchQuery}
-                            onChange={(e) => setCompanySearchQuery(e.target.value)}
-                          />
+        <div className="mt-8">
+          <div className="flex items-center gap-4 mb-6">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                // Reset form state
+                setNewBank({
+                  name: '',
+                  description: '',
+                  analysis_type_id: '',
+                  status: 'active',
+                  company_id: null
+                });
+                setAnalysisType('');
+                setSelectedCompany('all');
+                setSelectedStatements(new Set());
+                setAttributeSearchQuery('');
+                setCompanySearchQuery('');
+                
+                // Go back to list view
+                setView('list');
+                fetchBanks();
+              }}
+              className="gap-2"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back to Banks
+            </Button>
+            <div className="flex-1" />
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Create New Attribute Bank</CardTitle>
+              <CardDescription>
+                Configure your bank and select attributes
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Steps Section */}
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Step 1: Analysis Type */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-sm">
+                          1
                         </div>
-                        <ScrollArea className="h-[300px] p-4">
-                          <div className="space-y-2">
-                            <div
-                              className={cn(
-                                "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
-                                selectedCompany === 'all' && "bg-accent"
-                              )}
-                              onClick={() => {
-                                setSelectedCompany('all');
-                                setCompanySearchQuery('');
-                                setCompanyDialogOpen(false);
-                              }}
-                            >
-                              No Company
-                            </div>
-                            {companies.map((company) => (
+                        Analysis Type
+                        <span className="text-red-500">*</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Select
+                        value={analysisType}
+                        onValueChange={handleAnalysisTypeChange}
+                        required
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select analysis type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {analysisTypeList?.map((item) => (
+                            item?.value && item?.label ? (
+                              <SelectItem 
+                                key={item.value} 
+                                value={item.value}
+                              >
+                                {item.label}
+                              </SelectItem>
+                            ) : null
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </CardContent>
+                  </Card>
+
+                  {/* Step 2: Company */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="bg-muted text-muted-foreground w-6 h-6 rounded-full flex items-center justify-center text-sm">
+                          2
+                        </div>
+                        Company
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Dialog open={companyDialogOpen} onOpenChange={setCompanyDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between"
+                            role="combobox"
+                            onClick={() => setCompanyDialogOpen(true)}
+                          >
+                            {selectedCompany === 'all' 
+                              ? "Select a Company"
+                              : (companies.find(c => c.id === selectedCompany)?.name || 'Select Company')}
+                            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-[425px]">
+                          <DialogHeader>
+                            <DialogTitle>Select Company</DialogTitle>
+                            <DialogDescription>
+                              Choose a company to associate with this bank or search for a specific one.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="p-2">
+                            <Input
+                              type="text"
+                              placeholder="Search companies..."
+                              value={companySearchQuery}
+                              onChange={(e) => setCompanySearchQuery(e.target.value)}
+                            />
+                          </div>
+                          <ScrollArea className="h-[300px] p-4">
+                            <div className="space-y-2">
                               <div
-                                key={company.id}
                                 className={cn(
                                   "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
-                                  selectedCompany === company.id && "bg-accent"
+                                  selectedCompany === 'all' && "bg-accent"
                                 )}
                                 onClick={() => {
-                                  setSelectedCompany(company.id);
+                                  setSelectedCompany('all');
                                   setCompanySearchQuery('');
                                   setCompanyDialogOpen(false);
                                 }}
                               >
-                                {company.name}
+                                No Company
                               </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                      </DialogContent>
-                    </Dialog>
-                  </CardContent>
-                </Card>
+                              {companies.map((company) => (
+                                <div
+                                  key={company.id}
+                                  className={cn(
+                                    "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                                    selectedCompany === company.id && "bg-accent"
+                                  )}
+                                  onClick={() => {
+                                    setSelectedCompany(company.id);
+                                    setCompanySearchQuery('');
+                                    setCompanyDialogOpen(false);
+                                  }}
+                                >
+                                  {company.name}
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        </DialogContent>
+                      </Dialog>
+                    </CardContent>
+                  </Card>
 
-                {/* Step 3: Bank Details */}
+                  {/* Step 3: Bank Details */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="bg-muted text-muted-foreground w-6 h-6 rounded-full flex items-center justify-center text-sm">
+                          3
+                        </div>
+                        Bank Details
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label>Bank Name</Label>
+                        <Input
+                          placeholder="Enter bank name"
+                          value={newBank.name}
+                          onChange={(e) => setNewBank(prev => ({ ...prev, name: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label>Description</Label>
+                        <Input
+                          placeholder="Enter description"
+                          value={newBank.description}
+                          onChange={(e) => setNewBank(prev => ({ ...prev, description: e.target.value }))}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Attributes Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <div className="bg-muted text-muted-foreground w-6 h-6 rounded-full flex items-center justify-center text-sm">
-                        3
-                      </div>
-                      Bank Details
-                    </CardTitle>
+                    <CardTitle>Select Attributes</CardTitle>
+                    <CardDescription>
+                      Choose attributes and statements to include in your bank
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label>Bank Name</Label>
-                      <Input
-                        placeholder="Enter bank name"
-                        value={newBank.name}
-                        onChange={(e) => setNewBank(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <Label>Description</Label>
-                      <Input
-                        placeholder="Enter description"
-                        value={newBank.description}
-                        onChange={(e) => setNewBank(prev => ({ ...prev, description: e.target.value }))}
-                      />
-                    </div>
+                  <CardContent>
+                    <CreateAttributeBank
+                      attributes={attributes}
+                      selectedItems={selectedStatements}
+                      onSelectedItemsChange={setSelectedStatements}
+                      selectedIndustryFilter={selectedIndustryFilter}
+                      onIndustryFilterChange={setSelectedIndustryFilter}
+                      attributeSearchQuery={attributeSearchQuery}
+                      onAttributeSearchQueryChange={setAttributeSearchQuery}
+                      industries={industries}
+                      selectedStatements={selectedStatements}
+                    />
                   </CardContent>
                 </Card>
-              </div>
 
-              {/* Attributes Selection */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Select Attributes</CardTitle>
-                  <CardDescription>
-                    Choose attributes and statements to include in your bank
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <CreateAttributeBank
-                    attributes={attributes}
-                    selectedItems={selectedStatements}
-                    onSelectedItemsChange={setSelectedStatements}
-                    selectedIndustryFilter={selectedIndustryFilter}
-                    onIndustryFilterChange={setSelectedIndustryFilter}
-                    attributeSearchQuery={attributeSearchQuery}
-                    onAttributeSearchQueryChange={setAttributeSearchQuery}
-                    industries={industries}
-                    selectedStatements={selectedStatements}
-                  />
-                </CardContent>
-              </Card>
-
-              {/* Action Buttons */}
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setView('list')}>
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleCreateBank} 
-                  disabled={loading || selectedStatements.length === 0 || !newBank.name}
-                >
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Bank
-                </Button>
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-2">
+                  <Button variant="outline" onClick={() => {
+                    // Reset form state
+                    setNewBank({
+                      name: '',
+                      description: '',
+                      analysis_type_id: '',
+                      status: 'active',
+                      company_id: null
+                    });
+                    setAnalysisType('');
+                    setSelectedCompany('all');
+                    setSelectedStatements(new Set());
+                    setAttributeSearchQuery('');
+                    setCompanySearchQuery('');
+                    
+                    // Go back to list view
+                    setView('list');
+                    fetchBanks();
+                  }}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleCreateBank} 
+                    disabled={loading || selectedStatements.length === 0 || !newBank.name}
+                  >
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Create Bank
+                  </Button>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {view === 'details' && selectedBank && (
         <div className="mt-8">
           <div className="flex items-center gap-4 mb-6">
             <Button
-              variant="outline"
-              className="flex items-center gap-2"
+              variant="ghost"
               onClick={() => {
                 setSelectedBank(null);
-                navigate('/attribute-bank');
+                setView('list');
+                fetchBanks();  // Call fetchBanks directly instead of using onRefresh
               }}
+              className="gap-2"
             >
               <ChevronLeft className="h-4 w-4" />
               Back to Banks
             </Button>
+            <div className="flex-1" />
           </div>
           <BankDetails 
             bank={selectedBank} 
-            onRefresh={fetchBanks} 
+            onRefresh={fetchBanks}
             setSelectedBank={setSelectedBank}
             industries={industries}
           />
@@ -1226,6 +1303,183 @@ export default function AttributeBank() {
             )}
           </DialogContent>
         </Dialog>
+      )}
+    </div>
+  );
+}
+
+function BankList({ banks, onBankSelect, onRefresh, setSelectedBank, setIsEditDialogOpen, handleEditClick }) {
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [bankToDelete, setBankToDelete] = useState(null);
+  const [editingBank, setEditingBank] = useState(null);
+  const [editedBankData, setEditedBankData] = useState({ 
+    name: '', 
+    description: '', 
+    status: ''
+  });
+
+  const handleEdit = async () => {
+    try {
+      const { error } = await supabase
+        .from('attribute_banks')
+        .update({
+          name: editedBankData.name,
+          description: editedBankData.description,
+          status: editedBankData.status,
+          analysis_type_id: editedBankData.analysis_type_id
+        })
+        .eq('id', editingBank.id);
+
+      if (error) throw error;
+
+      toast.success('Bank updated successfully');
+      setEditingBank(null);
+      onRefresh?.();
+    } catch (error) {
+      console.error('Error updating bank:', error);
+      toast.error('Failed to update bank');
+    }
+  };
+
+  const handleBankDelete = async (bankId) => {
+    try {
+      const bank = banks.find(b => b.id === bankId);
+      if (bank?.status === 'active') {
+        toast.error('Active banks cannot be deleted');
+        return;
+      }
+
+      const { data: statements, error: stmtFetchError } = await supabase
+        .from('attribute_statements')
+        .select('id')
+        .eq('attribute_bank_id', bankId);
+
+      if (stmtFetchError) throw stmtFetchError;
+
+      if (statements?.length > 0) {
+        const { error: optionsError } = await supabase
+          .from('attribute_statement_options')
+          .delete()
+          .in('statement_id', statements.map(s => s.id));
+
+        if (optionsError) throw optionsError;
+      }
+
+      const { error: statementsError } = await supabase
+        .from('attribute_statements')
+        .delete()
+        .eq('attribute_bank_id', bankId);
+
+      if (statementsError) throw statementsError;
+
+      const { error: bankError } = await supabase
+        .from('attribute_banks')
+        .delete()
+        .eq('id', bankId);
+
+      if (bankError) throw bankError;
+
+      toast.success('Bank and all related data deleted successfully');
+      onRefresh?.();
+    } catch (error) {
+      console.error('Error deleting bank:', error);
+      toast.error('Failed to delete bank and its related data');
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {banks.map((bank) => (
+        <Card key={bank.id} className="hover:bg-accent/50 transition-colors">
+          {editingBank?.id === bank.id ? (
+            <CardHeader>
+              {/* Edit form content */}
+            </CardHeader>
+          ) : (
+            <div className="p-3">
+              <div className="flex flex-col">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-base truncate max-w-[70%]">
+                    {bank.name}
+                  </h3>
+                  <div className="flex items-center gap-1">
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onBankSelect(bank);
+                      }}
+                      className="p-1 hover:bg-accent/50 rounded-md cursor-pointer"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </div>
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBankToDelete(bank);
+                        setShowDeleteDialog(true);
+                      }}
+                      className="p-1 hover:bg-accent/50 rounded-md cursor-pointer text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className={cn(
+                    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                    {
+                      'bg-green-100 text-green-700': bank.status === 'active',
+                      'bg-yellow-100 text-yellow-700': bank.status === 'draft'
+                    }
+                  )}>
+                    {bank.status}
+                  </span>
+                  <span className={cn(
+                    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700'
+                  )}>
+                    {bank.analysis_types?.name || 'No Type'}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {bank.companies?.name || 'No Company'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+      ))}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Bank</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{bankToDelete?.name}"? This will permanently delete the bank and all its statements. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                handleBankDelete(bankToDelete?.id);
+                setShowDeleteDialog(false);
+                setBankToDelete(null);
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {banks.length === 0 && (
+        <div className="text-center text-muted-foreground py-8">
+          No banks found
+        </div>
       )}
     </div>
   );
@@ -1309,7 +1563,7 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
           )
         `)
         .eq('attribute_bank_id', bank.id)
-        .order('created_at', { ascending: true });
+        .order('statement', { ascending: true });  // Sort statements alphabetically
 
       if (error) throw error;
 
@@ -1332,9 +1586,21 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
         });
       });
 
-      setAttributes(Object.values(transformedAttributes));
-      setStatements(data || []); // Ensure we pass an array
+      // Sort statements within each attribute
+      Object.values(transformedAttributes).forEach(attr => {
+        attr.attribute_statements.sort((a, b) => 
+          a.statement.localeCompare(b.statement)
+        );
+      });
+
+      // Sort attributes by name
+      const sortedAttributes = Object.values(transformedAttributes)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setAttributes(sortedAttributes);
+      setStatements(data || []); // Keep the original data for reference
       setSelectedStatements(new Set(data?.map(s => s.id) || []));
+
     } catch (error) {
       console.error('Error fetching statements:', error);
       toast.error('Failed to fetch bank statements');
@@ -1585,7 +1851,14 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
       <div className="flex items-center justify-between">
         <div className="space-y-4 flex-1 mr-4">
           {isEditMode ? (
-            <>
+            <div className="space-y-4">
+              <div>
+                <Label>Analysis Type</Label>
+                <Input
+                  value={bank.analysis_types?.name || 'Not Set'}
+                  disabled
+                />
+              </div>
               <div>
                 <Label>Bank Name</Label>
                 <Input
@@ -1594,65 +1867,67 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
                   placeholder="Enter bank name"
                 />
               </div>
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <Label>Company</Label>
-                  <Select
-                    value={editedBank.company_id}
-                    onValueChange={(value) => {
-                      console.log('Company selected:', value); // Debug log
-                      setEditedBank(prev => {
-                        const updated = { ...prev, company_id: value };
-                        console.log('Updated editedBank:', updated); // Debug log
-                        return updated;
-                      });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select company" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="none">No Company</SelectItem>
-                        {companies?.map(company => (
-                          <SelectItem key={company.id} value={String(company.id)}>
-                            {company.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex-1">
-                  <Label>Status</Label>
-                  <Select
-                    value={editedBank.status}
-                    onValueChange={(value) => setEditedBank(prev => ({ ...prev, status: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="draft">Draft</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <Label>Company</Label>
+                <Select
+                  value={editedBank.company_id}
+                  onValueChange={(value) => {
+                    console.log('Company selected:', value);
+                    setEditedBank(prev => {
+                      const updated = { ...prev, company_id: value };
+                      console.log('Updated editedBank:', updated);
+                      return updated;
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a Company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="none">No Company</SelectItem>
+                      {companies?.map(company => (
+                        <SelectItem key={company.id} value={String(company.id)}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </div>
-            </>
+              <div>
+                <Label>Status</Label>
+                <Select
+                  value={editedBank.status}
+                  onValueChange={(value) => setEditedBank(prev => ({ ...prev, status: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="draft">Draft</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           ) : (
             <>
               <h2 className="text-2xl font-bold">{bank.name}</h2>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Company: {bank.companies?.name || 'No Company'}</span>
-                <span>•</span>
                 <span>Analysis Type: {bank.analysis_types?.name || 'Not Set'}</span>
+                <span>•</span>
+                <span>Company: {bank.companies?.name || 'No Company'}</span>
                 <span>•</span>
                 <span>Status: {bank.status}</span>
                 <span>•</span>
-                <span>Created: {new Date(bank.created_at).toLocaleDateString()}</span>
+                <span>Created: {bank.created_at ? new Date(bank.created_at).toLocaleDateString('en-US', { 
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
+                }) : 'Not Available'}</span>
               </div>
             </>
           )}
@@ -1747,253 +2022,6 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function BankList({ banks, onBankSelect, onRefresh, setSelectedBank, setIsEditDialogOpen, handleEditClick }) {
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [bankToDelete, setBankToDelete] = useState(null);
-  const [editingBank, setEditingBank] = useState(null);
-  const [editedBankData, setEditedBankData] = useState({ 
-    name: '', 
-    description: '', 
-    status: ''
-  });
-
-  const handleEdit = async () => {
-    try {
-      const { error } = await supabase
-        .from('attribute_banks')
-        .update({
-          name: editedBankData.name,
-          description: editedBankData.description,
-          status: editedBankData.status,
-          analysis_type_id: editedBankData.analysis_type_id
-        })
-        .eq('id', editingBank.id);
-
-      if (error) throw error;
-
-      toast.success('Bank updated successfully');
-      setEditingBank(null);
-      onRefresh?.();
-    } catch (error) {
-      console.error('Error updating bank:', error);
-      toast.error('Failed to update bank');
-    }
-  };
-
-  const handleBankDelete = async (bankId) => {
-    try {
-      const bank = banks.find(b => b.id === bankId);
-      if (bank?.status === 'active') {
-        toast.error('Active banks cannot be deleted');
-        return;
-      }
-
-      const { data: statements, error: stmtFetchError } = await supabase
-        .from('attribute_statements')
-        .select('id')
-        .eq('attribute_bank_id', bankId);
-
-      if (stmtFetchError) throw stmtFetchError;
-
-      if (statements?.length > 0) {
-        const { error: optionsError } = await supabase
-          .from('attribute_statement_options')
-          .delete()
-          .in('statement_id', statements.map(s => s.id));
-
-        if (optionsError) throw optionsError;
-      }
-
-      const { error: statementsError } = await supabase
-        .from('attribute_statements')
-        .delete()
-        .eq('attribute_bank_id', bankId);
-
-      if (statementsError) throw statementsError;
-
-      const { error: bankError } = await supabase
-        .from('attribute_banks')
-        .delete()
-        .eq('id', bankId);
-
-      if (bankError) throw bankError;
-
-      toast.success('Bank and all related data deleted successfully');
-      onRefresh?.();
-    } catch (error) {
-      console.error('Error deleting bank:', error);
-      toast.error('Failed to delete bank and its related data');
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      {banks.map((bank) => (
-        <Card key={bank.id} className="hover:bg-accent/50 transition-colors">
-          {editingBank?.id === bank.id ? (
-            <CardHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label>Bank Name</Label>
-                  <Input
-                    value={editedBankData.name}
-                    onChange={(e) => setEditedBankData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Enter bank name"
-                  />
-                </div>
-                <div>
-                  <Label>Description</Label>
-                  <Input
-                    value={editedBankData.description}
-                    onChange={(e) => setEditedBankData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Enter description"
-                  />
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <Select
-                    value={editedBankData.status}
-                    onValueChange={(value) => setEditedBankData(prev => ({ ...prev, status: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="draft">Draft</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Analysis Type</Label>
-                  <Select
-                    value={editedBankData.analysis_type_id}
-                    onValueChange={(value) => setEditedBankData(prev => ({ ...prev, analysis_type_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select analysis type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="behavior">Behavior</SelectItem>
-                        <SelectItem value="performance">Performance</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditingBank(null)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleEdit}
-                  >
-                    Save
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-          ) : (
-            <div className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-base">
-                    {bank.name}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={cn(
-                      'inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
-                      {
-                        'bg-green-100 text-green-700': bank.status === 'active',
-                        'bg-yellow-100 text-yellow-700': bank.status === 'draft'
-                      }
-                    )}>
-                      {bank.status}
-                    </span>
-                    <span className={cn(
-                      'inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
-                      {
-                        'bg-blue-100 text-blue-700': bank.analysis_type_id === 'behavior',
-                        'bg-purple-100 text-purple-700': bank.analysis_type_id === 'performance'
-                      }
-                    )}>
-                      {bank.analysis_type}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {bank.companies?.name || 'No Company'}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onBankSelect(bank);
-                    }}
-                    className="p-2 hover:bg-accent/50 rounded-md cursor-pointer"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </div>
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setBankToDelete(bank);
-                      setShowDeleteDialog(true);
-                    }}
-                    className="p-2 hover:bg-accent/50 rounded-md cursor-pointer text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
-      ))}
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Bank</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete "{bankToDelete?.name}"? This will permanently delete the bank and all its statements. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                handleBankDelete(bankToDelete?.id);
-                setShowDeleteDialog(false);
-                setBankToDelete(null);
-              }}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {banks.length === 0 && (
-        <div className="text-center text-muted-foreground py-8">
-          No banks found
-        </div>
-      )}
     </div>
   );
 }
