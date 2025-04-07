@@ -893,7 +893,8 @@ export default function Evaluations() {
               <TableRow className="border-b">
                 <TableHead className="border-r">Employees</TableHead>
                 <TableHead className="border-r">Self Evaluation</TableHead>
-                <TableHead>Assigned to Evaluate</TableHead>
+                <TableHead className="border-r">Assigned to Evaluate</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -917,7 +918,7 @@ export default function Evaluations() {
                       />
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="border-r">
                     <div className="flex flex-wrap gap-2">
                       {assignment.evaluations
                         ?.filter(e => !e.is_self_evaluator)
@@ -935,6 +936,50 @@ export default function Evaluations() {
                             </span>
                           </Badge>
                         ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-100"
+                        onClick={() => {
+                          setEditingEvaluation(assignment);
+                          setEditingEvalName(assignment.evaluation_name);
+                          setEditDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-100"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Evaluation</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete this evaluation? This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteAssignment(assignment.evaluation_name)}
+                              className="bg-red-500 hover:bg-red-700"
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </TableCell>
                 </TableRow>
