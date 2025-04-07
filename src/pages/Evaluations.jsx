@@ -14,7 +14,7 @@ import { Button } from '../components/ui/button';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Checkbox } from '../components/ui/checkbox';
-import { Search, Plus, X, Pencil, Trash2, Eye, User2, ArrowLeft } from 'lucide-react';
+import { Search, Plus, X, Pencil, Trash2, Eye, User2, ArrowLeft, Check, Users, UserPlus } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
@@ -43,6 +43,8 @@ import { MultiSelect } from '../components/ui/multi-select';
 import { Label } from '../components/ui/label';
 import * as Progress from "@radix-ui/react-progress";
 import emailjs from '@emailjs/browser';
+import { EditEvaluationForm } from '../components/EditEvaluationForm';
+import { AddEmployeesForm } from '../components/AddEmployeesForm';
 
 const StatusProgress = ({ currentStatus }) => {
   const statuses = ['draft', 'active'];
@@ -166,6 +168,26 @@ export default function Evaluations() {
 
   const [currentUserId, setCurrentUserId] = useState(null);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [editingRowId, setEditingRowId] = useState(null);
+  const [tempSelfEvalChanges, setTempSelfEvalChanges] = useState(new Map());
+
+  const [addEmployeesDialogOpen, setAddEmployeesDialogOpen] = useState(false);
+  const [selectedEvaluationForEmployees, setSelectedEvaluationForEmployees] = useState(null);
+
+  const startEditing = (assignment) => {
+    setEditingRowId(assignment.id);
+    // Initialize temp changes with current value
+    setTempSelfEvalChanges(new Map([[
+      assignment.id, 
+      assignment.evaluations?.some(e => e.is_self_evaluator) || false
+    ]]));
+  };
+
+  const cancelEditing = () => {
+    setEditingRowId(null);
+    setTempSelfEvalChanges(new Map());
+  };
+
   const fetch_companies = async () => {
     try {
       const { data, error } = await supabase
@@ -235,8 +257,9 @@ export default function Evaluations() {
       const { data: userData, error } = await supabase
         .from('users')
         .select('*')
-        .eq('company_id',company_id);
-      
+        .eq('company_id',company_id)
+        .order('full_name'); // Sort by full name A-Z
+
       if (error) throw error;
       // console.log(userData);
       setUsers(userData || []);
@@ -312,21 +335,19 @@ export default function Evaluations() {
 
       if (error) {
         console.error('Error fetching evaluations:', error);
-        toast.error("Failed to fetch evaluations: " + error.message);
-        return;
+        throw error;
       }
 
       if (!evaluations) {
         console.error('No evaluations data returned');
-        toast.error("No evaluation data available");
-        return;
+        throw new Error('No evaluation data available');
       }
 
       console.log('Raw evaluations:', evaluations);
       setAssignments(evaluations);
     } catch (error) {
       console.error('Error in try-catch:', error);
-      toast.error("An unexpected error occurred");
+      toast.error('Failed to fetch evaluations');
     }
   };
 
@@ -380,7 +401,8 @@ export default function Evaluations() {
       const { data, error } = await supabase
         .from('users')
         .select('id, full_name, email')
-        .eq('company_id', companyId);
+        .eq('company_id', companyId)
+        .order('full_name'); // Sort by full name A-Z
 
       if (error) throw error;
       setUsers(data || []);
@@ -391,32 +413,17 @@ export default function Evaluations() {
   };
 
   const fetchAssignments = async () => {
+    console.log('Starting fetchAssignments...');
     try {
-      console.log('Starting fetchAssignments...');
-      
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      // console.log('Current user:', user?.id);
-      
-      // Get user data
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user?.id)
-        .single();
-      
-      // console.log('User data:', userData);
-
-      // Get all assignments
       const { data: assignments, error } = await supabase
         .from('evaluation_assignments')
         .select(`
           *,
-          companies (
+          companies!evaluation_assignments_company_id_fkey (
             id,
             name
           ),
-          attribute_banks (
+          attribute_banks!evaluation_assignments_attribute_bank_id_fkey (
             id,
             name
           ),
@@ -430,43 +437,29 @@ export default function Evaluations() {
             email,
             full_name
           ),
-          evaluations (
+          evaluations!evaluations_evaluation_assignment_id_fkey (
             id,
+            status,
+            is_self_evaluator,
+            relationship_type,
             evaluator:users!evaluations_evaluator_id_fkey (
               id,
               email,
               full_name
-            ),
-            status,
-            is_self_evaluator,
-            relationship_type
+            )
           )
         `);
 
       if (error) {
         console.error('Error fetching assignments:', error);
-        toast.error('Failed to fetch assignments');
-        return;
+        throw error;
       }
 
-      // console.log('Raw assignments data:', assignments);
-
-      // Group assignments by evaluation name
-      const groupedAssignments = assignments.reduce((acc, assignment) => {
-        const key = assignment.evaluation_name;
-        if (!acc[key]) {
-          acc[key] = [];
-        }
-        acc[key].push(assignment);
-        return acc;
-      }, {});
-
-      // console.log('Final grouped assignments:', groupedAssignments);
-      setAssignments(assignments);
-
+      console.log('Fetched assignments:', assignments);
+      setAssignments(assignments || []);
     } catch (error) {
-      console.error('Error:', error);
-      toast.error('An error occurred while fetching assignments');
+      console.error('Error in fetchAssignments:', error);
+      toast.error('Failed to fetch assignments');
     }
   };
 
@@ -579,7 +572,7 @@ export default function Evaluations() {
           due_date: null
         };
 
-        // console.log('Creating assignment with data:', assignmentData);
+        console.log('Creating assignment with data:', assignmentData);
 
         const { data: assignment, error: assignmentError } = await supabase
           .from('evaluation_assignments')
@@ -587,10 +580,9 @@ export default function Evaluations() {
           .select()
           .single();
 
-        if (assignmentError) {
-          console.error('Assignment creation error:', assignmentError);
-          throw assignmentError;
-        }
+        if (assignmentError) throw assignmentError;
+
+        console.log('Assignment created:', assignment);
 
         // Prepare evaluations data
         const evaluationsData = [];
@@ -625,18 +617,19 @@ export default function Evaluations() {
           });
         });
 
+        console.log('Evaluations data:', evaluationsData);
+
         // Insert evaluations
         if (evaluationsData.length > 0) {
           const { error: evaluationsError } = await supabase
             .from('evaluations')
             .insert(evaluationsData);
 
-          if (evaluationsError) {
-            console.error('Evaluations creation error:', evaluationsError);
-            throw evaluationsError;
-          }
+          if (evaluationsError) throw evaluationsError;
         }
       }
+
+      console.log('All assignments created');
 
       toast.success('Evaluation created successfully');
       setEvaluationName('');
@@ -650,85 +643,6 @@ export default function Evaluations() {
       toast.error('Failed to create evaluation');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleEditAssignment = async () => {
-    try {
-      if (!editingName.trim()) {
-        toast.error('Evaluation name cannot be empty');
-        return;
-      }
-
-      // Update evaluation assignment name
-      const { error: assignmentError } = await supabase
-        .from('evaluation_assignments')
-        .update({ evaluation_name: editingName.trim() })
-        .eq('id', editingAssignment.id);
-
-      if (assignmentError) throw assignmentError;
-
-      // First, get existing evaluations
-      const { data: existingEvaluations, error: fetchError } = await supabase
-        .from('evaluations')
-        .select('*')
-        .eq('evaluation_assignment_id', editingAssignment.id);
-
-      if (fetchError) throw fetchError;
-
-      // Create new evaluations for added users/evaluators
-      const newEvaluations = [];
-      editingUsers.forEach(userId => {
-        editingEvaluators.forEach(evaluatorId => {
-          const exists = existingEvaluations.some(
-            ev => ev.user_to_evaluate_id === userId && ev.evaluator_id === evaluatorId
-          );
-          
-          if (!exists) {
-            newEvaluations.push({
-              evaluation_assignment_id: editingAssignment.id,
-              evaluator_id: evaluatorId,
-              user_to_evaluate_id: userId,
-              status: 'pending',
-              started_at: null,
-              completed_at: null,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-          }
-        });
-      });
-
-      // Insert new evaluations if any
-      if (newEvaluations.length > 0) {
-        const { error: insertError } = await supabase
-          .from('evaluations')
-          .insert(newEvaluations);
-
-        if (insertError) throw insertError;
-      }
-
-      // Delete removed evaluations
-      const evaluationsToDelete = existingEvaluations.filter(ev => 
-        !editingUsers.includes(ev.user_to_evaluate_id) || 
-        !editingEvaluators.includes(ev.evaluator_id)
-      );
-
-      if (evaluationsToDelete.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('evaluations')
-          .delete()
-          .in('id', evaluationsToDelete.map(e => e.id));
-
-        if (deleteError) throw deleteError;
-      }
-
-      toast.success('Evaluation updated successfully');
-      setEditingAssignment(null);
-      fetchAssignments();
-    } catch (err) {
-      console.error('Error updating evaluation:', err);
-      toast.error('Failed to update evaluation');
     }
   };
 
@@ -754,46 +668,23 @@ export default function Evaluations() {
     setEditingUsers(editingUsers.filter(id => id !== userId));
   };
 
-  const handleDeleteAssignment = async (evaluationName) => {
+  const handleDeleteEvaluation = async (assignment) => {
     try {
-      // First get all assignments with this evaluation name
-      const { data: assignmentsToDelete, error: fetchError } = await supabase
-        .from('evaluation_assignments')
-        .select('id')
-        .eq('evaluation_name', evaluationName);
-
-      if (fetchError) {
-        console.error('Error fetching assignments:', fetchError);
-        toast.error('Failed to delete evaluation');
-        return;
-      }
-
-      // Get all assignment IDs
-      const assignmentIds = assignmentsToDelete.map(a => a.id);
-
-      // First delete all evaluations for these assignments
+      // First delete all evaluations for this specific assignment
       const { error: evalError } = await supabase
         .from('evaluations')
         .delete()
-        .in('evaluation_assignment_id', assignmentIds);
+        .eq('evaluation_assignment_id', assignment.id);
 
-      if (evalError) {
-        console.error('Error deleting evaluations:', evalError);
-        toast.error('Failed to delete evaluation');
-        return;
-      }
+      if (evalError) throw evalError;
 
-      // Then delete all the evaluation assignments
-      const { error: assignError } = await supabase
+      // Then delete the specific assignment
+      const { error: assignmentError } = await supabase
         .from('evaluation_assignments')
         .delete()
-        .eq('evaluation_name', evaluationName);
+        .eq('id', assignment.id); // Only delete this specific assignment
 
-      if (assignError) {
-        console.error('Error deleting assignments:', assignError);
-        toast.error('Failed to delete evaluation');
-        return;
-      }
+      if (assignmentError) throw assignmentError;
 
       toast.success('Evaluation deleted successfully');
       fetchAssignments(); // Refresh the list
@@ -803,18 +694,143 @@ export default function Evaluations() {
     }
   };
 
+  const handleSaveEvaluation = async (updatedEvaluation) => {
+    try {
+      console.log('Saving evaluation:', updatedEvaluation);
+
+      // 1. Update evaluation assignment
+      const { error: updateError } = await supabase
+        .from('evaluation_assignments')
+        .update({
+          evaluation_name: updatedEvaluation.evaluation_name,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', updatedEvaluation.id);
+
+      if (updateError) throw updateError;
+
+      // 2. Handle evaluators
+      const currentEvaluatorIds = updatedEvaluation.evaluators.map(e => e.evaluator.id);
+
+      // Remove evaluators that were deleted
+      const evaluatorsToRemove = updatedEvaluation.evaluations
+        ?.filter(e => !e.is_self_evaluator && !currentEvaluatorIds.includes(e.evaluator.id))
+        .map(e => e.evaluator.id) || [];
+
+      if (evaluatorsToRemove.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('evaluations')
+          .delete()
+          .eq('evaluation_assignment_id', updatedEvaluation.id)
+          .in('evaluator_id', evaluatorsToRemove);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // Add new evaluators
+      const newEvaluators = updatedEvaluation.evaluators.filter(
+        e => !updatedEvaluation.evaluations?.some(existing => existing.evaluator.id === e.evaluator.id)
+      );
+
+      for (const evaluator of newEvaluators) {
+        const { error: insertError } = await supabase
+          .from('evaluations')
+          .insert({
+            evaluation_assignment_id: updatedEvaluation.id,
+            evaluator_id: evaluator.evaluator.id,
+            relationship_type: evaluator.relationship_type,
+            status: 'pending',
+            is_self_evaluator: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      // 3. Handle new employees
+      if (updatedEvaluation.newEmployeeIds?.length > 0) {
+        for (const employeeId of updatedEvaluation.newEmployeeIds) {
+          // Skip if already being evaluated
+          if (updatedEvaluation.allAssignments.some(a => a.user_to_evaluate_id === employeeId)) {
+            continue;
+          }
+
+          // First create evaluation_assignment
+          const { data: newAssignment, error: assignmentError } = await supabase
+            .from('evaluation_assignments')
+            .insert({
+              evaluation_name: updatedEvaluation.evaluation_name,
+              company_id: updatedEvaluation.company_id,
+              user_to_evaluate_id: employeeId,
+              attribute_bank_id: updatedEvaluation.attribute_bank_id,
+              created_by: updatedEvaluation.created_by,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (assignmentError) throw assignmentError;
+
+          // Add self-evaluation
+          const { error: selfEvalError } = await supabase
+            .from('evaluations')
+            .insert({
+              evaluation_assignment_id: newAssignment.id,
+              evaluator_id: employeeId,
+              relationship_type: 'self',
+              status: 'pending',
+              is_self_evaluator: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          if (selfEvalError) throw selfEvalError;
+
+          // Add evaluations for all current evaluators
+          for (const evaluator of updatedEvaluation.evaluators) {
+            const { error: evalError } = await supabase
+              .from('evaluations')
+              .insert({
+                evaluation_assignment_id: newAssignment.id,
+                evaluator_id: evaluator.evaluator.id,
+                relationship_type: evaluator.relationship_type,
+                status: 'pending',
+                is_self_evaluator: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              });
+
+            if (evalError) throw evalError;
+          }
+        }
+      }
+
+      // 4. Refresh the data
+      await fetchEvaluations();
+      setEditDialogOpen(false);
+      setAddEmployeesDialogOpen(false);
+      toast.success('Evaluation updated successfully');
+    } catch (error) {
+      console.error('Error updating evaluation:', error);
+      toast.error('Failed to update evaluation');
+    }
+  };
+
   const handleEditEvaluation = async () => {
     try {
       const { error } = await supabase
         .from('evaluation_assignments')
         .update({
           evaluation_name: editingEvalName,
-          status: editingEvalStatus,
           updated_at: new Date().toISOString()
         })
         .eq('id', editingEvaluation.id);
 
       if (error) throw error;
+
+      console.log('Evaluation updated');
 
       toast.success('Evaluation updated successfully');
       setEditDialogOpen(false);
@@ -824,6 +840,199 @@ export default function Evaluations() {
       toast.error('Failed to update evaluation');
     }
   };
+
+  const handleSelfEvaluationUpdate = async (assignmentId) => {
+    try {
+      const checked = tempSelfEvalChanges.get(assignmentId);
+      console.log('Starting update with:', { assignmentId, checked });
+      
+      // Get the evaluation ID for self-evaluation if it exists
+      const assignment = assignments.find(a => a.id === assignmentId);
+      const selfEvaluation = assignment?.evaluations?.find(e => e.is_self_evaluator);
+      console.log('Current assignment:', assignment);
+      console.log('Current self evaluation:', selfEvaluation);
+
+      if (checked && !selfEvaluation) {
+        console.log('Adding new self evaluation');
+        // Add self-evaluation
+        const { data: newEvaluation, error } = await supabase
+          .from('evaluations')
+          .insert({
+            evaluation_assignment_id: assignmentId,
+            evaluator_id: assignment.user_to_evaluate.id,
+            status: 'pending',
+            is_self_evaluator: true,
+            relationship_type: 'self',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log('New evaluation created:', newEvaluation);
+
+        // Fetch the updated assignment with all relationships
+        const { data: updatedAssignment, error: fetchError } = await supabase
+          .from('evaluation_assignments')
+          .select(`
+            *,
+            companies (
+              id,
+              name
+            ),
+            attribute_banks (
+              id,
+              name
+            ),
+            creator:users!evaluation_assignments_created_by_fkey (
+              id,
+              email,
+              full_name
+            ),
+            user_to_evaluate:users!evaluation_assignments_user_to_evaluate_id_fkey (
+              id,
+              email,
+              full_name
+            ),
+            evaluations (
+              id,
+              evaluator:users!evaluations_evaluator_id_fkey (
+                id,
+                email,
+                full_name
+              ),
+              status,
+              is_self_evaluator,
+              relationship_type
+            )
+          `)
+          .eq('id', assignmentId)
+          .single();
+
+        if (fetchError) throw fetchError;
+        console.log('Fetched updated assignment:', updatedAssignment);
+
+        // Update local state with full relationship data
+        setAssignments(prev => {
+          console.log('Previous assignments:', prev);
+          const updated = prev.map(a => {
+            if (a.id === assignmentId) {
+              console.log('Updating assignment:', a.id);
+              console.log('Updated assignment:', updatedAssignment);
+              return updatedAssignment;
+            }
+            return a;
+          });
+          console.log('Updated assignments:', updated);
+          return updated;
+        });
+      } else if (!checked && selfEvaluation) {
+        console.log('Removing self evaluation:', selfEvaluation.id);
+        // Remove self-evaluation
+        const { error } = await supabase
+          .from('evaluations')
+          .delete()
+          .eq('id', selfEvaluation.id);
+
+        if (error) throw error;
+        console.log('Self evaluation deleted successfully');
+
+        // Fetch the updated assignment with all relationships
+        const { data: updatedAssignment, error: fetchError } = await supabase
+          .from('evaluation_assignments')
+          .select(`
+            *,
+            companies (
+              id,
+              name
+            ),
+            attribute_banks (
+              id,
+              name
+            ),
+            creator:users!evaluation_assignments_created_by_fkey (
+              id,
+              email,
+              full_name
+            ),
+            user_to_evaluate:users!evaluation_assignments_user_to_evaluate_id_fkey (
+              id,
+              email,
+              full_name
+            ),
+            evaluations (
+              id,
+              evaluator:users!evaluations_evaluator_id_fkey (
+                id,
+                email,
+                full_name
+              ),
+              status,
+              is_self_evaluator,
+              relationship_type
+            )
+          `)
+          .eq('id', assignmentId)
+          .single();
+
+        if (fetchError) throw fetchError;
+        console.log('Fetched updated assignment:', updatedAssignment);
+
+        // Update local state with full relationship data
+        setAssignments(prev => {
+          console.log('Previous assignments:', prev);
+          const updated = prev.map(a => {
+            if (a.id === assignmentId) {
+              console.log('Updating assignment:', a.id);
+              console.log('Updated assignment:', updatedAssignment);
+              return updatedAssignment;
+            }
+            return a;
+          });
+          console.log('Updated assignments:', updated);
+          return updated;
+        });
+      }
+
+      setEditingRowId(null);
+      setTempSelfEvalChanges(new Map());
+      toast.success('Self evaluation updated successfully');
+    } catch (error) {
+      console.error('Error updating self evaluation:', error);
+      toast.error('Failed to update self evaluation');
+    }
+  };
+
+  useEffect(() => {
+    console.log('Assignments state changed:', assignments);
+    assignments.forEach(assignment => {
+      console.log('Assignment evaluations:', {
+        id: assignment.id,
+        evaluations: assignment.evaluations
+      });
+    });
+  }, [assignments]);
+
+  useEffect(() => {
+    console.log('Temp self eval changes:', tempSelfEvalChanges);
+  }, [tempSelfEvalChanges]);
+
+  useEffect(() => {
+    console.log('Self evaluations state changed:', selfEvaluations);
+  }, [selfEvaluations]);
+
+  useEffect(() => {
+    console.log('Selected evaluators state changed:', selectedEvaluators);
+  }, [selectedEvaluators]);
+
+  useEffect(() => {
+    console.log('Evaluator relationships state changed:', evaluatorRelationships);
+  }, [evaluatorRelationships]);
+
+  useEffect(() => {
+    console.log('Editing row ID state changed:', editingRowId);
+  }, [editingRowId]);
 
   // Consolidated useEffect for initial data loading
   useEffect(() => {
@@ -837,7 +1046,6 @@ export default function Evaluations() {
 
     loadInitialData();
   }, []);
-
 
   useEffect(()=>{
     // console.log(allbanks);
@@ -873,32 +1081,119 @@ export default function Evaluations() {
     return evaluatorGroups;
   };
 
+  const handleAddNewEmployees = async (data) => {
+    try {
+      const now = new Date().toISOString();
+      const { currentAssignment, newEmployeeIds } = data;
+
+      // Create new evaluation assignments for each selected employee
+      for (const employeeId of newEmployeeIds) {
+        // Skip if already being evaluated
+        if (currentAssignment.allAssignments?.some(a => a.user_to_evaluate_id === employeeId)) {
+          continue;
+        }
+
+        // Create evaluation_assignment
+        const { data: newAssignment, error: assignmentError } = await supabase
+          .from('evaluation_assignments')
+          .insert({
+            evaluation_name: currentAssignment.evaluation_name,
+            company_id: currentAssignment.company_id,
+            user_to_evaluate_id: employeeId,
+            attribute_bank_id: currentAssignment.attribute_bank_id,
+            created_by: currentAssignment.created_by,
+            created_at: now,
+            updated_at: now
+          })
+          .select()
+          .single();
+
+        if (assignmentError) throw assignmentError;
+
+        // Add self-evaluation
+        const { error: selfEvalError } = await supabase
+          .from('evaluations')
+          .insert({
+            evaluation_assignment_id: newAssignment.id,
+            evaluator_id: employeeId,
+            relationship_type: 'self',
+            status: 'pending',
+            is_self_evaluator: true,
+            created_at: now,
+            updated_at: now
+          });
+
+        if (selfEvalError) throw selfEvalError;
+      }
+
+      toast.success('Employees added successfully');
+      setAddEmployeesDialogOpen(false);
+      fetchAssignments();
+    } catch (error) {
+      console.error('Error adding employees:', error);
+      toast.error('Failed to add employees');
+    }
+  };
+
   const renderEvaluationsTable = (evaluations) => {
     // If viewing details, use all assignments for this evaluation
     const assignmentsToShow = evaluations[0]?.allAssignments || evaluations;
+    const currentAssignment = assignmentsToShow[0];
+
+    // Sort assignments by employee name
+    const sortedAssignments = [...assignmentsToShow].sort((a, b) => {
+      const nameA = a.user_to_evaluate?.full_name || '';
+      const nameB = b.user_to_evaluate?.full_name || '';
+      return nameA.localeCompare(nameB);
+    });
 
     return (
       <div className="p-4">
         <div className="mb-4">
-          <h3 className="text-lg font-semibold">{assignmentsToShow[0]?.evaluation_name}</h3>
-          <p className="text-sm text-gray-600">Bank: {assignmentsToShow[0]?.attribute_banks?.name}</p>
-          <p className="text-sm text-gray-600">Company: {assignmentsToShow[0]?.companies?.name}</p>
+          <h3 className="text-lg font-semibold">{currentAssignment?.evaluation_name}</h3>
+          <p className="text-sm text-gray-600">Bank: {currentAssignment?.attribute_banks?.name}</p>
+          <p className="text-sm text-gray-600">Company: {currentAssignment?.companies?.name || 'Not Assigned'}</p>
         </div>
-    
-
 
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow className="border-b">
-                <TableHead className="border-r">Employees</TableHead>
+                <TableHead className="border-r flex justify-between items-center">
+                  <span>Employees</span>
+                  <Dialog open={addEmployeesDialogOpen} onOpenChange={setAddEmployeesDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4" />
+                        Add Employee
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl">
+                      <DialogHeader>
+                        <DialogTitle>Add Employee to Evaluation</DialogTitle>
+                        <DialogDescription>
+                          Add new employee to "{currentAssignment?.evaluation_name}"
+                        </DialogDescription>
+                      </DialogHeader>
+                      <AddEmployeesForm
+                        evaluation={{
+                          ...currentAssignment,
+                          allAssignments: assignmentsToShow,
+                          evaluations: assignmentsToShow.flatMap(a => a.evaluations || [])
+                        }}
+                        onSave={handleAddNewEmployees}
+                        onCancel={() => setAddEmployeesDialogOpen(false)}
+                      />
+                    </DialogContent>
+                  </Dialog>
+                </TableHead>
                 <TableHead className="border-r">Self Evaluation</TableHead>
                 <TableHead className="border-r">Assigned to Evaluate</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {assignmentsToShow.map((assignment) => (
+              {sortedAssignments.map((assignment) => (
                 <TableRow key={assignment.id} className="border-b">
                   <TableCell className="border-r">
                     <div className="flex flex-col">
@@ -913,8 +1208,18 @@ export default function Evaluations() {
                   <TableCell className="border-r">
                     <div className="flex justify-center items-center h-full">
                       <Checkbox
-                        checked={assignment.evaluations?.some(e => e.is_self_evaluator)}
-                        disabled
+                        checked={editingRowId === assignment.id 
+                          ? tempSelfEvalChanges.get(assignment.id)
+                          : assignment.evaluations?.some(e => e.is_self_evaluator)}
+                        disabled={editingRowId !== assignment.id}
+                        onCheckedChange={(checked) => {
+                          console.log('Checkbox changed:', { assignmentId: assignment.id, checked });
+                          setTempSelfEvalChanges(prev => {
+                            const newMap = new Map(prev).set(assignment.id, checked);
+                            console.log('Updated temp changes:', Object.fromEntries(newMap));
+                            return newMap;
+                          });
+                        }}
                       />
                     </div>
                   </TableCell>
@@ -940,46 +1245,59 @@ export default function Evaluations() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-100"
-                        onClick={() => {
-                          setEditingEvaluation(assignment);
-                          setEditingEvalName(assignment.evaluation_name);
-                          setEditDialogOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                      {editingRowId === assignment.id ? (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-green-500 hover:text-green-700 hover:bg-green-100"
+                            onClick={() => handleSelfEvaluationUpdate(assignment.id)}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-100"
+                            onClick={cancelEditing}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-100"
+                            onClick={() => startEditing(assignment)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-purple-500 hover:text-purple-700 hover:bg-purple-100"
+                            onClick={() => {
+                              console.log('Opening edit dialog for evaluators:', assignment);
+                              openEditDialog(assignment);
+                            }}
+                          >
+                            <Users className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-100"
+                            onClick={() => {
+                              console.log('Opening delete dialog for assignment:', assignment);
+                              setAssignmentToDelete(assignment);
+                            }}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Evaluation</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete this evaluation? This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeleteAssignment(assignment.evaluation_name)}
-                              className="bg-red-500 hover:bg-red-700"
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -993,19 +1311,21 @@ export default function Evaluations() {
 
   const ManageEvaluations = () => {
     // Group assignments by evaluation name for card view
-    const groupedAssignments = assignments.reduce((acc, curr) => {
-      if (!acc[curr.evaluation_name]) {
-        acc[curr.evaluation_name] = {
-          evaluation_name: curr.evaluation_name,
-          bank: curr.attribute_banks,
-          company: curr.companies,
-          creator: curr.creator,
-          assignments: []
-        };
-      }
-      acc[curr.evaluation_name].assignments.push(curr);
-      return acc;
-    }, {});
+    const groupedAssignments = useMemo(() => {
+      return assignments.reduce((acc, curr) => {
+        const key = curr.evaluation_name;
+        if (!acc[key]) {
+          acc[key] = {
+            evaluation_name: curr.evaluation_name,
+            company: curr.companies,
+            bank: curr.attribute_banks,
+            assignments: []
+          };
+        }
+        acc[key].assignments.push(curr);
+        return acc;
+      }, {});
+    }, [assignments]);
 
     return (
       <div className="space-y-4">
@@ -1039,7 +1359,7 @@ export default function Evaluations() {
                             {group.evaluation_name}
                           </span>
                           <div className="text-sm text-muted-foreground mt-1">
-                            Company: {group.company?.name || 'N/A'}
+                            Company: {group.company?.name || 'Not Assigned'}
                           </div>
                           <div className="text-sm text-muted-foreground">
                             Bank: {group.bank?.name || 'N/A'}
@@ -1067,7 +1387,7 @@ export default function Evaluations() {
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
                               <AlertDialogAction
-                                onClick={() => handleDeleteAssignment(group.evaluation_name)}
+                                onClick={() => handleDeleteEvaluation(group.assignments[0])}
                                 className="bg-red-500 hover:bg-red-700"
                               >
                                 Delete
@@ -1169,7 +1489,9 @@ export default function Evaluations() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-muted-foreground" />
+              </div>
               <Input
                 placeholder="Search evaluators..."
                 value={dialogSearchQuery}
@@ -1230,6 +1552,18 @@ export default function Evaluations() {
         </DialogContent>
       </Dialog>
     );
+  };
+
+  const openEditDialog = (evaluation) => {
+    console.log('Opening edit dialog for evaluation:', evaluation);
+    console.log('Evaluation details:', {
+      id: evaluation.id,
+      name: evaluation.evaluation_name,
+      status: evaluation.status,
+      evaluators: evaluation.evaluations?.filter(e => !e.is_self_evaluator) || []
+    });
+    setEditingEvaluation(evaluation);
+    setEditDialogOpen(true);
   };
 
   if (loading) {
@@ -1474,7 +1808,6 @@ export default function Evaluations() {
                         <X className="h-4 w-4 mr-2" />
                         Back
                       </Button>
-                      <h2 className="text-2xl font-semibold">{selectedAssignmentForView.evaluation_name}</h2>
                     </div>
                   </div>
 
@@ -1490,6 +1823,21 @@ export default function Evaluations() {
         </TabsContent>
       </Tabs>
       <EvaluatorDialog />
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Edit Evaluation</DialogTitle>
+            <DialogDescription>
+              Manage evaluators and update evaluation details.
+            </DialogDescription>
+          </DialogHeader>
+          <EditEvaluationForm
+            evaluation={editingEvaluation}
+            onSave={handleSaveEvaluation}
+            onCancel={() => setEditDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
