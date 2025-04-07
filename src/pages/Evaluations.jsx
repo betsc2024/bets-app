@@ -1413,27 +1413,29 @@ export default function Evaluations() {
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-wrap gap-2">
-                                {selectedEvaluators.get(user.id)?.map((evaluatorId, idx) => {
-                                  const evaluator = users.find(u => u.id === evaluatorId);
-                                  if (!evaluator) return null;
-                                  
-                                  const relationship = evaluatorRelationships.get(`${user.id}-${evaluatorId}`);
-                                  return (
+                                {(selectedEvaluators.get(user.id) || []).map((evaluatorId) => {
+                                  const evaluator = users.find((u) => u.id === evaluatorId);
+                                  const relationshipType = evaluatorRelationships.get(`${user.id}-${evaluatorId}`) || 'peer';
+                                  return evaluator ? (
                                     <Badge
-                                      key={idx}
+                                      key={evaluatorId}
                                       variant="outline"
                                       className="inline-flex items-center gap-2 bg-secondary/20 px-2 py-1 text-sm"
                                     >
                                       <span className="max-w-[150px] truncate">
                                         {evaluator.full_name}
                                       </span>
-                                      {relationship && (
-                                        <span className={getRelationshipBadgeStyle(relationship)}>
-                                          {relationship}
-                                        </span>
-                                      )}
+                                      <span className={getRelationshipBadgeStyle(relationshipType)}>
+                                        {relationshipType}
+                                      </span>
+                                      <button
+                                        onClick={() => removeEvaluator(user.id, evaluatorId)}
+                                        className="ml-1 text-red-500 hover:text-red-700"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
                                     </Badge>
-                                  );
+                                  ) : null;
                                 })}
                                 {!selectedAssignmentForView && (
                                   <Button
