@@ -14,7 +14,7 @@ import { Button } from '../components/ui/button';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Checkbox } from '../components/ui/checkbox';
-import { Search, Plus, X, Pencil, Trash2, Eye, User2, ArrowLeft, Check, Users, UserPlus } from 'lucide-react';
+import { Search, Plus, X, Pencil, Trash2, Eye, User2, ArrowLeft, Check, Users } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
@@ -1159,12 +1159,16 @@ export default function Evaluations() {
           <Table>
             <TableHeader>
               <TableRow className="border-b">
-                <TableHead className="border-r flex justify-between items-center">
-                  <span>Employees</span>
+                <TableHead className="border-r flex justify-between items-center p-4">
+                  <span className="font-semibold text-sm">Employees</span>
                   <Dialog open={addEmployeesDialogOpen} onOpenChange={setAddEmployeesDialogOpen}>
                     <DialogTrigger asChild>
-                      <Button size="sm" className="flex items-center gap-2">
-                        <UserPlus className="h-4 w-4" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200 hover:border-purple-300"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
                         Add Employee
                       </Button>
                     </DialogTrigger>
@@ -1755,12 +1759,13 @@ export default function Evaluations() {
                                   <Button
                                     variant="outline"
                                     size="sm"
+                                    className="ml-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200 hover:border-purple-300"
                                     onClick={() => {
                                       setCurrentUserId(user.id);
                                       setShowAssignDialog(true);
                                     }}
                                   >
-                                    <Plus className="h-4 w-4" />
+                                    <Plus className="w-4 h-4" />
                                     Add
                                   </Button>
                                 )}
