@@ -890,17 +890,16 @@ export default function Evaluations() {
         <div className="rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Employees</TableHead>
-                <TableHead>Self Evaluation</TableHead>
+              <TableRow className="border-b">
+                <TableHead className="border-r">Employees</TableHead>
+                <TableHead className="border-r">Self Evaluation</TableHead>
                 <TableHead>Assigned to Evaluate</TableHead>
-                <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {assignmentsToShow.map((assignment) => (
-                <TableRow key={assignment.id}>
-                  <TableCell>
+                <TableRow key={assignment.id} className="border-b">
+                  <TableCell className="border-r">
                     <div className="flex flex-col">
                       <span className="font-medium">
                         {assignment.user_to_evaluate?.full_name || 'Unknown'}
@@ -910,8 +909,13 @@ export default function Evaluations() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    {assignment.evaluations?.some(e => e.is_self_evaluator) ? "Yes" : "-"}
+                  <TableCell className="border-r">
+                    <div className="flex justify-center items-center h-full">
+                      <Checkbox
+                        checked={assignment.evaluations?.some(e => e.is_self_evaluator)}
+                        disabled
+                      />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-2">
@@ -932,11 +936,6 @@ export default function Evaluations() {
                           </Badge>
                         ))}
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {assignment.evaluations?.[0]?.status || "Draft"}
-                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}
@@ -988,7 +987,6 @@ export default function Evaluations() {
               {Object.values(groupedAssignments).map((group) => (
                 <Card key={group.evaluation_name} className="flex flex-col">
                   <CardHeader>
-                    {console.log(group)}
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div>
@@ -1004,60 +1002,6 @@ export default function Evaluations() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-100"
-                              onClick={() => {
-                                setEditingEvaluation(group.assignments[0]);
-                                setEditingEvalName(group.evaluation_name);
-                                setEditingEvalStatus(group.assignments[0].status);
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Edit Evaluation</DialogTitle>
-                              <DialogDescription>
-                                Update the evaluation name and status
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="eval-name">Evaluation Name</Label>
-                                <Input
-                                  id="eval-name"
-                                  value={editingEvalName}
-                                  onChange={(e) => setEditingEvalName(e.target.value)}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="eval-status">Status</Label>
-                                <Select value={editingEvalStatus} onValueChange={setEditingEvalStatus}>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select status" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="draft">Draft</SelectItem>
-                                    <SelectItem value="active">Active</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <DialogFooter>
-                              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-                                Cancel
-                              </Button>
-                              <Button onClick={handleEditEvaluation}>
-                                Save Changes
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button 
@@ -1126,14 +1070,6 @@ export default function Evaluations() {
                     >
                       View Details
                     </Button>
-                    {/* <Button onClick={()=>{
-                      toast.info("Sending Wait.... ");
-                      group.assignments[0]?.evaluations.map((item)=>{
-                        sendMail(item.evaluator.email,item.evaluator.full_name);
-                      })
-                    }} className="w-full" >
-                      Send mail
-                    </Button> */}
                   </CardFooter>
                 </Card>
               ))}
@@ -1385,7 +1321,6 @@ export default function Evaluations() {
                           <TableHead>Employees</TableHead>
                           <TableHead>Self Evaluation</TableHead>
                           <TableHead>Assigned to Evaluate</TableHead>
-                          <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1450,13 +1385,6 @@ export default function Evaluations() {
                                     Add
                                   </Button>
                                 )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center">
-                                <Badge variant="outline" className="text-xs">
-                                  Draft
-                                </Badge>
                               </div>
                             </TableCell>
                           </TableRow>
