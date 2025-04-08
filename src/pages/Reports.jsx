@@ -325,7 +325,10 @@ export default function Reports() {
 
       // Process relationship evaluations if not self
       if (type !== 'self') {
-        const relationshipEvals = data.filter(e => e.relationship_type === type);
+        const relationshipEvals = type === 'total' 
+          ? data.filter(e => e.relationship_type !== 'self' && e.relationship_type !== null)  // For total, get all non-self data
+          : data.filter(e => e.relationship_type === type);  // For specific type, get only that type
+        
         relationshipData = relationshipEvals.map(e => ({
           attributeName: e.attribute_name,
           averageWeight: e.average_weight,
@@ -334,20 +337,6 @@ export default function Reports() {
         setNotSelfTableData(relationshipData);
         console.log("Relationship data:", relationshipData);
       }
-
-      // Process relationship counts
-      const relationshipCounts = {};
-      data.forEach(item => {
-        const type = item.relationship_type || "self";
-        relationshipCounts[type] = (relationshipCounts[type] || 0) + 1;
-      });
-
-      const countMapData = Object.entries(relationshipCounts).map(([type, count], index) => ({
-        SrNo: index + 1,
-        RelationshipType: type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' '),
-        Count: count
-      }));
-      setRelationCountMap(countMapData);
 
       // Update visualization data
       const labels = [...new Set(data.map(item => item.attribute_name))];
@@ -750,22 +739,26 @@ export default function Reports() {
   };
 
   const updateChartData = (type) => {
-    if (labels && selfResults) {
+    if (labels) {  
       console.log("Updating chart with:", { labels, selfResults, notSelfResults, type });
       
-      const datasets = [
-        {
+      const datasets = [];
+
+      // Add self data if it exists
+      if (selfResults && selfResults.length > 0) {
+        datasets.push({
           label: "Self Score",
           data: selfResults,
           backgroundColor: "#733e93",
           borderColor: "#733e93",
           borderWidth: 1,
-        }
-      ];
+        });
+      }
 
-      if (scoreType !== null && notSelfResults?.length > 0) {
+      // Add relationship data if it exists
+      if (notSelfResults && notSelfResults.length > 0) {
         datasets.push({
-          label: type,
+          label: type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' '),
           data: notSelfResults,
           backgroundColor: "#e74c3c",
           borderColor: "#e74c3c",
@@ -919,6 +912,13 @@ export default function Reports() {
       fetchData(selectedCompany, selectedUser, analysis, bank);
     }
   }, [selectedCompany, selectedUser, analysis, bank]);
+
+  useEffect(() => {
+    if (data && data.length > 0 && selectedCompany && selectedUser && analysis && bank) {
+      processRelationshipData('total');  // Process total data when filters change
+      console.log("Processing total data after filters changed");
+    }
+  }, [data, selectedCompany, selectedUser, analysis, bank]);
 
   const Demography_bar_data = (attribute) => {
 
@@ -1193,52 +1193,59 @@ export default function Reports() {
                             </div>
                         ) : selectedChart === "radial" && radialScore && item.key === "total" ? (
                           <div>
-                            {console.log('Attempting to render radar section with:', {
-                              selectedChart,
-                              radialScore,
-                              itemKey: item.key
-                            })}
                             <Select
                               value={selectedAttribute}
                               placeholder="Select an attribute"
                               onValueChange={(value) => { 
                                 console.log('Selected new attribute:', value);
-                                setSelectedAttribute(value); 
+                                setSelectedAttribute(value);
+                                // Set radar score to enable the chart
+                                setRadialScore(true);
+                                
+                                // Get relationship types for this attribute
+                                const types = [...new Set(data.map(item => 
+                                  item.relationship_type || 'self'
+                                ))];
+                                setRadialLabels(types);
+
+                                // Get scores for this attribute
+                                const scores = types.map(type => {
+                                  const items = data.filter(item => 
+                                    (item.relationship_type || 'self') === type && 
+                                    item.attribute_name === value
+                                  );
+                                  return items.length > 0 
+                                    ? items.reduce((sum, item) => sum + item.average_score_percentage, 0) / items.length 
+                                    : 0;
+                                });
+                                setRadialSelfData(scores);
                               }}
                             >
                               <SelectTrigger>
                                 <SelectValue placeholder="Select an attribute" />
                               </SelectTrigger>
                               <SelectContent>
-                                {labels.map((attribute, index) => (
+                                {labels?.map((attribute, index) => (
                                   <SelectItem key={index} value={attribute}>
                                     {attribute}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                            {console.log('About to check radial_data:', radialData)}
-                            {radialData ?
+                            {radialData && (
                               <div>
-                                <div ref={chartRef} style={{ height: '600px', width: '100%', position: 'relative' }}>
-                                  {console.log('Rendering Radar Chart with data:', {
-                                    labels: radialData.labels,
-                                    datasets: radialData.datasets.map(d => ({
-                                      label: d.label,
-                                      data: d.data
-                                    }))
-                                  })}
+                                <div ref={chartRef} style={{ height: '400px', width: '100%', position: 'relative' }}>
                                   <Radar 
                                     data={radialData} 
                                     options={radarOptions} 
-                                    className="mt-16"
+                                    className="mt-8"
                                   />
                                 </div>
                                 <button onClick={copyToClipboard} className="mt-4">
                                   Copy Chart to Clipboard
                                 </button>
                               </div>
-                              : <div>No radar data available</div>}
+                            )}
                           </div>
                         ) : selectedChart === "table" ? (
                           item.key === "demography" ? (<>
