@@ -1843,6 +1843,30 @@ export default function Evaluations() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Delete Assignment Confirmation Dialog */}
+      <AlertDialog open={!!assignmentToDelete} onOpenChange={(open) => !open && setAssignmentToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Evaluation Assignment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this evaluation for {assignmentToDelete?.user_to_evaluate?.full_name}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAssignmentToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                handleDeleteEvaluation(assignmentToDelete);
+                setAssignmentToDelete(null);
+              }}
+              className="bg-red-500 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
