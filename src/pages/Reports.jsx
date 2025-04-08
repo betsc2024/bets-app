@@ -183,20 +183,26 @@ export default function Reports() {
             user_to_evaluate_id,
             company_id,
             companies ( 
-            id,
-            name
+              id,
+              name
             ),
             attribute_banks (
-            id,
-            name
+              id,
+              name,
+              analysis_types (
+                name
+              )
             )
-            ),
+          ),
           evaluation_responses (
             attribute_statement_options ( 
               weight, 
               attribute_statements ( 
                 statement,
-                attributes ( name , analysis_type) 
+                attributes ( name ),
+                statement_analysis_types (
+                  analysis_types ( name )
+                )
               ) 
             ) 
           )
@@ -205,16 +211,10 @@ export default function Reports() {
         
         let { data, error } = await query;
         if (selectedAnalysis !== "") {
-          console.log(data);
           data = data.filter((item) =>
-              item.evaluation_responses.some(
-                  (response) =>
-                      response.attribute_statement_options.attribute_statements.attributes.analysis_type === selectedAnalysis
-              )
+            item.evaluation_assignments.attribute_banks.analysis_types.name === selectedAnalysis
           );
-          console.log(data);
-          console.log(selectedAnalysis);
-      }
+        }
     
         // **Case 3: Filter by Bank if provided**
           if (selectedBank !== "") {
@@ -252,9 +252,9 @@ export default function Reports() {
         Count: count
       }));
 
-
-      // console.log(relation_count_map_temp);
       setRelationCountMap(relationCountArray);
+      setData(filteredData);
+
       // console.log(filteredData);
 
 
@@ -266,10 +266,10 @@ export default function Reports() {
         e.evaluation_responses.forEach(res => {
           const attributeName = res.attribute_statement_options.attribute_statements?.attributes?.name;
           const weight = res.attribute_statement_options.weight || 0;
-          const analysis_type = res.attribute_statement_options.attribute_statements?.attributes?.analysis_type;
+          const analysis_type = res.attribute_statement_options.attribute_statements?.statement_analysis_types?.analysis_types?.name;
 
           if (!attributeMap[attributeName]) {
-            attributeMap[attributeName] = { totalWeight: 0, count: 0,analysis_type:analysis_type };
+            attributeMap[attributeName] = { totalWeight: 0, count: 0, analysis_type: analysis_type };
           }
 
           attributeMap[attributeName].totalWeight += weight;
@@ -292,7 +292,7 @@ export default function Reports() {
 
       // console.log(formattedData);
 
-      setData(formattedData);
+      // setData(formattedData);
 
       // console.log(data);
 
@@ -415,16 +415,16 @@ export default function Reports() {
   }
   const fetch_analysis = async ()=>{
     try{
-      const { data, error } = await supabase.from('analysis_type').select('*');
+      const { data, error } = await supabase.from('analysis_types').select('*');
       
       if (error) throw error;
       
-      // Filter out any items with empty or null analysis_type
+      // Filter out any items with empty or null name
       const validAnalysisTypes = data?.filter(item => 
         item && 
-        item.analysis_type && 
-        typeof item.analysis_type === 'string' && 
-        item.analysis_type.trim() !== ''
+        item.name && 
+        typeof item.name === 'string' && 
+        item.name.trim() !== ''
       ) || [];
       
       setAnalysisTypeList(validAnalysisTypes);
@@ -434,357 +434,82 @@ export default function Reports() {
     }
   }
 
-  const fetch_bank = async (selectedCompany)=>{
-    try{
-      const response = await supabase.from('attribute_banks').select().eq('company_id',selectedCompany?.id); 
-      setBankList(response.data);
-    }catch(err){
-      console.log(err);
+  const fetch_bank = async (selectedCompany, selectedAnalysis) => {
+    try {
+      const { data, error } = await supabase
+        .from('attribute_banks')
+        .select(`
+          *,
+          analysis_types (
+            name
+          )
+        `)
+        .eq('company_id', selectedCompany?.id);
+
+      if (error) throw error;
+
+      // Filter banks by selected analysis type if one is selected
+      const filteredBanks = selectedAnalysis 
+        ? data.filter(bank => bank.analysis_types?.name === selectedAnalysis)
+        : data;
+
+      setBankList(filteredBanks);
+    } catch (err) {
+      console.error('Error fetching banks:', err);
+      toast.error('Failed to fetch banks');
     }
   }
 
   useEffect(() => {
-    fetch_companies();
-    fetch_analysis();
+    if (selectedCompany) {
+      fetch_bank(selectedCompany, analysis);
+    }
+  }, [selectedCompany, analysis]);
+
+  useEffect(() => {
+    if (selectedCompany && selectedUser) {
+      fetchData(selectedCompany, selectedUser, analysis, bank);
+    }
+  }, [selectedCompany, selectedUser, analysis, bank]);
+
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        const { data: companiesData, error } = await supabase
+          .from('companies')
+          .select('*');
+        if (error) throw error;
+        setCompanies(companiesData);
+      } catch (error) {
+        console.error('Error fetching companies:', error);
+        toast.error('Failed to fetch companies');
+      }
+    };
+    fetchCompanies();
   }, []);
 
   useEffect(() => {
-    if (selectedCompany?.id) {
-      fetch_user();
-      fetchData(selectedCompany, selectedUser);
-      fetch_spefifc_data(score_type);
-      fetch_bank(selectedCompany);
-    }
-  }, [selectedCompany, selectedUser])
-
-
-  useEffect(()=>{
-    fetchData(selectedCompany,selectedUser,analysis,bank);
-  },[analysis,bank,selectedCompany,selectedUser])
-
-
-
-
-
-
-  const fetch_spefifc_data = (relationship_type) => {
-    if (!data) return;
-
-    // console.log(data);
-    // Separate self and not-self data
-    const selfData = data.filter((item) => item.relationship_type === null);
-
-    const notSelfData =
-      relationship_type === "total"
-        ? data.filter((item) => item.relationship_type !== null)
-        : data.filter((item) => item.relationship_type === relationship_type);
-
-    // console.log("Original Self Data:", selfData);
-    // console.log("Original Not Self Data:", notSelfData);
-
-    // Get unique labels
-    const labels = [...new Set(data.map((item) => item.attribute_name))];
-
-    // Compute averages for self and not-self
-    const selfResultsMap = {};
-    const notSelfResultsMap = {};
-
-    const aggregatedSelfData = labels.map((label) => {
-      const selfItems = selfData.filter((item) => item.attribute_name === label);
-      // console.log(selfItems);
-
-      const avgSelfWeight = selfItems.length
-        ? selfItems.reduce((sum, i) => sum + i.average_weight, 0)
-        : 0;
-      const avgSelfScore = selfItems.length
-        ? selfItems.reduce((sum, i) => sum + i.average_score_percentage, 0)
-        : 0;
-
-      selfResultsMap[label] = avgSelfScore;
-
-      return {
-        company_name: selfItems[0]?.company_name || "Unknown",
-        attribute_name: label,
-        average_weight: avgSelfWeight,
-        average_score_percentage: avgSelfScore,
-      };
-    });
-
-    const aggregatedNotSelfData = labels.map((label) => {
-      if (relationship_type === "total" && relation_count_map) {
-        const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
-        // console.log(notSelfItems);
-
-        let total_c = 0;
-        // console.log(relation_count_map);
-        relation_count_map.map((item) => {
-          if (item.RelationshipType !== "self")
-            total_c += item.Count;
-        })
-        // console.log(total_c);
-
-        const avgNotSelfWeight = notSelfItems.length
-          ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0)
-          : 0;
-        let avgNotSelfScore = notSelfItems.length
-          ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_weight), 0)
-          : 0;
-        avgNotSelfScore = avgNotSelfScore / total_c;
-
-
-        notSelfResultsMap[label] = avgNotSelfScore;
-
-        // console.log(notSelfItems);
-        return {
-          company_name: notSelfItems[0]?.company_name || "Unknown",
-          attribute_name: label,
-          average_weight: avgNotSelfWeight,
-          average_score_percentage: avgNotSelfScore,
-        };
-      } else {
-        const notSelfItems = notSelfData.filter((item) => item.attribute_name === label);
-        // console.log(notSelfItems);
-
-        const avgNotSelfWeight = notSelfItems.length
-          ? notSelfItems.reduce((sum, i) => sum + i.average_weight, 0)
-          : 0;
-        const avgNotSelfScore = notSelfItems.length
-          ? notSelfItems.reduce((sum, i) => Math.round(sum + i.average_score_percentage), 0)
-          : 0;
-
-        notSelfResultsMap[label] = avgNotSelfScore;
-
-        return {
-          company_name: notSelfItems[0]?.company_name || "Unknown",
-          attribute_name: label,
-          average_weight: avgNotSelfWeight,
-          average_score_percentage: avgNotSelfScore,
-        };
+    const fetchUsers = async () => {
+      if (!selectedCompany) return;
+      try {
+        const { data: usersData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('company_id', selectedCompany.id);
+        if (error) throw error;
+        setUsers(usersData);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        toast.error('Failed to fetch users');
       }
+    };
+    fetchUsers();
+  }, [selectedCompany]);
 
-    });
-    if(relationship_type ==="total"){
-      setTotal(aggregatedNotSelfData);
-    }
-
-    // Merge self and not-self aggregated data
-
-
-    // Set data for charts and tables
-    setLabel(labels);
-    setSelfResults(Object.values(selfResultsMap));
-    setnotselfresults(Object.values(notSelfResultsMap));
-
-    setSelfTableData(aggregatedSelfData);
-    setNotSelfTableData(aggregatedNotSelfData);
-
-    // console.log("Final Self Data:", aggregatedSelfData);
-    // console.log("Final Not Self Data:", aggregatedNotSelfData);
-
-  };
-
-
-
-
-
-
-  const fetch_radar = async (relationship_type , selectedAnalysis = "" , selectedBank = "") => {
-
-    try {
-
-      console.log('Starting fetch_radar with:', {
-        relationship_type,
-        selectedAnalysis,
-        selectedBank,
-        selectedAttribute
-      });
-
-      const id = selectedCompany?.id;
-      const user_id = selectedUser?.id;
-
-      let query = supabase
-        .from('evaluations')
-        .select(`
-          relationship_type,
-              evaluation_assignments ( 
-            id,
-            user_to_evaluate_id,
-            company_id,
-            companies(
-             name,
-             ideal_score
-            ),
-            attribute_banks (
-            id,
-            name
-            )
-            ),
-          evaluation_responses (
-            attribute_statement_options (
-              weight,
-              attribute_statements (
-                statement,
-                attributes(
-                name,
-                analysis_type
-                )
-              )
-            )
-          )
-        `)
-        .eq('status', 'completed'); // Only filtering by completed status
-
-
-
-      let { data: query_info, error } = await query;
-
-      if (selectedAnalysis !== "") {
-        query_info = query_info.filter((item) =>
-            item.evaluation_responses.some(
-                (response) =>
-                    response.attribute_statement_options.attribute_statements.attributes.analysis_type === selectedAnalysis
-            )
-        );
-        // console.log(data);
-    }
-  
-      // **Case 3: Filter by Bank if provided**
-        if (selectedBank !== "") {
-          query_info = query_info.filter((item)=> 
-            item.evaluation_assignments.attribute_banks.id === selectedBank
-          );
-          // console.log(data);
-      }
-
-      console.log('Filtered Query Data:', query_info);
-
-      // console.log(id);
-      // console.log(user_id);  
-
-      
-      setRadial_IdealScore(query_info[0]?.evaluation_assignments?.companies.ideal_score);
-
-      const query_Data = query_info.filter(evaluation =>
-        evaluation.evaluation_assignments?.company_id === id &&
-        evaluation.evaluation_assignments?.user_to_evaluate_id === user_id
-      )
-
-      if (error) {
-        throw new Error('Error fetching data: ' + error.message);
-      }
-
-      const filterByAttributeName = (data, attributeName) => {
-        return data
-          .map(item => ({
-            ...item,
-            evaluation_responses: item.evaluation_responses.filter(response =>
-              response.attribute_statement_options.attribute_statements.attributes.name === attributeName
-            )
-          }))
-          .filter(item => item.evaluation_responses.length > 0);
-      };
-
-      const data = filterByAttributeName(query_Data, selectedAttribute);
-      console.log('Data filtered by attribute:', {
-        selectedAttribute,
-        filteredData: data
-      });
-
-      const fetch_self_Data = (query_Data) => {
-        const filteredData = query_Data.filter(item => item.relationship_type === null);
-
-        const processedData = {};
-
-        filteredData.forEach((evaluation) => {
-          evaluation.evaluation_responses.forEach((response) => {
-            const option = response.attribute_statement_options;
-            if (option && option.attribute_statements) {
-              const statement = option.attribute_statements.statement;
-              if (!processedData[statement]) {
-                processedData[statement] = { totalWeight: 0, count: 0 };
-              }
-              processedData[statement].totalWeight += option.weight;
-              processedData[statement].count += 1;
-            }
-          });
-        });
-
-        const result = Object.entries(processedData).map(([statement, { totalWeight, count }]) => ({
-          statement,
-          average_weight: totalWeight / count,
-        }));
-
-
-        console.log('Self Data Processed:', result);
-        return result;
-      }
-      const temp_self_Data = fetch_self_Data(data);
-      setRadialSelfData(temp_self_Data);
-
-      const processedData = {};
-
-      const filterData = data.filter(item => item.relationship_type !== null);
-
-
-      filterData.forEach((evaluation) => {
-        evaluation.evaluation_responses.forEach((response) => {
-          const option = response.attribute_statement_options;
-          if (option && option.attribute_statements) {
-            const statement = option.attribute_statements.statement;
-            if (!processedData[statement]) {
-              processedData[statement] = { totalWeight: 0, count: 0};
-            }
-            processedData[statement].totalWeight += option.weight;
-            processedData[statement].count += 1;
-          }
-        });
-      });
-
-      const result = Object.entries(processedData).map(([statement, { totalWeight, count }]) => ({
-        relationship_type,
-        statement,
-        average_weight: totalWeight / count,
-      }));
-
-      console.log('Relationship Data Processed:', result);
-      set_Radial_Result(result);
-
-    } catch (err) {
-      console.error(err);
-      throw new Error("Failed to fetch radar data: " + err.message);
-    }
-  };
-
-
+  // Fetch analysis types when component mounts
   useEffect(() => {
-    if (radial_result) {
-      console.log('Setting radial labels and scores from result:', {
-        radial_result,
-        statements: radial_result.map(item => item.statement)
-      });
-
-      setRadial_Label(radial_result.map(item => item.statement));
-      setRadial_Score(radial_result);
-    }
-    if (radial_self_data) {
-      console.log('Setting radial labels from self data:', {
-        radial_self_data,
-        statements: radial_self_data.map(item => item.statement)
-      });
-      setRadial_Label(radial_self_data.map(item => item.statement));
-    }
-  }, [selectedAttribute, radial_result, radial_self_data])
-
-  useEffect(() => {
-    console.log('Fetching radar data with:', {
-      selectedAttribute,
-      analysis,
-      bank
-    });
-    fetch_radar("total", analysis, bank);
-  }, [selectedAttribute, analysis, bank])
-
-
+    fetch_analysis();
+  }, []);
 
   useEffect(() => {
     // Fetch self data and max data
@@ -1293,29 +1018,34 @@ export default function Reports() {
             </SelectTrigger>
             <SelectContent>
               {analysisTypeList?.map((item) => (
-                item?.id && item?.analysis_type ? (
+                item?.id && item?.name ? (
                   <SelectItem 
                     key={item.id} 
-                    value={item.analysis_type}
+                    value={item.name}
                   >
-                    {item.analysis_type}
+                    {item.name}
                   </SelectItem>
                 ) : null
               ))}
             </SelectContent>
           </Select>
-          <Label className='mt-3 mb-3'> Select an Bank </Label>
+          <Label className='mt-3 mb-3'> Select a Bank </Label>
           <Select value={bank} onValueChange={(value) => {
             setBank(value);
           }}>
             <SelectTrigger>
-              <SelectValue placeholder="Select an Bank" />
+              <SelectValue placeholder="Select a Bank" />
             </SelectTrigger>
             <SelectContent>
-              { bankList && bankList.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.name}
-                </SelectItem>
+              {bankList?.map((item) => (
+                item?.id && item?.name ? (
+                  <SelectItem 
+                    key={item.id} 
+                    value={item.id}
+                  >
+                    {item.name}
+                  </SelectItem>
+                ) : null
               ))}
             </SelectContent>
           </Select>
