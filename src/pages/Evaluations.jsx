@@ -687,7 +687,7 @@ export default function Evaluations() {
       if (assignmentError) throw assignmentError;
 
       toast.success('Evaluation deleted successfully');
-      fetchAssignments(); // Refresh the list
+      window.location.reload();
     } catch (error) {
       console.error('Error:', error);
       toast.error('An error occurred while deleting');
