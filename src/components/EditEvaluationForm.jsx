@@ -151,18 +151,26 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!evalName.trim()) {
       toast.error('Evaluation name cannot be empty');
       return;
     }
 
-    onSave({
-      ...evaluation,
-      evaluation_name: evalName.trim(),
-      evaluators,
-      newEmployeeIds: currentEmployees
-    });
+    try {
+      await onSave({
+        ...evaluation,
+        evaluation_name: evalName.trim(),
+        evaluators,
+        newEmployeeIds: currentEmployees
+      });
+      
+      // Only refresh after successful save
+      window.location.reload();
+    } catch (error) {
+      console.error('Error saving evaluation:', error);
+      toast.error('Failed to save changes');
+    }
   };
 
   if (loading) {
