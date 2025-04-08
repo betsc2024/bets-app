@@ -66,6 +66,8 @@ export default function Reports() {
   const [selfTableData, setSelfTableData] = useState([]);
   const [notSelfTableData, setNotSelfTableData] = useState([]);
   const [tableData, setTableData] = useState([]);
+  const [relationCountMap, setRelationCountMap] = useState([]);
+  const [total, setTotal] = useState([]);
 
   // Company and user states
   const [companies, setCompanies] = useState([]);
@@ -85,10 +87,6 @@ export default function Reports() {
   const [analysisTypeList, setAnalysisTypeList] = useState([]);
   const [bank, setBank] = useState("");
   const [bankList, setBankList] = useState([]);
-
-  // Relationship data
-  const [relationCountMap, setRelationCountMap] = useState([]);
-  const [total, setTotal] = useState([]);
 
   const chartRef = useRef(null);
 
@@ -305,7 +303,7 @@ export default function Reports() {
   };
 
 
-  const fetch_specific_data = async (type) => {
+  const fetchSpecificData = async (type) => {
     try {
       if (!selectedCompany || !selectedUser || !data) return;
 
@@ -333,9 +331,23 @@ export default function Reports() {
           averageWeight: e.average_weight,
           scorePercentage: e.average_score_percentage
         }));
-        console.log("Relationship data:", relationshipData);
         setNotSelfTableData(relationshipData);
+        console.log("Relationship data:", relationshipData);
       }
+
+      // Process relationship counts
+      const relationshipCounts = {};
+      data.forEach(item => {
+        const type = item.relationship_type || "self";
+        relationshipCounts[type] = (relationshipCounts[type] || 0) + 1;
+      });
+
+      const countMapData = Object.entries(relationshipCounts).map(([type, count], index) => ({
+        SrNo: index + 1,
+        RelationshipType: type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' '),
+        Count: count
+      }));
+      setRelationCountMap(countMapData);
 
       // Update visualization data
       const labels = [...new Set(data.map(item => item.attribute_name))];
@@ -359,7 +371,7 @@ export default function Reports() {
       }
 
     } catch (error) {
-      console.error("Error in fetch_specific_data:", error);
+      console.error("Error in fetchSpecificData:", error);
       toast.error("Error processing evaluation data");
     }
   };
@@ -737,65 +749,6 @@ export default function Reports() {
     },
   };
 
-  const fetchSpecificData = async (type) => {
-    try {
-      if (!selectedCompany || !selectedUser || !data) return;
-
-      console.log("Using existing data:", data);
-
-      // Process self evaluations from existing data
-      const selfEvals = data.filter(e => e.relationship_type === "self" || e.relationship_type === null);
-      const selfData = selfEvals.map(e => ({
-        attributeName: e.attribute_name,
-        averageWeight: e.average_weight,
-        scorePercentage: e.average_score_percentage
-      }));
-      setSelfTableData(selfData);
-
-      console.log("Self data:", selfData);
-
-      // Initialize relationshipData outside the if block
-      let relationshipData = [];
-
-      // Process relationship evaluations if not self
-      if (type !== 'self') {
-        const relationshipEvals = data.filter(e => e.relationship_type === type);
-        relationshipData = relationshipEvals.map(e => ({
-          attributeName: e.attribute_name,
-          averageWeight: e.average_weight,
-          scorePercentage: e.average_score_percentage
-        }));
-        console.log("Relationship data:", relationshipData);
-        setNotSelfTableData(relationshipData);
-      }
-
-      // Update visualization data
-      const labels = [...new Set(data.map(item => item.attribute_name))];
-      console.log("Labels:", labels);
-      
-      const selfResults = labels.map(label => {
-        const item = selfData.find(d => d.attributeName === label);
-        return item ? item.scorePercentage : 0;
-      });
-      
-      setLabels(labels);
-      setSelfResults(selfResults);
-
-      if (type !== 'self') {
-        const notSelfResults = labels.map(label => {
-          const item = relationshipData.find(d => d.attributeName === label);
-          return item ? item.scorePercentage : 0;
-        });
-        console.log("Not self results:", notSelfResults);
-        setNotSelfResults(notSelfResults);
-      }
-
-    } catch (error) {
-      console.error("Error in fetchSpecificData:", error);
-      toast.error("Error processing evaluation data");
-    }
-  };
-
   const updateChartData = (type) => {
     if (labels && selfResults) {
       console.log("Updating chart with:", { labels, selfResults, notSelfResults, type });
@@ -875,31 +828,45 @@ export default function Reports() {
   ];
 
   useEffect(() => {
-    // console.log(selfTableData);
-    // console.log(notSelfTableData);
+    // If we have relationship data but no self data, create table from relationship data
+    if (notSelfTableData.length > 0) {
+      if (selfTableData.length === 0) {
+        // Create table data directly from relationship data
+        const tableRows = notSelfTableData.map(relationshipScore => ({
+          attributeName: relationshipScore.attributeName,
+          averageWeight: 0, // No self weight
+          scorePercentage: 0, // No self percentage
+          avgRelnWeight: relationshipScore.averageWeight,
+          avgRelnPerc: relationshipScore.scorePercentage
+        }));
+        setTableData(tableRows);
+      } else {
+        // Original merging logic when both self and relationship data exist
+        const mergedScores = selfTableData.map((selfScore) => {
+          const relationshipScore = notSelfTableData.find(
+            (reln) => reln.attributeName === selfScore.attributeName
+          );
 
-    if (selfTableData.length > 0) {
-      // Merge self and not-self scores properly
-      const mergedScores = selfTableData.map((selfScore) => {
-        // Find matching relationship-based data using attribute_name & company_name
-        const relationshipScore = notSelfTableData.find(
-          (reln) =>
-            reln.attributeName === selfScore.attributeName &&
-            reln.companyName === selfScore.companyName
-        );
-
-        return {
-          companyName: selfScore.companyName,
-          attributeName: selfScore.attributeName,
-          averageWeight: selfScore.averageWeight, // Self weight
-          scorePercentage: selfScore.scorePercentage, // Self percentage
-          avgRelnWeight: relationshipScore ? relationshipScore.averageWeight : 0, // Relationship weight
-          avgRelnPerc: relationshipScore ? relationshipScore.scorePercentage : 0, // Relationship percentage
-        };
-      });
-
-      // console.log(mergedScores);
-      setTableData(mergedScores);
+          return {
+            attributeName: selfScore.attributeName,
+            averageWeight: selfScore.averageWeight,
+            scorePercentage: selfScore.scorePercentage,
+            avgRelnWeight: relationshipScore ? relationshipScore.averageWeight : 0,
+            avgRelnPerc: relationshipScore ? relationshipScore.scorePercentage : 0
+          };
+        });
+        setTableData(mergedScores);
+      }
+    } else if (selfTableData.length > 0) {
+      // Only self data exists
+      const tableRows = selfTableData.map(selfScore => ({
+        attributeName: selfScore.attributeName,
+        averageWeight: selfScore.averageWeight,
+        scorePercentage: selfScore.scorePercentage,
+        avgRelnWeight: 0,
+        avgRelnPerc: 0
+      }));
+      setTableData(tableRows);
     }
   }, [selfTableData, notSelfTableData]);
 
