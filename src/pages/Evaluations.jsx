@@ -1052,13 +1052,15 @@ export default function Evaluations() {
     fetchBanks(allbanks);
   },[allbanks])
 
-  // Only fetch users when bank changes
-  // useEffect(() => {
-  //   if (selectedBank) {
-  //     console.log('Selected bank changed, fetching users...');
-  //     fetchCompanyUsers(selectedBank.company_id);
-  //   }
-  // }, [selectedBank]);
+  useEffect(() => {
+    if (selectedCompany) {
+      setAllbanks(false);
+      fetchBanks(false);
+    } else {
+      setAllbanks(true);
+      fetchBanks(true);
+    }
+  }, [selectedCompany]);
 
   // Only fetch assignments when tab changes to manage
   useEffect(() => {
@@ -1629,18 +1631,22 @@ export default function Evaluations() {
               />
             </div>
 
-            <div>
-              <Label>Select Company</Label>
-              <Select value={selectedCompany?.id} onValueChange={(value) => {
-                const company = companies.find(b => b.id === value);
-                setSelectedCompany(company);
-              }}>
+            <div className="space-y-2">
+              <Label>Company</Label>
+              <Select
+                value={selectedCompany ? JSON.stringify(selectedCompany) : 'all'}
+                onValueChange={(value) => {
+                  const company = value === 'all' ? null : JSON.parse(value);
+                  setSelectedCompany(company);
+                }}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a Company" />
+                  <SelectValue placeholder="Select Company" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">All Companies</SelectItem>
                   {companies.map((company) => (
-                    <SelectItem key={company.id} value={company.id}>
+                    <SelectItem key={company.id} value={JSON.stringify(company)}>
                       {company.name}
                     </SelectItem>
                   ))}
@@ -1648,35 +1654,28 @@ export default function Evaluations() {
               </Select>
             </div>
 
-{
-  selectedCompany &&  <div className='row'>
-              <div className='col'>
-              <Label>Select Bank From : </Label>
-              <input type = "radio"  className='mx-2' id="all" name="select_bank" defaultChecked onClick={()=>{
-                setAllbanks(true);
-              }} />
-              <Label>All</Label>
-              <input type = "radio" className='mx-2' id="specific" name="select_bank" onClick={()=>{
-                setAllbanks(false);
-              }}/>
-              <Label>Industry Specific</Label>
-              <Select value={selectedBank?.id} onValueChange={(value) => {
-                const bank = banks.find(b => b.id === value);
-                setSelectedBank(bank);
-              }}>
+            <div className="space-y-2">
+              <Label>Bank</Label>
+              <Select
+                value={selectedBank ? selectedBank.id.toString() : ''}
+                onValueChange={(value) => {
+                  const bank = banks.find(b => b.id.toString() === value);
+                  setSelectedBank(bank || null);
+                }}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a bank" />
+                  <SelectValue placeholder="Select Bank" />
                 </SelectTrigger>
                 <SelectContent>
                   {banks.map((bank) => (
-                    <SelectItem key={bank.id} value={bank.id}>
+                    <SelectItem key={bank.id} value={bank.id.toString()}>
                       {bank.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              </div>
-            </div>}
+            </div>
+
             {selectedBank && (
               <div className="space-y-4">
                 <Card>

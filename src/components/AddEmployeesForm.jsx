@@ -13,22 +13,31 @@ export function AddEmployeesForm({ evaluation, onSave, onCancel }) {
 
   useEffect(() => {
     const fetchUsers = async () => {
-      if (evaluation) {
+      console.log('Evaluation data:', evaluation);
+      const companyId = evaluation?.company_id || evaluation?.companies?.id;
+      console.log('Using company ID:', companyId);
+      
+      if (evaluation && companyId) {
         setLoading(true);
         try {
+          console.log('Fetching users for company:', companyId);
           // Get users from the same company as the evaluation
           const { data: userData, error } = await supabase
             .from('users')
             .select('id, email, full_name')
-            .eq('company_id', evaluation.company_id)
+            .eq('company_id', companyId)
             .order('full_name');
 
           if (error) throw error;
+          
+          console.log('Fetched users:', userData);
 
           // Get all employees that are already in any evaluation with this name
           const existingEmployeeIds = evaluation.allAssignments
             ?.filter(a => a.evaluation_name === evaluation.evaluation_name)
             ?.map(a => a.user_to_evaluate_id) || [];
+
+          console.log('Existing employee IDs:', existingEmployeeIds);
 
           // Also exclude any newly selected employees
           const excludeIds = [...existingEmployeeIds, ...selectedEmployees.map(e => e.id)];
@@ -36,6 +45,7 @@ export function AddEmployeesForm({ evaluation, onSave, onCancel }) {
           // Filter out users who are already in the evaluation or selected
           const availableEmps = userData.filter(user => !excludeIds.includes(user.id));
           
+          console.log('Available employees after filtering:', availableEmps);
           setAvailableEmployees(availableEmps);
         } catch (err) {
           console.error('Error fetching users:', err);
@@ -43,6 +53,15 @@ export function AddEmployeesForm({ evaluation, onSave, onCancel }) {
         } finally {
           setLoading(false);
         }
+      } else {
+        console.log('No evaluation or company ID available');
+        if (!evaluation) console.log('No evaluation object');
+        if (!companyId) console.log('No company ID found in:', { 
+          directCompanyId: evaluation?.company_id,
+          companiesObject: evaluation?.companies
+        });
+        setLoading(false);
+        setAvailableEmployees([]);
       }
     };
 
@@ -123,9 +142,9 @@ export function AddEmployeesForm({ evaluation, onSave, onCancel }) {
                 </SelectItem>
               ))}
               {availableEmployees.length === 0 && (
-                <SelectItem value="" disabled>
+                <div className="px-2 py-2 text-sm text-gray-500">
                   No more employees available
-                </SelectItem>
+                </div>
               )}
             </SelectContent>
           </Select>
