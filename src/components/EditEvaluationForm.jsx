@@ -11,11 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
   const [evalName, setEvalName] = useState('');
-  const [evalStatus, setEvalStatus] = useState('');
   const [evaluators, setEvaluators] = useState([]);
   const [availableEvaluators, setAvailableEvaluators] = useState([]);
   const [selectedEvaluatorId, setSelectedEvaluatorId] = useState('');
-  const [selectedRelationType, setSelectedRelationType] = useState('peer');
+  const [selectedRelationType, setSelectedRelationType] = useState('');
   const [loading, setLoading] = useState(true);
   const [availableEmployees, setAvailableEmployees] = useState([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
@@ -53,9 +52,13 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
         console.log('EditEvaluationForm received evaluation:', evaluation);
         setLoading(true);
         try {
+          // Get users from the same company as the evaluation
+          const companyId = evaluation?.company_id || evaluation?.companies?.id;
           const { data: userData, error } = await supabase
             .from('users')
-            .select('id, email, full_name');
+            .select('id, email, full_name')
+            .eq('company_id', companyId)  // Filter users by company_id
+            .order('full_name');
 
           if (error) throw error;
 
@@ -83,7 +86,6 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
 
           setAvailableEvaluators(available);
           setEvalName(evaluation.evaluation_name);
-          setEvalStatus(evaluation.status);
           setEvaluators(evaluation.evaluations?.filter(e => !e.is_self_evaluator) || []);
         } catch (err) {
           console.error('Error fetching users:', err);
@@ -137,7 +139,7 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
       setEvaluators([...evaluators, newEvaluation]);
       setAvailableEvaluators(prev => prev.filter(u => u.id !== selectedEvaluatorId));
       setSelectedEvaluatorId('');
-      setSelectedRelationType('peer');
+      setSelectedRelationType('');
     }
   };
 
@@ -158,7 +160,6 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
     onSave({
       ...evaluation,
       evaluation_name: evalName.trim(),
-      status: evalStatus,
       evaluators,
       newEmployeeIds: currentEmployees
     });
@@ -178,19 +179,6 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
           onChange={(e) => setEvalName(e.target.value)}
           className="col-span-3"
         />
-      </div>
-
-      <div className="grid grid-cols-4 items-center gap-4">
-        <Label htmlFor="status" className="text-right">Status</Label>
-        <Select value={evalStatus} onValueChange={setEvalStatus}>
-          <SelectTrigger className="col-span-3">
-            <SelectValue placeholder="Select status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       <Tabs defaultValue="evaluators" className="mt-6">
@@ -237,22 +225,34 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Select evaluator" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {availableEvaluators.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        {user.full_name}
-                      </SelectItem>
-                    ))}
+                  <SelectContent className="max-h-[300px] overflow-y-auto w-[min(calc(100vw-2rem),400px)]">
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {availableEvaluators.map((user) => (
+                        <SelectItem key={user.id} value={user.id} className="py-2">
+                          <div>
+                            <div className="font-medium">{user.full_name}</div>
+                            {user.email && (
+                              <div className="text-xs text-gray-500">{user.email}</div>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                      {availableEvaluators.length === 0 && (
+                        <div className="px-2 py-2 text-sm text-gray-500">
+                          No more evaluators available
+                        </div>
+                      )}
+                    </div>
                   </SelectContent>
                 </Select>
                 <Select value={selectedRelationType} onValueChange={setSelectedRelationType}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Relationship" />
+                  <SelectTrigger className="w-[220px] border-purple-200 hover:border-purple-300 focus:ring-purple-200">
+                    <SelectValue placeholder="Select Relationship Type" className="text-gray-600" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="w-[220px]">
                     {relationshipTypes.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
+                      <SelectItem key={type.value} value={type.value} className="py-3 hover:bg-purple-50 cursor-pointer">
+                        <div className="font-medium">{type.label}</div>
                       </SelectItem>
                     ))}
                   </SelectContent>

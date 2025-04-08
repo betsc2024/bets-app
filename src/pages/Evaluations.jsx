@@ -1640,16 +1640,20 @@ export default function Evaluations() {
                   setSelectedCompany(company);
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Select Company" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Companies</SelectItem>
-                  {companies.map((company) => (
-                    <SelectItem key={company.id} value={JSON.stringify(company)}>
-                      {company.name}
+                <SelectContent className="max-h-[300px] overflow-y-auto w-[min(calc(100vw-2rem),400px)]">
+                  <div className="max-h-[300px] overflow-y-auto">
+                    <SelectItem value="all" className="py-2">
+                      <div className="font-medium">All Companies</div>
                     </SelectItem>
-                  ))}
+                    {companies.map((company) => (
+                      <SelectItem key={company.id} value={JSON.stringify(company)} className="py-2">
+                        <div className="font-medium">{company.name}</div>
+                      </SelectItem>
+                    ))}
+                  </div>
                 </SelectContent>
               </Select>
             </div>
@@ -1663,15 +1667,22 @@ export default function Evaluations() {
                   setSelectedBank(bank || null);
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Select Bank" />
                 </SelectTrigger>
-                <SelectContent>
-                  {banks.map((bank) => (
-                    <SelectItem key={bank.id} value={bank.id.toString()}>
-                      {bank.name}
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[300px] overflow-y-auto w-[min(calc(100vw-2rem),400px)]">
+                  <div className="max-h-[300px] overflow-y-auto">
+                    {banks.map((bank) => (
+                      <SelectItem key={bank.id} value={bank.id.toString()} className="py-2">
+                        <div>
+                          <div className="font-medium">{bank.name}</div>
+                          {bank.description && (
+                            <div className="text-xs text-gray-500">{bank.description}</div>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </div>
                 </SelectContent>
               </Select>
             </div>

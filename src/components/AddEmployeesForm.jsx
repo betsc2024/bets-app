@@ -135,17 +135,24 @@ export function AddEmployeesForm({ evaluation, onSave, onCancel }) {
             <SelectTrigger className="flex-1">
               <SelectValue placeholder="Select employee" />
             </SelectTrigger>
-            <SelectContent>
-              {availableEmployees.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.full_name}
-                </SelectItem>
-              ))}
-              {availableEmployees.length === 0 && (
-                <div className="px-2 py-2 text-sm text-gray-500">
-                  No more employees available
-                </div>
-              )}
+            <SelectContent className="max-h-[300px] overflow-y-auto w-[min(calc(100vw-2rem),400px)]">
+              <div className="max-h-[300px] overflow-y-auto">
+                {availableEmployees.map((user) => (
+                  <SelectItem key={user.id} value={user.id} className="py-2">
+                    <div>
+                      <div className="font-medium">{user.full_name}</div>
+                      {user.email && (
+                        <div className="text-xs text-gray-500">{user.email}</div>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+                {availableEmployees.length === 0 && (
+                  <div className="px-2 py-2 text-sm text-gray-500">
+                    No more employees available
+                  </div>
+                )}
+              </div>
             </SelectContent>
           </Select>
           <Button onClick={handleAddEmployee}>Add</Button>
