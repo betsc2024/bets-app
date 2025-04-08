@@ -872,61 +872,6 @@ export default function Evaluations() {
         if (error) throw error;
         console.log('New evaluation created:', newEvaluation);
 
-        // Fetch the updated assignment with all relationships
-        const { data: updatedAssignment, error: fetchError } = await supabase
-          .from('evaluation_assignments')
-          .select(`
-            *,
-            companies (
-              id,
-              name
-            ),
-            attribute_banks (
-              id,
-              name
-            ),
-            creator:users!evaluation_assignments_created_by_fkey (
-              id,
-              email,
-              full_name
-            ),
-            user_to_evaluate:users!evaluation_assignments_user_to_evaluate_id_fkey (
-              id,
-              email,
-              full_name
-            ),
-            evaluations (
-              id,
-              evaluator:users!evaluations_evaluator_id_fkey (
-                id,
-                email,
-                full_name
-              ),
-              status,
-              is_self_evaluator,
-              relationship_type
-            )
-          `)
-          .eq('id', assignmentId)
-          .single();
-
-        if (fetchError) throw fetchError;
-        console.log('Fetched updated assignment:', updatedAssignment);
-
-        // Update local state with full relationship data
-        setAssignments(prev => {
-          console.log('Previous assignments:', prev);
-          const updated = prev.map(a => {
-            if (a.id === assignmentId) {
-              console.log('Updating assignment:', a.id);
-              console.log('Updated assignment:', updatedAssignment);
-              return updatedAssignment;
-            }
-            return a;
-          });
-          console.log('Updated assignments:', updated);
-          return updated;
-        });
       } else if (!checked && selfEvaluation) {
         console.log('Removing self evaluation:', selfEvaluation.id);
         // Remove self-evaluation
@@ -937,67 +882,12 @@ export default function Evaluations() {
 
         if (error) throw error;
         console.log('Self evaluation deleted successfully');
-
-        // Fetch the updated assignment with all relationships
-        const { data: updatedAssignment, error: fetchError } = await supabase
-          .from('evaluation_assignments')
-          .select(`
-            *,
-            companies (
-              id,
-              name
-            ),
-            attribute_banks (
-              id,
-              name
-            ),
-            creator:users!evaluation_assignments_created_by_fkey (
-              id,
-              email,
-              full_name
-            ),
-            user_to_evaluate:users!evaluation_assignments_user_to_evaluate_id_fkey (
-              id,
-              email,
-              full_name
-            ),
-            evaluations (
-              id,
-              evaluator:users!evaluations_evaluator_id_fkey (
-                id,
-                email,
-                full_name
-              ),
-              status,
-              is_self_evaluator,
-              relationship_type
-            )
-          `)
-          .eq('id', assignmentId)
-          .single();
-
-        if (fetchError) throw fetchError;
-        console.log('Fetched updated assignment:', updatedAssignment);
-
-        // Update local state with full relationship data
-        setAssignments(prev => {
-          console.log('Previous assignments:', prev);
-          const updated = prev.map(a => {
-            if (a.id === assignmentId) {
-              console.log('Updating assignment:', a.id);
-              console.log('Updated assignment:', updatedAssignment);
-              return updatedAssignment;
-            }
-            return a;
-          });
-          console.log('Updated assignments:', updated);
-          return updated;
-        });
       }
 
       setEditingRowId(null);
       setTempSelfEvalChanges(new Map());
       toast.success('Self evaluation updated successfully');
+      window.location.reload();
     } catch (error) {
       console.error('Error updating self evaluation:', error);
       toast.error('Failed to update self evaluation');
