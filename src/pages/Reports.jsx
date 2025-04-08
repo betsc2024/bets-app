@@ -12,8 +12,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 
-
-
 import html2canvas from "html2canvas";
 
 import {
@@ -44,56 +42,53 @@ import {
 } from '@/components/ui/table';
 import classNames from 'classnames';
 
-
-
-
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, RadialLinearScale, PointElement, LineElement, Filler, ChartDataLabels);
 
 export default function Reports() {
-
-
-  //x and y axes values
+  // Chart data states
   const [data, setData] = useState([]);
-  const [label, setLabel] = useState(null);
-  const [selfresults, setSelfResults] = useState(null);
-  const [notselfresults, setnotselfresults] = useState(null);
+  const [labels, setLabels] = useState(null);
+  const [selfResults, setSelfResults] = useState(null);
+  const [notSelfResults, setNotSelfResults] = useState(null);
   const [selectedChart, setSelectedChart] = useState("table");
-  const [bardata, setBarData] = useState(null);
-  const [score_type, setScore_Type] = useState(null);
+  const [barData, setBarData] = useState(null);
+  const [scoreType, setScoreType] = useState(null);
 
-  const [radial_label, setRadial_Label] = useState([]);
-  const [radial_score, setRadial_Score] = useState(null);
-  const [radial_data, setRadial_data] = useState(null);
-  const [radial_result, set_Radial_Result] = useState(null);
-  const [radial_self_data, setRadialSelfData] = useState(null);
-  const [radial_ideal_score,  setRadial_IdealScore] = useState(null);
+  // Radar chart states
+  const [radialLabels, setRadialLabels] = useState([]);
+  const [radialScore, setRadialScore] = useState(null);
+  const [radialData, setRadialData] = useState(null);
+  const [radialResult, setRadialResult] = useState(null);
+  const [radialSelfData, setRadialSelfData] = useState(null);
+  const [radialIdealScore, setRadialIdealScore] = useState(null);
 
+  // Table data states
+  const [selfTableData, setSelfTableData] = useState([]);
+  const [notSelfTableData, setNotSelfTableData] = useState([]);
+  const [tableData, setTableData] = useState([]);
 
-  const [self_table_data, setSelfTableData] = useState([]);
-  const [notself_table_data, setNotSelfTableData] = useState([]);
-  const [table_data, setTable_Data] = useState([]);
-
+  // Company and user states
   const [companies, setCompanies] = useState([]);
   const [selectedCompany, setSelectedCompany] = useState(null);
-
-  const [list_Demographic_atr, setlist_Demographic_atr] = useState([]);
-  const [demographicData, setDemographic_data] = useState([]);
-  const [demographicTypes, setDemographic_types] = useState([]);
-  const [demographicbardata, setdemographicbardata] = useState([]);
-
-  const [total, setTotal] = useState([]);
-
-  const [selectedAttribute, setSelectedAttribute] = useState('');
-
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [relation_count_map, setRelationCountMap] = useState([]);
-  // const [relation_count_map_o,setRelationCountMap_o] = useState({});
-  const [analysis , setAnaysis] =  useState("");
-  const [analysisTypeList,setAnalysisTypeList]  = useState([]);
 
-  const  [bank , setBank] = useState("");
-  const [bankList,setBankList] = useState([]);
+  // Demographic data states
+  const [demographicAttributes, setDemographicAttributes] = useState([]);
+  const [demographicData, setDemographicData] = useState([]);
+  const [demographicTypes, setDemographicTypes] = useState([]);
+  const [demographicBarData, setDemographicBarData] = useState([]);
+  const [selectedAttribute, setSelectedAttribute] = useState('');
+
+  // Analysis and bank states
+  const [analysis, setAnalysis] = useState("");
+  const [analysisTypeList, setAnalysisTypeList] = useState([]);
+  const [bank, setBank] = useState("");
+  const [bankList, setBankList] = useState([]);
+
+  // Relationship data
+  const [relationCountMap, setRelationCountMap] = useState([]);
+  const [total, setTotal] = useState([]);
 
   const chartRef = useRef(null);
 
@@ -166,7 +161,7 @@ export default function Reports() {
   const fetchData = async (selectedCompany, selectedUser , selectedAnalysis = "",selectedBank = "") => {
     try {
       setBarData(null);
-      setTable_Data([]);
+      setTableData([]);
 
 
 
@@ -210,6 +205,7 @@ export default function Reports() {
         .eq("status", "completed");
         
         let { data, error } = await query;
+        console.log("All top_boss evaluations:", data.filter(e => e.relationship_type === 'top_boss'));
         if (selectedAnalysis !== "") {
           data = data.filter((item) =>
             item.evaluation_assignments.attribute_banks.analysis_types.name === selectedAnalysis
@@ -234,6 +230,9 @@ export default function Reports() {
         evaluation.evaluation_assignments?.company_id === id &&
         evaluation.evaluation_assignments?.user_to_evaluate_id === user_id
       )
+      console.log("Filtered top_boss evaluations:", filteredData.filter(e => e.relationship_type === 'top_boss'));
+      console.log("Current company_id:", id);
+      console.log("Current user_id:", user_id);
       const relation_count_map_temp = {};
 
       filteredData.map((item) => {
@@ -290,9 +289,10 @@ export default function Reports() {
         }));
       }).flat();
 
-      // console.log(formattedData);
+      console.log("Final formatted data:", formattedData.filter(d => d.relationship_type === 'top_boss'));
 
-      // setData(formattedData);
+      // console.log(formattedData);
+      setData(formattedData);
 
       // console.log(data);
 
@@ -304,6 +304,65 @@ export default function Reports() {
     }
   };
 
+
+  const fetch_specific_data = async (type) => {
+    try {
+      if (!selectedCompany || !selectedUser || !data) return;
+
+      console.log("Using existing data:", data);
+
+      // Process self evaluations from existing data
+      const selfEvals = data.filter(e => e.relationship_type === "self" || e.relationship_type === null);
+      const selfData = selfEvals.map(e => ({
+        attributeName: e.attribute_name,
+        averageWeight: e.average_weight,
+        scorePercentage: e.average_score_percentage
+      }));
+      setSelfTableData(selfData);
+
+      console.log("Self data:", selfData);
+
+      // Initialize relationshipData outside the if block
+      let relationshipData = [];
+
+      // Process relationship evaluations if not self
+      if (type !== 'self') {
+        const relationshipEvals = data.filter(e => e.relationship_type === type);
+        relationshipData = relationshipEvals.map(e => ({
+          attributeName: e.attribute_name,
+          averageWeight: e.average_weight,
+          scorePercentage: e.average_score_percentage
+        }));
+        console.log("Relationship data:", relationshipData);
+        setNotSelfTableData(relationshipData);
+      }
+
+      // Update visualization data
+      const labels = [...new Set(data.map(item => item.attribute_name))];
+      console.log("Labels:", labels);
+      
+      const selfResults = labels.map(label => {
+        const item = selfData.find(d => d.attributeName === label);
+        return item ? item.scorePercentage : 0;
+      });
+      
+      setLabels(labels);
+      setSelfResults(selfResults);
+
+      if (type !== 'self') {
+        const notSelfResults = labels.map(label => {
+          const item = relationshipData.find(d => d.attributeName === label);
+          return item ? item.scorePercentage : 0;
+        });
+        console.log("Not self results:", notSelfResults);
+        setNotSelfResults(notSelfResults);
+      }
+
+    } catch (error) {
+      console.error("Error in fetch_specific_data:", error);
+      toast.error("Error processing evaluation data");
+    }
+  };
 
   const processDemographicData = () => {
     if (!data || data.length === 0) {
@@ -359,9 +418,9 @@ export default function Reports() {
 
 
 
-      setDemographic_types(relationshipTypesArray);
-      setlist_Demographic_atr(Object.keys(attributeMap));
-      setDemographic_data(processedData);
+      setDemographicTypes(relationshipTypesArray);
+      setDemographicAttributes(Object.keys(attributeMap));
+      setDemographicData(processedData);
 
 
 
@@ -513,18 +572,18 @@ export default function Reports() {
 
   useEffect(() => {
     // Fetch self data and max data
-    if (radial_score && radial_label && radial_self_data) {
+    if (radialScore && radialLabels && radialSelfData) {
       console.log('Radar Chart Data Creation - Input:', {
-        radial_score,
-        radial_label,
-        radial_self_data
+        radialScore,
+        radialLabels,
+        radialSelfData
       });
 
-      const result = radial_score;
+      const result = radialScore;
       const maxData = new Array(result.length).fill(100);
       
       console.log('Processing self data...');
-      const selfData = radial_self_data.map(item => {
+      const selfData = radialSelfData.map(item => {
         console.log('Self item:', item);
         return item.average_weight;
       });
@@ -536,14 +595,14 @@ export default function Reports() {
       });
 
       console.log('Creating final radar data with:', {
-        labels: radial_label,
+        labels: radialLabels,
         selfData,
         relationshipData,
         maxData
       });
 
       const radarData = {
-        labels: radial_label,
+        labels: radialLabels,
         datasets: [
           {
             label: 'Self',
@@ -570,7 +629,7 @@ export default function Reports() {
           /* Ideal Score - To be implemented later
           {
             label: 'Ideal Score',
-            data: radial_label.map(() => radial_ideal_score),
+            data: radialLabels.map(() => radialIdealScore),
             backgroundColor: 'rgba(0, 0, 255, 0.15)',
             borderColor: 'rgba(0, 0, 255, 0.9)',
             borderWidth: 2.5,
@@ -595,20 +654,20 @@ export default function Reports() {
       };
       
       console.log('Setting final radar data:', radarData);
-      setRadial_data(radarData);
+      setRadialData(radarData);
     } else {
       console.log('Missing required data for radar chart:', {
-        hasRadialScore: !!radial_score,
-        hasRadialLabel: !!radial_label,
-        hasRadialSelfData: !!radial_self_data,
-        radial_score,
-        radial_label,
-        radial_self_data
+        hasRadialScore: !!radialScore,
+        hasRadialLabel: !!radialLabels,
+        hasRadialSelfData: !!radialSelfData,
+        radialScore,
+        radialLabels,
+        radialSelfData
       });
     }
-  }, [selectedAttribute, radial_label, radial_score, radial_self_data])
-  const options = {
-    indexAxis: "x", // Ensures vertical bars
+  }, [selectedAttribute, radialLabels, radialScore, radialSelfData])
+  const chartOptions = {
+    indexAxis: "x",
     elements: {
       bar: {
         borderWidth: 2,
@@ -618,177 +677,156 @@ export default function Reports() {
     plugins: {
       legend: {
         position: "bottom",
-        align: "end"
       },
       title: {
         display: true,
-        text: "Report",
-      },
-      datalabels: {
-        anchor: "end", // Positions label on top of bars
-        align: "top",
-        offset: 5, // Adds margin above the bar
-        font: {
-          weight: "bold",
-        },
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          max: 100
-
-        },
-      },
-
-
-    },
-  };
-  const baroptions = {
-    indexAxis: "x", // Ensures vertical bars
-    elements: {
-      bar: {
-        borderWidth: 2,
-      },
-    },
-    responsive: true,
-    plugins: {
-      legend: {
-        display:false,
-        position: "bottom",
-        align: "end"
-      },
-      title: {
-        display: true,
-        text: "Report",
-      },
-      datalabels: {
-        anchor: "end", // Positions label on top of bars
-        align: "top",
-        offset: 5, // Adds margin above the bar
-        font: {
-          weight: "bold",
-        },
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          max: 100
-
-        },
-      },
-
-
-    },
-  };
-
-  const specific_type_bar = (relationship_type) => {
-    if (label && selfresults) {
-      if (score_type === null) {
-        setBarData({
-          labels: label,
-          datasets: [
-            {
-              label: "Self Score",
-              data: selfresults,
-              backgroundColor: "#733e93",
-              borderColor: "#733e93",
-              borderWidth: 1,
-            }
-          ],
-        });
-      } else {
-        setBarData({
-          labels: label,
-          datasets: [
-            {
-              label: "Self Score",
-              data: selfresults,
-              backgroundColor: "#733e93",
-              borderColor: "#733e93",
-              borderWidth: 1,
-            },
-            ...(notselfresults && notselfresults.length > 0 ? [{
-              label: relationship_type,
-              data: notselfresults,
-              backgroundColor: "#e74c3c",
-              borderColor: "#e74c3c",
-              borderWidth: 1,
-            }] : []),
-          ],
-        });
-      }
-    }
-  }
-
-
-
-  const radaroptions = {
-    plugins: {
-      legend: {
-        position: 'bottom',
-        display: true,
+        text: "Evaluation Results",
       },
       datalabels: {
         display: true,
         color: "black",
         font: {
-          size: 14,
           weight: "bold",
+          size: 11
         },
-        formatter: (value) => {
-          const num = parseFloat(value);
-          return !isNaN(num) ? num.toFixed(1) : value;
+        anchor: 'end',
+        align: 'top',
+        offset: 4,
+        formatter: (value) => value.toFixed(2)
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: (context) => {
+          const values = context.chart.data.datasets.flatMap(d => d.data);
+          const maxValue = Math.max(...values);
+          return Math.ceil(maxValue / 5) * 5; // Round up to nearest 5
         },
-        anchor: 'center',
-        align: 'center',
-      },
-      tooltip: {
-        enabled: true,
-        callbacks: {
-          label: function(context) {
-            const num = parseFloat(context.raw);
-            return `${context.dataset.label}: ${!isNaN(num) ? num.toFixed(1) : context.raw}`;
+        ticks: {
+          stepSize: 5,
+          callback: function(value, index, values) {
+            // Include all multiples of 5 and the actual data values
+            const dataValues = this.chart.data.datasets.flatMap(d => d.data);
+            const uniqueValues = [...new Set(dataValues)].sort((a, b) => a - b);
+            return value % 5 === 0 || uniqueValues.includes(value) ? value : '';
           }
         }
+      },
+    },
+  };
+
+  const radarOptions = {
+    plugins: {
+      legend: {
+        position: "bottom",
+      },
+      datalabels: {
+        display: false
       }
     },
     scales: {
       r: {
+        min: 0,
+        max: 100,
+        beginAtZero: true,
         ticks: {
-          display: false,
           stepSize: 20,
         },
-        grid: {
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-        angleLines: {
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-        pointLabels: {
-          color: 'black',
-          font: {
-            size: 12,
-            weight: 'bold'
-          },
-          callback: function (label) {
-            let words = label.split(" ");
-            let formattedLabel = [];
-            
-            for (let i = 0; i < words.length; i += 3) {
-              formattedLabel.push(words.slice(i, i + 3).join(" "));
-            }
-            
-            return formattedLabel;
-          }
-        },
-        suggestedMin: 0,
-        suggestedMax: 100,
-        beginAtZero: true
       },
     },
-    responsive: true,
-    maintainAspectRatio: false
   };
+
+  const fetchSpecificData = async (type) => {
+    try {
+      if (!selectedCompany || !selectedUser || !data) return;
+
+      console.log("Using existing data:", data);
+
+      // Process self evaluations from existing data
+      const selfEvals = data.filter(e => e.relationship_type === "self" || e.relationship_type === null);
+      const selfData = selfEvals.map(e => ({
+        attributeName: e.attribute_name,
+        averageWeight: e.average_weight,
+        scorePercentage: e.average_score_percentage
+      }));
+      setSelfTableData(selfData);
+
+      console.log("Self data:", selfData);
+
+      // Initialize relationshipData outside the if block
+      let relationshipData = [];
+
+      // Process relationship evaluations if not self
+      if (type !== 'self') {
+        const relationshipEvals = data.filter(e => e.relationship_type === type);
+        relationshipData = relationshipEvals.map(e => ({
+          attributeName: e.attribute_name,
+          averageWeight: e.average_weight,
+          scorePercentage: e.average_score_percentage
+        }));
+        console.log("Relationship data:", relationshipData);
+        setNotSelfTableData(relationshipData);
+      }
+
+      // Update visualization data
+      const labels = [...new Set(data.map(item => item.attribute_name))];
+      console.log("Labels:", labels);
+      
+      const selfResults = labels.map(label => {
+        const item = selfData.find(d => d.attributeName === label);
+        return item ? item.scorePercentage : 0;
+      });
+      
+      setLabels(labels);
+      setSelfResults(selfResults);
+
+      if (type !== 'self') {
+        const notSelfResults = labels.map(label => {
+          const item = relationshipData.find(d => d.attributeName === label);
+          return item ? item.scorePercentage : 0;
+        });
+        console.log("Not self results:", notSelfResults);
+        setNotSelfResults(notSelfResults);
+      }
+
+    } catch (error) {
+      console.error("Error in fetchSpecificData:", error);
+      toast.error("Error processing evaluation data");
+    }
+  };
+
+  const updateChartData = (type) => {
+    if (labels && selfResults) {
+      console.log("Updating chart with:", { labels, selfResults, notSelfResults, type });
+      
+      const datasets = [
+        {
+          label: "Self Score",
+          data: selfResults,
+          backgroundColor: "#733e93",
+          borderColor: "#733e93",
+          borderWidth: 1,
+        }
+      ];
+
+      if (scoreType !== null && notSelfResults?.length > 0) {
+        datasets.push({
+          label: type,
+          data: notSelfResults,
+          backgroundColor: "#e74c3c",
+          borderColor: "#e74c3c",
+          borderWidth: 1,
+        });
+      }
+
+      setBarData({
+        labels,
+        datasets
+      });
+    }
+  };
+
   const items = [
     {
       id: 1,
@@ -830,107 +868,91 @@ export default function Reports() {
       key: "demography",
     },
   ];
-  const chartOptions = [
+  const chartOptionsList = [
     { id: "table", label: "Table" },
     { id: "bar", label: "Bar Chart" },
     { id: "radial", label: "Radial Chart" },
   ];
 
   useEffect(() => {
-    // console.log(self_table_data);
-    // console.log(notself_table_data);
+    // console.log(selfTableData);
+    // console.log(notSelfTableData);
 
-    if (self_table_data.length > 0) {
+    if (selfTableData.length > 0) {
       // Merge self and not-self scores properly
-      const mergedScores = self_table_data.map((selfScore) => {
+      const mergedScores = selfTableData.map((selfScore) => {
         // Find matching relationship-based data using attribute_name & company_name
-        const relationshipScore = notself_table_data.find(
+        const relationshipScore = notSelfTableData.find(
           (reln) =>
-            reln.attribute_name === selfScore.attribute_name &&
-            reln.company_name === selfScore.company_name
+            reln.attributeName === selfScore.attributeName &&
+            reln.companyName === selfScore.companyName
         );
 
         return {
-          company_name: selfScore.company_name,
-          attribute_name: selfScore.attribute_name,
-          average_weight: selfScore.average_weight, // Self weight
-          average_score_percentage: selfScore.average_score_percentage, // Self percentage
-          avg_reln_weight: relationshipScore ? relationshipScore.average_weight : 0, // Relationship weight
-          avg_reln_perc: relationshipScore ? relationshipScore.average_score_percentage : 0, // Relationship percentage
+          companyName: selfScore.companyName,
+          attributeName: selfScore.attributeName,
+          averageWeight: selfScore.averageWeight, // Self weight
+          scorePercentage: selfScore.scorePercentage, // Self percentage
+          avgRelnWeight: relationshipScore ? relationshipScore.averageWeight : 0, // Relationship weight
+          avgRelnPerc: relationshipScore ? relationshipScore.scorePercentage : 0, // Relationship percentage
         };
       });
 
       // console.log(mergedScores);
-      setTable_Data(mergedScores);
+      setTableData(mergedScores);
     }
-  }, [self_table_data, notself_table_data]);
-  const deleteEvaluationResponses = async (companyId) => {
-    try {
-      let ans = prompt("Are you sure you want to delete?(Yes/No)");
+  }, [selfTableData, notSelfTableData]);
 
-      if (ans === "yes" || ans === "Yes") {
-        const { data: assignments, error: assignmentError } = await supabase
-          .from('evaluation_assignments')
-          .select(`
-            id,
-            user_to_evaluate_id
-            `)
-          .eq('user_to_evaluate_id', selectedUser?.id);
-
-        if (assignmentError) throw assignmentError;
-        if (!assignments.length) return console.log('No matching evaluations found.');
-
-        const assignmentIds = assignments.map(a => a.id);
-
-        const { data: evaluations, error: evaluationError } = await supabase
-          .from('evaluations')
-          .select('id')
-          .in('evaluation_assignment_id', assignmentIds);
-
-        if (evaluationError) throw evaluationError;
-        if (!evaluations.length) return console.log('No evaluations found.');
-
-        const evaluationIds = Array.isArray(evaluations) ? evaluations.map(e => e.id) : [];
-
-        const { error: deleteError } = await supabase
-          .from('evaluation_responses')
-          .delete()
-          .in('evaluation_id', evaluationIds);
-
-        if (deleteError) throw deleteError;
-
-        const { data: assignmentsToUpdate, error: assignmentUpdateError } = await supabase
-          .from('evaluation_assignments')
-          .select('id')
-          .eq('user_to_evaluate_id', selectedUser?.id);
-
-        if (assignmentUpdateError) throw assignmentUpdateError;
-
-        const assignmentIdsToUpdate = Array.isArray(assignmentsToUpdate) ? assignmentsToUpdate.map(a => a.id) : [];
-
-        if (assignmentIdsToUpdate.length > 0) {
-          const { error: updateEvalError } = await supabase
-            .from('evaluations')
-            .update({ status: 'pending' })
-            .in('evaluation_assignment_id', assignmentIdsToUpdate);
-
-          if (updateEvalError) throw updateEvalError;
-        } else {
-          console.log('No evaluations to update.');
-        }
-        setRelationCountMap([]);
-
-
-        console.log('Evaluation responses deleted successfully.');
-        toast.message('Data deleted successfully');
-        setTable_Data([]);
-        setBarData(null);
-      }
-    } catch (error) {
-      toast.error(error);
-      console.error('Error deleting evaluation responses:', error.message);
+  const handleAnalysisChange = (value) => {
+    setAnalysis(value);
+    if (selectedCompany && selectedUser) {
+      fetchData(selectedCompany, selectedUser, value, bank);
     }
   };
+
+  const handleRelationshipTypeSelect = (type) => {
+    console.log("Selected relationship type:", type);
+    console.log("Current data state:", data);
+    
+    fetchSpecificData(type);
+    updateChartData(type);
+    setScoreType(type);
+    setSelectedChart("bar");
+    
+    if (type === 'demography') {
+      fetchSpecificData('total');
+      processDemographicData();
+    }
+  };
+
+  const processRelationshipData = (type) => {
+    if (!data || data.length === 0) return;
+
+    const relationshipData = data.filter(item => 
+      type === 'total' ? true : item.relationship_type === type
+    );
+
+    const processedData = relationshipData.map(e => ({
+      attributeName: e.attribute_name,
+      averageWeight: e.average_weight,
+      scorePercentage: e.average_score_percentage
+    }));
+    
+    if (type === 'total') {
+      setTotal(processedData);
+    } else {
+      setDemographicData(processedData);
+    }
+
+    updateChartData(type);
+  };
+
+  useEffect(() => {
+    if (selectedCompany && selectedUser && analysis) {
+      fetchData(selectedCompany, selectedUser, analysis, bank);
+    }
+  }, [selectedCompany, selectedUser, analysis, bank]);
+
   const Demography_bar_data = (attribute) => {
 
     let selfresult = [];
@@ -952,7 +974,7 @@ export default function Reports() {
     // console.log(selfresult);
     const colors = ["#733e93", "#FF5733", "#33FF57", "#3357FF", "#FF33A1", "#F4A261", "#2A9D8F"];
 
-    setdemographicbardata({
+    setDemographicBarData({
       labels: demographicTypes,
       datasets: [
         {
@@ -972,13 +994,21 @@ export default function Reports() {
     processDemographicData();
   },[total]);
 
+  const isSelectionsValid = () => {
+    return (
+      selectedCompany !== null &&
+      selectedUser !== null &&
+      analysis !== "" &&
+      bank !== ""
+    );
+  };
+
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
-      <div className=' mb-4 flex flex-row justify-items-end items-end '>
-        <div className='flex flex-col' >
-          <Label className='mb-3'> Select a Company: </Label>
-          <Select className='mb-3' value={selectedCompany?.id} onValueChange={(value) => {
+      <div className="flex flex-wrap gap-4 mb-6">
+        <div className="flex flex-wrap gap-4">
+          <Select value={selectedCompany?.id} onValueChange={(value) => {
             const company = companies.find(c => c.id === value);
             setSelectedCompany(company);
           }}>
@@ -993,7 +1023,7 @@ export default function Reports() {
               ))}
             </SelectContent>
           </Select>
-          <Label className='mt-3 mb-3'> Select an Employee </Label>
+
           <Select value={selectedUser?.id} onValueChange={(value) => {
             const user = users.find(c => c.id === value);
             setSelectedUser(user);
@@ -1009,10 +1039,7 @@ export default function Reports() {
               ))}
             </SelectContent>
           </Select>
-          <Label className='mt-3 mb-3'> Select an Analysis Type </Label>
-          <Select value={analysis} onValueChange={(value) => {
-            setAnaysis(value);
-            }}>
+          <Select value={analysis} onValueChange={handleAnalysisChange}>
             <SelectTrigger>
               <SelectValue placeholder="Select an Analysis Type" />
             </SelectTrigger>
@@ -1029,7 +1056,6 @@ export default function Reports() {
               ))}
             </SelectContent>
           </Select>
-          <Label className='mt-3 mb-3'> Select a Bank </Label>
           <Select value={bank} onValueChange={(value) => {
             setBank(value);
           }}>
@@ -1050,318 +1076,311 @@ export default function Reports() {
             </SelectContent>
           </Select>
         </div>
-        {selectedCompany && selectedUser ? <Button
-          className="w-48 ml-3 bg-primary hover:bg-red-600 text-primary-foreground font-semibold  }" onClick={() => { deleteEvaluationResponses(selectedCompany?.id) }}             >
-
-          Delete Report
-        </Button> : <></>}
       </div>
-      {
-        selectedCompany && selectedUser  ?
-          <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
-            <TableHeader className="text-white">
-              <TableRow>
-                <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                <TableHead className="text-left">Relationship Type</TableHead>
-                <TableHead className="text-center">Count</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {relation_count_map.length > 0 ? (
-                relation_count_map.map((row, index) => (
-                  <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
-                    <TableCell className="text-center">{row.SrNo}</TableCell>
-                    <TableCell className="text-left">{row.RelationshipType}</TableCell>
-                    <TableCell className="text-center">{row.Count}</TableCell>
-                  </TableRow>
-                ))
-              ) : (
+
+      {!isSelectionsValid() ? (
+        <div className="text-center text-gray-500 mt-8">
+          Please select Company, User, Analysis Type and Bank to view the data.
+        </div>
+      ) : (
+        <div className="space-y-6" ref={chartRef}>
+          {selectedCompany && selectedUser  ?
+            <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
+              <TableHeader className="text-white">
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-2">
-                    No data available
-                  </TableCell>
+                  <TableHead className="w-12 text-center">Sr. No.</TableHead>
+                  <TableHead className="text-left">Relationship Type</TableHead>
+                  <TableHead className="text-center">Count</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table> : <></>
-      }
+              </TableHeader>
+              <TableBody>
+                {relationCountMap.length > 0 ? (
+                  relationCountMap.map((row, index) => (
+                    <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
+                      <TableCell className="text-center">{row.SrNo}</TableCell>
+                      <TableCell className="text-left">{row.RelationshipType}</TableCell>
+                      <TableCell className="text-center">{row.Count}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center py-2">
+                      No data available
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table> : <></>
+          }
 
-      {(selectedCompany != null && selectedUser != null) ?
-        <div style={{ width: "1000px", margin: "0 auto" }}>
-          <Accordion.Root type="single" collapsible className="w-full  space-y-2">
-            {items.map((item, index) => (
-              <Accordion.Item key={item.id} value={item.id} className="border rounded-md">
-                <Accordion.Header className="w-full">
-                  <Accordion.Trigger
-                    className={cn(
-                      "flex items-center justify-between w-full px-4 py-3 text-left font-medium",
-                      "hover:bg-gray-100 transition-all"
-                    )}
-                    onClick={() => {
+          {(selectedCompany != null && selectedUser != null) ?
+            <div style={{ width: "1000px", margin: "0 auto" }}>
+              <Accordion.Root type="single" collapsible className="w-full  space-y-2">
+                {items.map((item, index) => (
+                  <Accordion.Item key={item.id} value={item.id} className="border rounded-md">
+                    <Accordion.Header className="w-full">
+                      <Accordion.Trigger
+                        className={cn(
+                          "flex items-center justify-between w-full px-4 py-3 text-left font-medium",
+                          "hover:bg-gray-100 transition-all"
+                        )}
+                        onClick={() => {
+                          handleRelationshipTypeSelect(item.key);
+                        }}
 
-                      fetch_spefifc_data(item.key);
-                      specific_type_bar(item.key);
-                      setScore_Type(item.key);
-                      setSelectedChart(item.key);
-                      if (item.key === 'demography') {
-                        fetch_spefifc_data('total');
-                      }
-                      processDemographicData();
+                      >
+                        {item.title}
 
-                    }}
-
-                  >
-                    {item.title}
-
-                    <ChevronDown className="w-5 h-5 transition-transform data-[state=open]:rotate-180" />
-                  </Accordion.Trigger>
-                </Accordion.Header>
-                <Accordion.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
-                  <div className="px-4 py-2 text-gray-700">
-                    <RadioGroup.Root
-                      value={selectedChart}
-                      onValueChange={setSelectedChart}
-                      className=""
-                    >
-                      {chartOptions.map((option) => {
-                        if (option.id === "radial" && item.key !== "total") {
-                          return null;
-                        }
-                        return (
-                          <div
-                            key={option.id}
-                            className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
-                            onClick={() => {
-
-                              // console.log("clicking");
-                              if (option.id === "bar") {
-                                specific_type_bar(item.key);
-                              }
-                              if (option.id === "radial") {
-                                fetch_radar(item.key);
-                              }
-
-                            }}
+                        <ChevronDown className="w-5 h-5 transition-transform data-[state=open]:rotate-180" />
+                      </Accordion.Trigger>
+                    </Accordion.Header>
+                    <Accordion.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
+                      <div className="px-4 py-2 text-gray-700">
+                        {isSelectionsValid() && (
+                          <RadioGroup.Root
+                            value={selectedChart}
+                            onValueChange={setSelectedChart}
+                            className=""
                           >
-                            <RadioGroup.Item
-                              value={option.id}
-                              id={`chart-option-${option.id}`}
-                              className="w-0.5 h-10 border border-gray-300 rounded-full flex items-center justify-center data-[state=checked]:bg-primary"
+                            {chartOptionsList.map((option) => {
+                              if (option.id === "radial" && item.key !== "total") {
+                                return null;
+                              }
+                              return (
+                                <div
+                                  key={option.id}
+                                  className="flex items-center space-x-3 bg-white p-4 rounded-md shadow-sm hover:bg-gray-50 transition"
+                                  onClick={() => {
 
-                            >
-                              <div className="w-1 h-1 bg-white rounded-full" />
-                            </RadioGroup.Item>
-                            <Label
-                              htmlFor={`chart-option-${option.id}`}
-                              className="flex-1 text-gray-700 cursor-pointer"
-                            >
-                              {option.label}
-                            </Label>
-                          </div>
-                        );
-                      })}
-                    </RadioGroup.Root>
+                                    // console.log("clicking");
+                                    if (option.id === "bar") {
+                                      updateChartData(item.key);
+                                    }
+                                    if (option.id === "radial") {
+                                      // fetch_radar(item.key);
+                                    }
 
+                                  }}
+                                >
+                                  <RadioGroup.Item
+                                    value={option.id}
+                                    id={`chart-option-${option.id}`}
+                                    className="w-0.5 h-10 border border-gray-300 rounded-full flex items-center justify-center data-[state=checked]:bg-primary"
 
-                    {selectedChart === "bar" && bardata ? (
-                      item.key === "demography" ?
+                                  >
+                                    <div className="w-1 h-1 bg-white rounded-full" />
+                                  </RadioGroup.Item>
+                                  <Label
+                                    htmlFor={`chart-option-${option.id}`}
+                                    className="flex-1 text-gray-700 cursor-pointer"
+                                  >
+                                    {option.label}
+                                  </Label>
+                                </div>
+                              );
+                            })}
+                          </RadioGroup.Root>
+                        )}
+                        {selectedChart === "bar" && barData ? (
+                          item.key === "demography" ?
 
-                        <>
-                          <Select
-                            value={selectedAttribute}
-                            placeholder="Select an attribute"
-                            onValueChange={(value) => setSelectedAttribute(value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select an attribute" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {list_Demographic_atr.map((attribute, index) => (
-                                <SelectItem key={index} value={attribute}>
-                                  {attribute}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            <>
+                              <Select
+                                value={selectedAttribute}
+                                placeholder="Select an attribute"
+                                onValueChange={(value) => setSelectedAttribute(value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select an attribute" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {demographicAttributes.map((attribute, index) => (
+                                    <SelectItem key={index} value={attribute}>
+                                      {attribute}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
 
-                          {selectedAttribute ?
+                              {selectedAttribute ?
 
-                            <div>
+                                <div>
+                                  <div ref={chartRef}>
+                                    <Bar data={demographicBarData} options={chartOptions} plugins={[ChartDataLabels]} />
+                                  </div>
+                                  <button onClick={copyToClipboard} className="mt-4">
+                                    Copy Chart to Clipboard
+                                  </button>
+                                </div>
+
+                                : <></>}
+                            </>
+
+                            : <div>
                               <div ref={chartRef}>
-                                <Bar data={demographicbardata} options={baroptions} plugins={[ChartDataLabels]} />
+                                <Bar data={barData} options={chartOptions} plugins={[ChartDataLabels]} />
                               </div>
                               <button onClick={copyToClipboard} className="mt-4">
                                 Copy Chart to Clipboard
                               </button>
                             </div>
-
-                            : <></>}
-                        </>
-
-                        : <div>
-                          <div ref={chartRef}>
-                            <Bar data={bardata} options={options} plugins={[ChartDataLabels]} />
-                          </div>
-                          <button onClick={copyToClipboard} className="mt-4">
-                            Copy Chart to Clipboard
-                          </button>
-                        </div>
-                    ) : selectedChart === "radial" && radial_score && item.key === "total" ? (
-                      <div>
-                        {console.log('Attempting to render radar section with:', {
-                          selectedChart,
-                          radial_score,
-                          itemKey: item.key
-                        })}
-                        <Select
-                          value={selectedAttribute}
-                          placeholder="Select an attribute"
-                          onValueChange={(value) => { 
-                            console.log('Selected new attribute:', value);
-                            setSelectedAttribute(value); 
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select an attribute" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {label.map((attribute, index) => (
-                              <SelectItem key={index} value={attribute}>
-                                {attribute}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {console.log('About to check radial_data:', radial_data)}
-                        {radial_data ?
+                        ) : selectedChart === "radial" && radialScore && item.key === "total" ? (
                           <div>
-                            <div ref={chartRef} style={{ height: '600px', width: '100%', position: 'relative' }}>
-                              {console.log('Rendering Radar Chart with data:', {
-                                labels: radial_data.labels,
-                                datasets: radial_data.datasets.map(d => ({
-                                  label: d.label,
-                                  data: d.data
-                                }))
-                              })}
-                              <Radar 
-                                data={radial_data} 
-                                options={radaroptions} 
-                                className="mt-16"
-                              />
-                            </div>
-                            <button onClick={copyToClipboard} className="mt-4">
-                              Copy Chart to Clipboard
-                            </button>
+                            {console.log('Attempting to render radar section with:', {
+                              selectedChart,
+                              radialScore,
+                              itemKey: item.key
+                            })}
+                            <Select
+                              value={selectedAttribute}
+                              placeholder="Select an attribute"
+                              onValueChange={(value) => { 
+                                console.log('Selected new attribute:', value);
+                                setSelectedAttribute(value); 
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select an attribute" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {labels.map((attribute, index) => (
+                                  <SelectItem key={index} value={attribute}>
+                                    {attribute}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {console.log('About to check radial_data:', radialData)}
+                            {radialData ?
+                              <div>
+                                <div ref={chartRef} style={{ height: '600px', width: '100%', position: 'relative' }}>
+                                  {console.log('Rendering Radar Chart with data:', {
+                                    labels: radialData.labels,
+                                    datasets: radialData.datasets.map(d => ({
+                                      label: d.label,
+                                      data: d.data
+                                    }))
+                                  })}
+                                  <Radar 
+                                    data={radialData} 
+                                    options={radarOptions} 
+                                    className="mt-16"
+                                  />
+                                </div>
+                                <button onClick={copyToClipboard} className="mt-4">
+                                  Copy Chart to Clipboard
+                                </button>
+                              </div>
+                              : <div>No radar data available</div>}
                           </div>
-                          : <div>No radar data available</div>}
-                      </div>
-                    ) : selectedChart === "table" ? (
-                      item.key === "demography" ? (<>
-                        <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
-                          <TableHeader className="text-white">
-                            <TableRow>
-                              <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                              <TableHead className="text-left">Attributes</TableHead>
-
-                              {demographicTypes.map((type) => (
-                                <TableHead key={type} className="text-center">
-                                  {type}
-                                </TableHead>
-                              ))}
-
-                            </TableRow>
-                          </TableHeader>
-
-                          <TableBody>
-                            {demographicData.length > 0 ? (
-                              demographicData.map((row, index) => (
-                                <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
-                                  <TableCell className="text-center">{row.SrNo}</TableCell>
-                                  <TableCell>{row.Attribute}</TableCell>
+                        ) : selectedChart === "table" ? (
+                          item.key === "demography" ? (<>
+                            <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
+                              <TableHeader className="text-white">
+                                <TableRow>
+                                  <TableHead className="w-12 text-center">Sr. No.</TableHead>
+                                  <TableHead className="text-left">Attributes</TableHead>
 
                                   {demographicTypes.map((type) => (
-                                    <TableCell key={type} className="text-center">
-                                      {row[type]}%
-                                    </TableCell>
+                                    <TableHead key={type} className="text-center">
+                                      {type}
+                                    </TableHead>
                                   ))}
 
                                 </TableRow>
-                              ))
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={demographicTypes.length + 3} className="text-center text-gray-500 py-4">
-                                  No data available
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
+                              </TableHeader>
 
-                      </>) :
-                        <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
-                          {/* Table Header */}
-                          <TableHeader className="text-white">
-                            <TableRow>
-                              <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                              <TableHead className="text-left">Attributes</TableHead>
-                              <TableHead className="text-center">Avg - Self Score</TableHead>
-                              <TableHead className="text-center">% Self Score</TableHead>
-                              {item.key !== null && (
-                                <>
-                                  <TableHead className="text-center">Avg - {item.title} Score</TableHead>
-                                  <TableHead className="text-center">% {item.title} Score</TableHead>
-                                </>
-                              )}
-                            </TableRow>
-                          </TableHeader>
+                              <TableBody>
+                                {demographicData.length > 0 ? (
+                                  demographicData.map((row, index) => (
+                                    <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
+                                      <TableCell className="text-center">{row.SrNo}</TableCell>
+                                      <TableCell>{row.Attribute}</TableCell>
 
-                          {/* Table Body */}
-                          <TableBody>
-                            {table_data.length > 0 ? (
-                              table_data.map((row, index) => (
+                                      {demographicTypes.map((type) => (
+                                        <TableCell key={type} className="text-center">
+                                          {row[type]}%
+                                        </TableCell>
+                                      ))}
 
-                                <TableRow key={index} className="border-b hover:bg-gray-100">
-                                  <TableCell className="text-center">{index + 1}</TableCell>
-                                  <TableCell>{row.attribute_name}</TableCell>
-                                  <TableCell className="text-center">{row.average_weight.toFixed(2)}</TableCell>
-                                  <TableCell className="text-center">
-                                    {row.average_score_percentage.toFixed(2)}%
-                                  </TableCell>
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={demographicTypes.length + 3} className="text-center text-gray-500 py-4">
+                                      No data available
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
 
+                          </>) :
+                            <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
+                              {/* Table Header */}
+                              <TableHeader className="text-white">
+                                <TableRow>
+                                  <TableHead className="w-12 text-center">Sr. No.</TableHead>
+                                  <TableHead className="text-left">Attributes</TableHead>
+                                  <TableHead className="text-center">Avg - Self Score</TableHead>
+                                  <TableHead className="text-center">% Self Score</TableHead>
                                   {item.key !== null && (
                                     <>
-                                      <TableCell className="text-center">
-                                        {row.avg_reln_weight?.toFixed(2) || "0.00"}
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        {(row.avg_reln_perc.toFixed(2))}%
-                                      </TableCell>
+                                      <TableHead className="text-center">Avg - {item.title} Score</TableHead>
+                                      <TableHead className="text-center">% {item.title} Score</TableHead>
                                     </>
                                   )}
                                 </TableRow>
-                              ))
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={6} className="text-center text-gray-500 py-4">
-                                  No data available
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
+                              </TableHeader>
 
-                    ) : null
-                    }
+                              {/* Table Body */}
+                              <TableBody>
+                                {tableData.length > 0 ? (
+                                  tableData.map((row, index) => (
 
-                  </div>
-                </Accordion.Content>
-              </Accordion.Item>
-            ))}
-          </Accordion.Root>
+                                    <TableRow key={index} className="border-b hover:bg-gray-100">
+                                      <TableCell className="text-center">{index + 1}</TableCell>
+                                      <TableCell>{row.attributeName}</TableCell>
+                                      <TableCell className="text-center">{row.averageWeight.toFixed(2)}</TableCell>
+                                      <TableCell className="text-center">
+                                        {row.scorePercentage.toFixed(2)}%
+                                      </TableCell>
 
+                                      {item.key !== null && (
+                                        <>
+                                          <TableCell className="text-center">
+                                            {row.avgRelnWeight?.toFixed(2) || "0.00"}
+                                          </TableCell>
+                                          <TableCell className="text-center">
+                                            {(row.avgRelnPerc.toFixed(2))}%
+                                          </TableCell>
+                                        </>
+                                      )}
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={6} className="text-center text-gray-500 py-4">
+                                      No data available
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+
+                        ) : null
+                        }
+
+                      </div>
+                    </Accordion.Content>
+                  </Accordion.Item>
+                ))}
+              </Accordion.Root>
+
+            </div>
+            : <> Please Select a Company and User</>}
         </div>
-        : <> Please Select a Company and User</>}
-
+      )}
     </div>
   );
 }
