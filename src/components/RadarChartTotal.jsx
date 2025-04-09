@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/supabase';
 import {
   Chart as ChartJS,
@@ -11,6 +11,7 @@ import {
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 
 // Register ChartJS components
 ChartJS.register(
@@ -26,6 +27,7 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const chartRef = useRef(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -191,6 +193,56 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
     }
   }, [companyId, userId, attribute]);
 
+  // Copy chart to clipboard
+  const handleCopyChart = async () => {
+    try {
+      const chart = chartRef.current;
+      if (!chart) {
+        toast.error('Chart not available');
+        return;
+      }
+
+      const canvas = chart.canvas;
+      const imageData = canvas.toDataURL('image/png');
+      
+      // Create a temporary canvas to add white background
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      
+      // Fill white background
+      tempCtx.fillStyle = 'white';
+      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // Draw the chart on top
+      const image = new Image();
+      image.src = imageData;
+      await new Promise(resolve => {
+        image.onload = () => {
+          tempCtx.drawImage(image, 0, 0);
+          resolve();
+        };
+      });
+
+      // Convert to blob and copy
+      const blob = await new Promise(resolve => 
+        tempCanvas.toBlob(resolve, 'image/png')
+      );
+      
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob
+        })
+      ]);
+      
+      toast.success('Chart copied to clipboard');
+    } catch (err) {
+      console.error('Error copying chart:', err);
+      toast.error('Failed to copy chart');
+    }
+  };
+
   const chartOptions = {
     scales: {
       r: {
@@ -215,29 +267,46 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
     }
   };
 
-  if (loading) {
-    return <div className="flex justify-center items-center py-8">Loading...</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="text-red-500 text-center py-8">
-        Error loading chart: {error}
-      </div>
-    );
-  }
-
-  if (!chartData) {
-    return (
-      <div className="text-gray-500 text-center py-8">
-        No data available for the selected attribute
-      </div>
-    );
-  }
-
   return (
-    <div className="w-full aspect-square max-w-2xl mx-auto">
-      <Radar data={chartData} options={chartOptions} />
+    <div className="relative">
+      {loading && <div className="text-center py-4">Loading...</div>}
+      {error && <div className="text-red-500 text-center py-4">{error}</div>}
+      {chartData && (
+        <>
+          <Radar
+            ref={chartRef}
+            data={chartData}
+            options={{
+              scales: {
+                r: {
+                  min: 0,
+                  max: 100,
+                  ticks: {
+                    stepSize: 20
+                  }
+                }
+              },
+              plugins: {
+                legend: {
+                  position: 'top'
+                }
+              }
+            }}
+          />
+          <div className="flex justify-center mt-4">
+            <Button 
+              variant="secondary" 
+              onClick={handleCopyChart}
+              className="bg-purple-600 text-white hover:bg-purple-700"
+            >
+              Copy Chart to Clipboard
+            </Button>
+          </div>
+        </>
+      )}
+      {!chartData && !loading && !error && (
+        <div className="text-center py-4">No data available for the selected attribute</div>
+      )}
     </div>
   );
 };

@@ -1019,21 +1019,12 @@ export default function Reports() {
                                 Please select an attribute to view the radar chart
                               </div>
                             )}
-                            <button 
-                              onClick={copyToClipboard}
-                              className="mt-4 px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition-colors"
-                            >
-                              Copy Chart to Clipboard
-                            </button>
                           </div>
                         ) : selectedChart === "bar" && barData ? (
                           <div>
                             <div ref={chartRef}>
                               <Bar data={barData} options={chartOptions} plugins={[ChartDataLabels]} />
                             </div>
-                            <button onClick={copyToClipboard} className="mt-4">
-                              Copy Chart to Clipboard
-                            </button>
                           </div>
                         ) : selectedChart === "table" ? (
                           item.key === "demography" ?
