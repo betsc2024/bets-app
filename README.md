@@ -208,6 +208,26 @@ The reports module processes evaluation data to generate various insights based 
    - Combines all relationship types
    - Total Average = Sum of all relationship type averages / Number of types
 
+### Score Calculations
+
+#### Total Score Calculation
+The average total score is calculated by excluding self-evaluations and averaging the weights for each statement. The process works as follows:
+
+1. **Data Filtering**
+   - All self-evaluations (where `relationship_type` is 'self' or null) are excluded
+   - Only evaluations from other relationship types are considered
+
+2. **Calculation Process**
+   - For each statement:
+     1. Sum up all weights from non-self evaluations
+     2. Divide by the count of evaluations to get the average
+     3. Final formula: `average_score_percentage = (totalWeight / count) / number_of_evaluations_for_relationship_type`
+
+3. **Implementation Details**
+   - The calculation is handled in both `fetchSpecificData` and `fetch_radar` functions
+   - Self-evaluations are explicitly filtered out using: `relationship_type !== 'self' && relationship_type !== null`
+   - Each statement's weights are averaged separately to maintain individual attribute scores
+
 ### Visualization Types
 
 1. **Table View**
