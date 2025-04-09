@@ -80,16 +80,16 @@ export default function Reports() {
   const [bank, setBank] = useState("");
   const [bankList, setBankList] = useState([]);
 
-  const chartRef = useRef(null);
+  const barChartRef = useRef(null);
 
   const copyToClipboard = async () => {
     try {
-      if (!chartRef.current) {
+      if (!barChartRef.current) {
         toast.error("Chart not found");
         return;
       }
 
-      const canvas = await html2canvas(chartRef.current);
+      const canvas = await html2canvas(barChartRef.current);
       
       // Try using modern Clipboard API first
       if (navigator.clipboard && navigator.clipboard.write) {
@@ -417,6 +417,60 @@ export default function Reports() {
       toast.error('Failed to fetch banks');
     }
   }
+
+  const handleCopyChart = async (ref) => {
+    try {
+      if (!ref.current) {
+        toast.error('Chart not available');
+        return;
+      }
+
+      // For Bar chart, we need to get the canvas from the chart instance
+      const canvas = ref.current.firstChild;
+      if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
+        toast.error('Chart canvas not found');
+        return;
+      }
+
+      const imageData = canvas.toDataURL('image/png');
+      
+      // Create a temporary canvas to add white background
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      
+      // Fill white background
+      tempCtx.fillStyle = 'white';
+      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // Draw the chart on top
+      const image = new Image();
+      image.src = imageData;
+      await new Promise(resolve => {
+        image.onload = () => {
+          tempCtx.drawImage(image, 0, 0);
+          resolve();
+        };
+      });
+
+      // Convert to blob and copy
+      const blob = await new Promise(resolve => 
+        tempCanvas.toBlob(resolve, 'image/png')
+      );
+      
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob
+        })
+      ]);
+      
+      toast.success('Chart copied to clipboard');
+    } catch (err) {
+      console.error('Error copying chart:', err);
+      toast.error('Failed to copy chart');
+    }
+  };
 
   useEffect(() => {
     if (selectedCompany) {
@@ -878,7 +932,7 @@ export default function Reports() {
           Please select Company, User, Analysis Type and Bank to view the data.
         </div>
       ) : (
-        <div className="space-y-6" ref={chartRef}>
+        <div className="space-y-6" ref={barChartRef}>
           {selectedCompany && selectedUser  ?
             <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
               <TableHeader className="text-white">
@@ -1006,14 +1060,16 @@ export default function Reports() {
                               </Select>
                             </div>
                             {selectedAttribute ? (
-                              <RadarChartTotal 
-                                companyId={selectedCompany?.id} 
-                                userId={selectedUser?.id}
-                                attribute={selectedAttribute}
-                                onDataLoad={(data) => {
-                                  console.log('Radar chart data loaded:', data);
-                                }}
-                              />
+                              <div className="space-y-4">
+                                <RadarChartTotal 
+                                  companyId={selectedCompany?.id} 
+                                  userId={selectedUser?.id}
+                                  attribute={selectedAttribute}
+                                  onDataLoad={(data) => {
+                                    console.log('Radar chart data loaded:', data);
+                                  }}
+                                />
+                              </div>
                             ) : (
                               <div className="text-center text-gray-500 py-4">
                                 Please select an attribute to view the radar chart
@@ -1021,111 +1077,56 @@ export default function Reports() {
                             )}
                           </div>
                         ) : selectedChart === "bar" && barData ? (
-                          <div>
-                            <div ref={chartRef}>
+                          <div className="space-y-4">
+                            <div ref={barChartRef}>
                               <Bar data={barData} options={chartOptions} plugins={[ChartDataLabels]} />
+                            </div>
+                            <div className="flex justify-center">
+                              <Button
+                                variant="secondary"
+                                onClick={() => handleCopyChart(barChartRef)}
+                                className="bg-purple-600 text-white hover:bg-purple-700"
+                              >
+                                Copy Chart to Clipboard
+                              </Button>
                             </div>
                           </div>
                         ) : selectedChart === "table" ? (
-                          item.key === "demography" ?
-
-                            <>
-                              <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
-                                <TableHeader className="text-white">
-                                  <TableRow>
-                                    <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                                    <TableHead className="text-left">Attributes</TableHead>
-
-                                    {demographicTypes.map((type) => (
-                                      <TableHead key={type} className="text-center">
-                                        {type}
-                                      </TableHead>
-                                    ))}
-
+                          <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
+                            <TableHeader className="text-white">
+                              <TableRow>
+                                <TableHead className="w-12 text-center">Sr. No.</TableHead>
+                                <TableHead className="text-left">Attribute Name</TableHead>
+                                <TableHead className="text-center">Self Average Weight</TableHead>
+                                <TableHead className="text-center">Self Average Score Percentage</TableHead>
+                                <TableHead className="text-center">Average Relationship Weight</TableHead>
+                                <TableHead className="text-center">Average Relationship Score Percentage</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {tableData.length > 0 ? (
+                                tableData.map((row, index) => (
+                                  <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
+                                    <TableCell className="text-center">{row.SrNo}</TableCell>
+                                    <TableCell className="text-left">{row.attributeName}</TableCell>
+                                    <TableCell className="text-center">{row.averageWeight.toFixed(2)}</TableCell>
+                                    <TableCell className="text-center">{row.scorePercentage.toFixed(2)}</TableCell>
+                                    <TableCell className="text-center">{row.avgRelnWeight.toFixed(2)}</TableCell>
+                                    <TableCell className="text-center">{row.avgRelnPerc.toFixed(2)}</TableCell>
                                   </TableRow>
-                                </TableHeader>
-
-                                <TableBody>
-                                  {demographicData.length > 0 ? (
-                                    demographicData.map((row, index) => (
-                                      <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
-                                        <TableCell className="text-center">{row.SrNo}</TableCell>
-                                        <TableCell>{row.Attribute}</TableCell>
-
-                                        {demographicTypes.map((type) => (
-                                          <TableCell key={type} className="text-center">
-                                            {row[type]}%
-                                          </TableCell>
-                                        ))}
-
-                                      </TableRow>
-                                    ))
-                                  ) : (
-                                    <TableRow>
-                                      <TableCell colSpan={demographicTypes.length + 3} className="text-center text-gray-500 py-4">
-                                        No data available
-                                      </TableCell>
-                                    </TableRow>
-                                  )}
-                                </TableBody>
-                              </Table>
-
-                            </> :
-                            <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md">
-                              {/* Table Header */}
-                              <TableHeader className="text-white">
+                                ))
+                              ) : (
                                 <TableRow>
-                                  <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                                  <TableHead className="text-left">Attributes</TableHead>
-                                  <TableHead className="text-center">Avg - Self Score</TableHead>
-                                  <TableHead className="text-center">% Self Score</TableHead>
-                                  {item.key !== null && (
-                                    <>
-                                      <TableHead className="text-center">Avg - {item.title} Score</TableHead>
-                                      <TableHead className="text-center">% {item.title} Score</TableHead>
-                                    </>
-                                  )}
+                                  <TableCell colSpan={6} className="text-center py-2">
+                                    No data available
+                                  </TableCell>
                                 </TableRow>
-                              </TableHeader>
-
-                              {/* Table Body */}
-                              <TableBody>
-                                {tableData.length > 0 ? (
-                                  tableData.map((row, index) => (
-
-                                    <TableRow key={index} className="border-b hover:bg-gray-100">
-                                      <TableCell className="text-center">{index + 1}</TableCell>
-                                      <TableCell>{row.attributeName}</TableCell>
-                                      <TableCell className="text-center">{row.averageWeight.toFixed(2)}</TableCell>
-                                      <TableCell className="text-center">
-                                        {row.scorePercentage.toFixed(2)}%
-                                      </TableCell>
-
-                                      {item.key !== null && (
-                                        <>
-                                          <TableCell className="text-center">
-                                            {row.avgRelnWeight?.toFixed(2) || "0.00"}
-                                          </TableCell>
-                                          <TableCell className="text-center">
-                                            {(row.avgRelnPerc.toFixed(2))}%
-                                          </TableCell>
-                                        </>
-                                      )}
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={6} className="text-center text-gray-500 py-4">
-                                      No data available
-                                    </TableCell>
-                                  </TableRow>
-                                )}
-                              </TableBody>
-                            </Table>
-
-                        ) : null
-                        }
-
+                              )}
+                            </TableBody>
+                          </Table>
+                        ) : (
+                          <></>
+                        )}
                       </div>
                     </Accordion.Content>
                   </Accordion.Item>
