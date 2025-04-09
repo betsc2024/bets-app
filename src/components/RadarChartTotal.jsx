@@ -142,7 +142,22 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
 
         // Prepare data for radar chart
         const chartData = {
-          labels: allStatements,
+          labels: allStatements.map(statement => {
+            // Split statement into lines of max 25 characters
+            const words = statement.split(' ');
+            let lines = [''];
+            let currentLine = 0;
+            
+            words.forEach(word => {
+              if ((lines[currentLine] + ' ' + word).length > 25) {
+                currentLine++;
+                lines[currentLine] = '';
+              }
+              lines[currentLine] = (lines[currentLine] + ' ' + word).trim();
+            });
+            
+            return lines;
+          }),
           datasets: [
             {
               label: 'Self',
@@ -177,8 +192,54 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
           ]
         };
 
-        setChartData(chartData);
-        if (onDataLoad) onDataLoad(chartData);
+        const chartOptions = {
+          scales: {
+            r: {
+              angleLines: {
+                display: true,
+                color: 'rgba(0, 0, 0, 0.1)'
+              },
+              grid: {
+                color: 'rgba(0, 0, 0, 0.1)'
+              },
+              beginAtZero: true,
+              max: 100,
+              ticks: {
+                stepSize: 20,
+                font: {
+                  size: 10
+                }
+              },
+              pointLabels: {
+                font: {
+                  size: 11
+                },
+                callback: function(value) {
+                  // Handle wrapped text
+                  if (Array.isArray(value)) {
+                    return value;
+                  }
+                  return value;
+                }
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `${context.dataset.label}: ${context.formattedValue}%`;
+                }
+              }
+            }
+          }
+        };
+
+        setChartData({ data: chartData, options: chartOptions });
+        if (onDataLoad) onDataLoad({ data: chartData, options: chartOptions });
       } catch (err) {
         console.error('Error fetching radar chart data:', err);
         setError(err.message);
@@ -243,55 +304,16 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
     }
   };
 
-  const chartOptions = {
-    scales: {
-      r: {
-        beginAtZero: true,
-        max: 100,
-        ticks: {
-          stepSize: 20
-        }
-      }
-    },
-    plugins: {
-      legend: {
-        position: 'top',
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            return `${context.dataset.label}: ${context.formattedValue}%`;
-          }
-        }
-      }
-    }
-  };
-
   return (
     <div className="relative">
       {loading && <div className="text-center py-4">Loading...</div>}
-      {error && <div className="text-red-500 text-center py-4">{error}</div>}
-      {chartData && (
+      {error && <div className="text-center text-red-500 py-4">{error}</div>}
+      {chartData && !loading && !error && (
         <>
           <Radar
             ref={chartRef}
-            data={chartData}
-            options={{
-              scales: {
-                r: {
-                  min: 0,
-                  max: 100,
-                  ticks: {
-                    stepSize: 20
-                  }
-                }
-              },
-              plugins: {
-                legend: {
-                  position: 'top'
-                }
-              }
-            }}
+            data={chartData.data}
+            options={chartData.options}
           />
           <div className="flex justify-center mt-4">
             <Button 

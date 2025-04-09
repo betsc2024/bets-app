@@ -1042,7 +1042,7 @@ export default function Reports() {
                                 }}
                               >
                                 <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Select an attribute to view" />
+                                  <SelectValue placeholder="Select Attribute" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectGroup>
