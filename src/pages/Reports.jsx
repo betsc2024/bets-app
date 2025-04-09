@@ -278,47 +278,115 @@ export default function Reports() {
     try {
       if (!selectedCompany || !selectedUser || !data) return;
 
-      // Process self evaluations from existing data
+      const labels = [...new Set(data.map(item => item.attribute_name))];
+      setLabels(labels);
+
+      // Process self evaluations
       const selfEvals = data.filter(e => e.relationship_type === "self" || e.relationship_type === null);
       const selfData = selfEvals.map(e => ({
         attributeName: e.attribute_name,
-        averageWeight: e.average_weight,
-        scorePercentage: e.average_score_percentage
+        averageWeight: e.average_weight || 0,
+        scorePercentage: e.average_score_percentage || 0
       }));
-      setSelfTableData(selfData);
 
-      // Initialize relationshipData outside the if block
-      let relationshipData = [];
-
-      // Process relationship evaluations if not self
-      if (type !== 'self') {
-        const relationshipEvals = type === 'total' 
-          ? data.filter(e => e.relationship_type !== 'self' && e.relationship_type !== null)  // For total, get all non-self data
-          : data.filter(e => e.relationship_type === type);  // For specific type, get only that type
-        
-        relationshipData = relationshipEvals.map(e => ({
-          attributeName: e.attribute_name,
-          averageWeight: e.average_weight,
-          scorePercentage: e.average_score_percentage
+      // For self accordion, we only need self data
+      if (type === 'self') {
+        const selfTableRows = selfData.map((row, index) => ({
+          SrNo: index + 1,
+          attributeName: row.attributeName,
+          averageWeight: row.averageWeight || 0,
+          scorePercentage: row.scorePercentage || 0
         }));
-        setNotSelfTableData(relationshipData);
+        setTableData(selfTableRows);
+        return;
       }
 
-      // Update visualization data
-      const labels = [...new Set(data.map(item => item.attribute_name))];
-      
+      // For total, combine all non-self evaluations
+      if (type === 'total') {
+        const nonSelfEvals = data.filter(e => e.relationship_type !== 'self' && e.relationship_type !== null);
+        const totalData = labels.map(label => {
+          const items = nonSelfEvals.filter(e => e.attribute_name === label);
+          const avgWeight = items.length > 0 
+            ? items.reduce((sum, item) => sum + (item.average_weight || 0), 0) / items.length 
+            : 0;
+          const avgPercentage = items.length > 0
+            ? items.reduce((sum, item) => sum + (item.average_score_percentage || 0), 0) / items.length
+            : 0;
+          
+          const selfItem = selfData.find(d => d.attributeName === label) || {
+            averageWeight: 0,
+            scorePercentage: 0
+          };
+          
+          return {
+            SrNo: labels.indexOf(label) + 1,
+            attributeName: label,
+            selfAverageWeight: selfItem.averageWeight || 0,
+            selfScorePercentage: selfItem.scorePercentage || 0,
+            relationshipAverageWeight: avgWeight,
+            relationshipScorePercentage: avgPercentage
+          };
+        });
+        setTableData(totalData);
+        
+        // Update chart data for total
+        const totalResults = totalData.map(item => item.relationshipScorePercentage || 0);
+        setNotSelfResults(totalResults);
+        return;
+      }
+
+      // For other accordions, process relationship data
+      const relationshipEvals = data.filter(e => e.relationship_type === type);
+      const relationshipData = relationshipEvals.map(e => ({
+        attributeName: e.attribute_name,
+        averageWeight: e.average_weight || 0,
+        scorePercentage: e.average_score_percentage || 0
+      }));
+
+      // For top_boss and peer accordions, merge self and relationship data
+      if (type === 'top_boss' || type === 'peer') {
+        const mergedData = labels.map((label, index) => {
+          const selfItem = selfData.find(d => d.attributeName === label) || {
+            averageWeight: 0,
+            scorePercentage: 0
+          };
+          const relationshipItem = relationshipData.find(d => d.attributeName === label) || {
+            averageWeight: 0,
+            scorePercentage: 0
+          };
+          
+          return {
+            SrNo: index + 1,
+            attributeName: label,
+            selfAverageWeight: selfItem.averageWeight || 0,
+            selfScorePercentage: selfItem.scorePercentage || 0,
+            relationshipAverageWeight: relationshipItem.averageWeight || 0,
+            relationshipScorePercentage: relationshipItem.scorePercentage || 0
+          };
+        });
+        setTableData(mergedData);
+      } else {
+        // For other non-self accordions, show only relationship data
+        const relationshipTableRows = relationshipData.map((row, index) => ({
+          SrNo: index + 1,
+          attributeName: row.attributeName,
+          averageWeight: row.averageWeight || 0,
+          scorePercentage: row.scorePercentage || 0
+        }));
+        setTableData(relationshipTableRows);
+      }
+
+      // Update chart data
       const selfResults = labels.map(label => {
         const item = selfData.find(d => d.attributeName === label);
-        return item ? item.scorePercentage : 0;
+        return item ? (item.scorePercentage || 0) : 0;
       });
-      
-      setLabels(labels);
       setSelfResults(selfResults);
 
       if (type !== 'self') {
         const notSelfResults = labels.map(label => {
           const item = relationshipData.find(d => d.attributeName === label);
-          return item ? item.scorePercentage : 0;
+          return item ? (item.scorePercentage || 0) : 0;
         });
         setNotSelfResults(notSelfResults);
       }
@@ -328,7 +396,6 @@ export default function Reports() {
       toast.error("Error processing evaluation data");
     }
   };
-
 
 
   const fetch_companies = async () => {
@@ -526,7 +593,7 @@ export default function Reports() {
   useEffect(() => {
     // Fetch self data and max data
     if (data && data.length > 0 && selectedCompany && selectedUser && analysis && bank) {
-      fetchSpecificData('total');  // Process total data when filters change
+      fetchSpecificData('self');  // Process self data when filters change
     }
   }, [data, selectedCompany, selectedUser, analysis, bank]);
 
@@ -569,7 +636,7 @@ export default function Reports() {
     setSelectedChart("bar");
     
     if (type === 'demography') {
-      fetchSpecificData('total');
+      fetchSpecificData('self');
       processDemographicData();
     }
   };
@@ -583,8 +650,8 @@ export default function Reports() {
 
     const processedData = relationshipData.map(e => ({
       attributeName: e.attribute_name,
-      averageWeight: e.average_weight,
-      scorePercentage: e.average_score_percentage
+      averageWeight: e.average_weight || 0,
+      scorePercentage: e.average_score_percentage || 0
     }));
     
     if (type === 'total') {
@@ -605,8 +672,8 @@ export default function Reports() {
           attributeName: relationshipScore.attributeName,
           averageWeight: 0, // No self weight
           scorePercentage: 0, // No self percentage
-          avgRelnWeight: relationshipScore.averageWeight,
-          avgRelnPerc: relationshipScore.scorePercentage
+          avgRelnWeight: relationshipScore.averageWeight || 0,
+          avgRelnPerc: relationshipScore.scorePercentage || 0
         }));
         setTableData(tableRows);
       } else {
@@ -618,10 +685,10 @@ export default function Reports() {
 
           return {
             attributeName: selfScore.attributeName,
-            averageWeight: selfScore.averageWeight,
-            scorePercentage: selfScore.scorePercentage,
-            avgRelnWeight: relationshipScore ? relationshipScore.averageWeight : 0,
-            avgRelnPerc: relationshipScore ? relationshipScore.scorePercentage : 0
+            averageWeight: selfScore.averageWeight || 0,
+            scorePercentage: selfScore.scorePercentage || 0,
+            avgRelnWeight: relationshipScore ? relationshipScore.averageWeight || 0 : 0,
+            avgRelnPerc: relationshipScore ? relationshipScore.scorePercentage || 0 : 0
           };
         });
         setTableData(mergedScores);
@@ -630,8 +697,8 @@ export default function Reports() {
       // Only self data exists
       const tableRows = selfTableData.map(selfScore => ({
         attributeName: selfScore.attributeName,
-        averageWeight: selfScore.averageWeight,
-        scorePercentage: selfScore.scorePercentage,
+        averageWeight: selfScore.averageWeight || 0,
+        scorePercentage: selfScore.scorePercentage || 0,
         avgRelnWeight: 0,
         avgRelnPerc: 0
       }));
@@ -694,7 +761,7 @@ export default function Reports() {
 
   useEffect(() => {
     if (data && data.length > 0 && selectedCompany && selectedUser && analysis && bank) {
-      processRelationshipData('total');  // Process total data when filters change
+      processRelationshipData('self');  // Process self data when filters change
     }
   }, [data, selectedCompany, selectedUser, analysis, bank]);
 
@@ -836,7 +903,7 @@ export default function Reports() {
             : 0;
         });
         if (total.length > 0 && total) {
-          row["Total"] = (total[index].average_score_percentage);
+          row["Total"] = (total[index].average_score_percentage || 0);
         }
 
         return row;
@@ -1097,27 +1164,78 @@ export default function Reports() {
                               <TableRow>
                                 <TableHead className="w-12 text-center">Sr. No.</TableHead>
                                 <TableHead className="text-left">Attribute Name</TableHead>
-                                <TableHead className="text-center">Self Average Weight</TableHead>
-                                <TableHead className="text-center">Self Average Score Percentage</TableHead>
-                                <TableHead className="text-center">Average Relationship Weight</TableHead>
-                                <TableHead className="text-center">Average Relationship Score Percentage</TableHead>
+                                {item.key === 'self' ? (
+                                  <>
+                                    <TableHead className="text-center">Self - Average Score</TableHead>
+                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
+                                  </>
+                                ) : item.key === 'top_boss' ? (
+                                  <>
+                                    <TableHead className="text-center">Self - Average Score</TableHead>
+                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
+                                    <TableHead className="text-center">TopBoss - Average Score</TableHead>
+                                    <TableHead className="text-center">TopBoss - Score Percentage</TableHead>
+                                  </>
+                                ) : item.key === 'peer' ? (
+                                  <>
+                                    <TableHead className="text-center">Self - Average Score</TableHead>
+                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
+                                    <TableHead className="text-center">Peer - Average Score</TableHead>
+                                    <TableHead className="text-center">Peer - Score Percentage</TableHead>
+                                  </>
+                                ) : item.key === 'total' ? (
+                                  <>
+                                    <TableHead className="text-center">Self - Average Score</TableHead>
+                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
+                                    <TableHead className="text-center">Relationship - Average Score</TableHead>
+                                    <TableHead className="text-center">Relationship - Score Percentage</TableHead>
+                                  </>
+                                ) : (
+                                  <>
+                                    <TableHead className="text-center">Average Score</TableHead>
+                                    <TableHead className="text-center">Score Percentage</TableHead>
+                                  </>
+                                )}
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {tableData.length > 0 ? (
+                              {tableData && tableData.length > 0 ? (
                                 tableData.map((row, index) => (
                                   <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
                                     <TableCell className="text-center">{row.SrNo}</TableCell>
                                     <TableCell className="text-left">{row.attributeName}</TableCell>
-                                    <TableCell className="text-center">{row.averageWeight.toFixed(2)}</TableCell>
-                                    <TableCell className="text-center">{row.scorePercentage.toFixed(2)}</TableCell>
-                                    <TableCell className="text-center">{row.avgRelnWeight.toFixed(2)}</TableCell>
-                                    <TableCell className="text-center">{row.avgRelnPerc.toFixed(2)}</TableCell>
+                                    {item.key === 'top_boss' ? (
+                                      <>
+                                        <TableCell className="text-center">{(row.selfAverageWeight || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.selfScorePercentage || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.topBossAverageWeight || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.topBossScorePercentage || 0).toFixed(2)}</TableCell>
+                                      </>
+                                    ) : item.key === 'peer' ? (
+                                      <>
+                                        <TableCell className="text-center">{(row.selfAverageWeight || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.selfScorePercentage || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.relationshipAverageWeight || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.relationshipScorePercentage || 0).toFixed(2)}</TableCell>
+                                      </>
+                                    ) : item.key === 'total' ? (
+                                      <>
+                                        <TableCell className="text-center">{(row.selfAverageWeight || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.selfScorePercentage || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.relationshipAverageWeight || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.relationshipScorePercentage || 0).toFixed(2)}</TableCell>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <TableCell className="text-center">{(row.averageWeight || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.scorePercentage || 0).toFixed(2)}</TableCell>
+                                      </>
+                                    )}
                                   </TableRow>
                                 ))
                               ) : (
                                 <TableRow>
-                                  <TableCell colSpan={6} className="text-center py-2">
+                                  <TableCell colSpan={item.key === 'top_boss' ? 6 : item.key === 'total' ? 5 : 4} className="text-center py-2">
                                     No data available
                                   </TableCell>
                                 </TableRow>
