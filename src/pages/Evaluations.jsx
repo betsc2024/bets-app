@@ -147,6 +147,7 @@ export default function Evaluations() {
   const [editingEvalName, setEditingEvalName] = useState('');
   const [editingEvalStatus, setEditingEvalStatus] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const itemsPerPage = 8;
   const assignmentsPerPage = 10;
   const [companies, setCompanies] = useState([]);
@@ -418,12 +419,17 @@ export default function Evaluations() {
       const { data: assignments, error } = await supabase
         .from('evaluation_assignments')
         .select(`
-          *,
-          companies!evaluation_assignments_company_id_fkey (
+          id,
+          evaluation_name,
+          company_id,
+          attribute_bank_id,
+          created_by,
+          user_to_evaluate_id,
+          companies:evaluation_assignments_company_id_fkey (
             id,
             name
           ),
-          attribute_banks!evaluation_assignments_attribute_bank_id_fkey (
+          attribute_banks:evaluation_assignments_attribute_bank_id_fkey (
             id,
             name
           ),
@@ -437,7 +443,7 @@ export default function Evaluations() {
             email,
             full_name
           ),
-          evaluations!evaluations_evaluation_assignment_id_fkey (
+          evaluations:evaluations_evaluation_assignment_id_fkey (
             id,
             status,
             is_self_evaluator,
@@ -448,14 +454,15 @@ export default function Evaluations() {
               full_name
             )
           )
-        `);
+        `)
+        .order('evaluation_name');
 
       if (error) {
         console.error('Error fetching assignments:', error);
         throw error;
       }
 
-      console.log('Fetched assignments:', assignments);
+      console.log('Fetched assignments:', assignments?.length || 0, 'items');
       setAssignments(assignments || []);
     } catch (error) {
       console.error('Error in fetchAssignments:', error);
@@ -637,7 +644,7 @@ export default function Evaluations() {
       setSelfEvaluations({});
       setSelectedEvaluators(new Map());
       setCurrentTab('manage');
-      fetchAssignments();
+      await fetchAssignments();
     } catch (err) {
       console.error('Error creating evaluation:', err);
       toast.error('Failed to create evaluation');
@@ -687,7 +694,7 @@ export default function Evaluations() {
       if (assignmentError) throw assignmentError;
 
       toast.success('Evaluation deleted successfully');
-      window.location.reload();
+      await fetchAssignments();
     } catch (error) {
       console.error('Error:', error);
       toast.error('An error occurred while deleting');
@@ -834,7 +841,7 @@ export default function Evaluations() {
 
       toast.success('Evaluation updated successfully');
       setEditDialogOpen(false);
-      fetchAssignments();
+      await fetchAssignments();
     } catch (err) {
       console.error('Error updating evaluation:', err);
       toast.error('Failed to update evaluation');
@@ -887,7 +894,7 @@ export default function Evaluations() {
       setEditingRowId(null);
       setTempSelfEvalChanges(new Map());
       toast.success('Self evaluation updated successfully');
-      window.location.reload();
+      await fetchAssignments();
     } catch (error) {
       console.error('Error updating self evaluation:', error);
       toast.error('Failed to update self evaluation');
@@ -929,28 +936,28 @@ export default function Evaluations() {
     const loadInitialData = async () => {
       console.log('Loading initial data...');
       await Promise.all([
-        fetchAssignments(),
-        fetchBanks(true)
+        await fetchAssignments(),
+        await fetchBanks(true)
       ]);
     };
 
     loadInitialData();
   }, []);
 
-  useEffect(()=>{
-    // console.log(allbanks);
-    fetchBanks(allbanks);
-  },[allbanks])
+ useEffect(()=>{
+   // console.log(allbanks);
+   fetchBanks(allbanks);
+ },[allbanks])
 
-  useEffect(() => {
-    if (selectedCompany) {
-      setAllbanks(false);
-      fetchBanks(false);
-    } else {
-      setAllbanks(true);
-      fetchBanks(true);
-    }
-  }, [selectedCompany]);
+ useEffect(() => {
+   if (selectedCompany) {
+     setAllbanks(false);
+     fetchBanks(false);
+   } else {
+     setAllbanks(true);
+     fetchBanks(true);
+   }
+ }, [selectedCompany]);
 
   // Only fetch assignments when tab changes to manage
   useEffect(() => {
@@ -1020,7 +1027,7 @@ export default function Evaluations() {
 
       toast.success('Employees added successfully');
       setAddEmployeesDialogOpen(false);
-      fetchAssignments();
+      await fetchAssignments();
     } catch (error) {
       console.error('Error adding employees:', error);
       toast.error('Failed to add employees');
@@ -1275,18 +1282,18 @@ export default function Evaluations() {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Evaluation</AlertDialogTitle>
+                              <AlertDialogTitle>Delete Evaluation Group</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete this evaluation and all its assignments? This action cannot be undone.
+                                Are you sure you want to delete this entire evaluation group "{group.evaluation_name}" and all its assignments? This action cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
                               <AlertDialogAction
-                                onClick={() => handleDeleteEvaluation(group.assignments[0])}
+                                onClick={() => handleDeleteEvaluationGroup(group.evaluation_name)}
                                 className="bg-red-500 hover:bg-red-700"
                               >
-                                Delete
+                                Delete Group
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
@@ -1369,6 +1376,65 @@ export default function Evaluations() {
         )}
       </div>
     );
+  };
+
+  const handleDeleteEvaluationGroup = async (evaluationName) => {
+    if (isDeleting) return; // Prevent multiple deletes
+    
+    try {
+      setIsDeleting(true);
+      console.log('Starting group deletion for:', evaluationName);
+
+      // Get all assignments
+      const { data: assignmentsToDelete, error: fetchError } = await supabase
+        .from('evaluation_assignments')
+        .select('id, evaluation_name')
+        .eq('evaluation_name', evaluationName);
+
+      if (fetchError) throw fetchError;
+      console.log('Found assignments to delete:', assignmentsToDelete);
+      
+      if (!assignmentsToDelete || assignmentsToDelete.length === 0) {
+        throw new Error('No assignments found to delete');
+      }
+
+      const assignmentIds = assignmentsToDelete.map(a => a.id);
+      console.log('Assignment IDs to delete:', assignmentIds);
+
+      // Delete evaluations first
+      console.log('Deleting evaluations...');
+      const { data: deletedEvals, error: evalError } = await supabase
+        .from('evaluations')
+        .delete()
+        .in('evaluation_assignment_id', assignmentIds)
+        .select();
+
+      if (evalError) throw evalError;
+      console.log('Deleted evaluations:', deletedEvals?.length || 0);
+
+      // Delete assignments
+      console.log('Deleting assignments...');
+      const { data: deletedAssignments, error: assignmentError } = await supabase
+        .from('evaluation_assignments')
+        .delete()
+        .eq('evaluation_name', evaluationName)
+        .select();
+
+      if (assignmentError) throw assignmentError;
+      console.log('Deleted assignments:', deletedAssignments?.length || 0);
+
+      toast.success(`Deleted ${deletedAssignments?.length || 0} evaluations successfully`);
+      
+      console.log('Refreshing assignments list...');
+      await fetchAssignments();
+      console.log('Assignments refreshed');
+      
+    } catch (error) {
+      console.error('Detailed error:', error);
+      toast.error('An error occurred while deleting the evaluation group');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const EvaluatorDialog = () => {
