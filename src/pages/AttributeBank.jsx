@@ -146,6 +146,14 @@ export default function AttributeBank() {
           attribute_statements (
             id,
             statement,
+            attribute_id,
+            statement_analysis_types (
+              analysis_type_id,
+              analysis_types (
+                id,
+                name
+              )
+            ),
             attribute_statement_options (
               id,
               option_text,
@@ -590,6 +598,23 @@ export default function AttributeBank() {
         return;
       }
 
+      // First check for evaluations
+      const { data: evaluations, error: evalCheckError } = await supabase
+        .from('evaluation_assignments')
+        .select('id')
+        .eq('attribute_bank_id', bankId);
+
+      if (evalCheckError) throw evalCheckError;
+
+      if (evaluations && evaluations.length > 0) {
+        toast.error(
+          `Cannot delete this bank as it is being used in ${evaluations.length} evaluation(s). Please delete the evaluations first.`,
+          { duration: 5000 }
+        );
+        return;
+      }
+
+      // If no evaluations exist, proceed with deletion
       const { data: statements, error: stmtFetchError } = await supabase
         .from('attribute_statements')
         .select('id')
@@ -620,7 +645,7 @@ export default function AttributeBank() {
 
       if (bankError) throw bankError;
 
-      toast.success('Bank and its statements deleted successfully');
+      toast.success('Bank deleted successfully');
       setView('list');
       fetchBanks();
     } catch (error) {
@@ -1349,6 +1374,24 @@ function BankList({ banks, onBankSelect, onRefresh, setSelectedBank, setIsEditDi
         return;
       }
 
+      // First check for evaluations
+      const { data: evaluations, error: evalCheckError } = await supabase
+        .from('evaluation_assignments')
+        .select('id')
+        .eq('attribute_bank_id', bankId);
+
+      if (evalCheckError) throw evalCheckError;
+
+      if (evaluations && evaluations.length > 0) {
+        toast.error(
+          `Cannot delete this bank as it is being used in ${evaluations.length} evaluation(s). Please delete the evaluations first.`,
+          { duration: 5000 }
+        );
+        setShowDeleteDialog(false);
+        return;
+      }
+
+      // If no evaluations exist, proceed with deletion
       const { data: statements, error: stmtFetchError } = await supabase
         .from('attribute_statements')
         .select('id')
@@ -1379,11 +1422,13 @@ function BankList({ banks, onBankSelect, onRefresh, setSelectedBank, setIsEditDi
 
       if (bankError) throw bankError;
 
-      toast.success('Bank and all related data deleted successfully');
+      toast.success('Bank deleted successfully');
       onRefresh?.();
+      setShowDeleteDialog(false);
     } catch (error) {
-      console.error('Error deleting bank:', error);
-      toast.error('Failed to delete bank and its related data');
+      console.error('Error:', error);
+      toast.error(error.message || 'Failed to delete bank');
+      setShowDeleteDialog(false);
     }
   };
 
