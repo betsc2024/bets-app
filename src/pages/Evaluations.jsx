@@ -165,7 +165,9 @@ export default function Evaluations() {
     { value: 'subordinate', label: 'Subordinate' }
   ];
 
-  const [selectedRelationType, setSelectedRelationType] = useState('peer');
+  const [relationshipTypeMap, setRelationshipTypeMap] = useState(new Map());
+
+  const [selectedRelationType, setSelectedRelationType] = useState('default');
 
   const [currentUserId, setCurrentUserId] = useState(null);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
@@ -1437,16 +1439,50 @@ export default function Evaluations() {
     }
   };
 
+  const handleRelationshipChange = (userId, value) => {
+    setRelationshipTypeMap(prev => {
+      const newMap = new Map(prev);
+      newMap.set(userId, value);
+      return newMap;
+    });
+  };
+
   const EvaluatorDialog = () => {
     if (!showAssignDialog) return null;
 
+    const filteredUsers = users
+      .filter(u => u.id !== currentUserId)
+      .filter(u => 
+        u.full_name.toLowerCase().includes(dialogSearchQuery.toLowerCase()) ||
+        u.email.toLowerCase().includes(dialogSearchQuery.toLowerCase())
+      );
+
+    const isUserAdded = (userId) => {
+      const currentEvaluators = selectedEvaluators.get(currentUserId) || [];
+      return currentEvaluators.includes(userId);
+    };
+
+    const getRelationshipLabel = (type) => {
+      const relationship = relationshipTypes.find(t => t.value === type);
+      return relationship ? relationship.label : '';
+    };
+
     return (
-      <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+      <Dialog 
+        open={showAssignDialog} 
+        onOpenChange={(open) => {
+          setShowAssignDialog(open);
+          if (!open) {
+            setRelationshipTypeMap(new Map());
+            setDialogSearchQuery("");
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[700px]">
           <DialogHeader>
             <DialogTitle>Add Evaluators</DialogTitle>
             <DialogDescription>
-              Select evaluators and their relationship type
+              Select evaluators and their relationship types
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1463,51 +1499,59 @@ export default function Evaluations() {
             </div>
             <ScrollArea className="h-[400px]">
               <div className="space-y-2 p-2">
-                {users
-                  .filter(u => u.id !== currentUserId) // Filter out current user
-                  .filter(u => {
-                    // Get current evaluators for the user being evaluated
-                    const currentEvaluators = selectedEvaluators.get(currentUserId) || [];
-                    // Only show users who are not already evaluators
-                    return !currentEvaluators.includes(u.id);
-                  })
-                  .filter(u => 
-                    u.full_name.toLowerCase().includes(dialogSearchQuery.toLowerCase()) ||
-                    u.email.toLowerCase().includes(dialogSearchQuery.toLowerCase())
-                  )
-                  .map((u) => (
-                  <div key={u.id} className="flex items-center space-x-2 rounded-lg hover:bg-accent p-2">
-                    <div className="flex-grow">
-                      <div className="font-medium">{u.full_name}</div>
-                      <div className="text-sm text-muted-foreground">{u.email}</div>
+                {filteredUsers.map((u) => {
+                  const added = isUserAdded(u.id);
+                  const relationshipType = added ? getRelationshipLabel(relationshipTypeMap.get(u.id)) : null;
+                  
+                  return (
+                    <div key={u.id} className="flex items-center space-x-2 rounded-lg hover:bg-accent p-2">
+                      <div className="flex-grow">
+                        <div className="font-medium">{u.full_name}</div>
+                        <div className="text-sm text-muted-foreground">{u.email}</div>
+                      </div>
+                      {added ? (
+                        <>
+                          <div className="text-sm text-purple-600 font-medium">{relationshipType}</div>
+                          <div className="text-sm text-green-600 font-medium">Added</div>
+                        </>
+                      ) : (
+                        <>
+                          <Select
+                            value={relationshipTypeMap.get(u.id) || 'default'}
+                            onValueChange={(value) => handleRelationshipChange(u.id, value)}
+                          >
+                            <SelectTrigger className="w-[200px] h-8 text-sm">
+                              <SelectValue placeholder="Relationship" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="default">Select Relationship</SelectItem>
+                              {relationshipTypes.map(type => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              const relationType = relationshipTypeMap.get(u.id);
+                              if (relationType && relationType !== 'default') {
+                                addEvaluator(currentUserId, u.id, relationType);
+                                setDialogSearchQuery("");
+                              } else {
+                                toast.error("Please select a relationship type");
+                              }
+                            }}
+                          >
+                            Add
+                          </Button>
+                        </>
+                      )}
                     </div>
-                    <Select
-                      value={selectedRelationType}
-                      onValueChange={setSelectedRelationType}
-                    >
-                      <SelectTrigger className="w-[160px] h-8">
-                        <SelectValue placeholder="Relationship" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {relationshipTypes.map(type => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        addEvaluator(currentUserId, u.id, selectedRelationType);
-                        setDialogSearchQuery("");
-                      }}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </ScrollArea>
           </div>
