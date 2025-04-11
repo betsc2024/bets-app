@@ -335,46 +335,34 @@ export default function Reports() {
         return;
       }
 
-      // For other accordions, process relationship data
       const relationshipEvals = data.filter(e => e.relationship_type === type);
       const relationshipData = relationshipEvals.map(e => ({
         attributeName: e.attribute_name,
         averageWeight: e.average_weight || 0,
         scorePercentage: e.average_score_percentage || 0
       }));
-
-      // For top_boss and peer accordions, merge self and relationship data
-      if (type === 'top_boss' || type === 'peer') {
-        const mergedData = labels.map((label, index) => {
-          const selfItem = selfData.find(d => d.attributeName === label) || {
-            averageWeight: 0,
-            scorePercentage: 0
-          };
-          const relationshipItem = relationshipData.find(d => d.attributeName === label) || {
-            averageWeight: 0,
-            scorePercentage: 0
-          };
-          
-          return {
-            SrNo: index + 1,
-            attributeName: label,
-            selfAverageWeight: selfItem.averageWeight || 0,
-            selfScorePercentage: selfItem.scorePercentage || 0,
-            relationshipAverageWeight: relationshipItem.averageWeight || 0,
-            relationshipScorePercentage: relationshipItem.scorePercentage || 0
-          };
-        });
-        setTableData(mergedData);
-      } else {
-        // For other non-self accordions, show only relationship data
-        const relationshipTableRows = relationshipData.map((row, index) => ({
+      
+      // For all relationship types, show both self and relationship data
+      const mergedData = labels.map((label, index) => {
+        const selfItem = selfData.find(d => d.attributeName === label) || {
+          averageWeight: 0,
+          scorePercentage: 0
+        };
+        const relationshipItem = relationshipData.find(d => d.attributeName === label) || {
+          averageWeight: 0,
+          scorePercentage: 0
+        };
+        
+        return {
           SrNo: index + 1,
-          attributeName: row.attributeName,
-          averageWeight: row.averageWeight || 0,
-          scorePercentage: row.scorePercentage || 0
-        }));
-        setTableData(relationshipTableRows);
-      }
+          attributeName: label,
+          selfAverageWeight: selfItem.averageWeight || 0,
+          selfScorePercentage: selfItem.scorePercentage || 0,
+          relationshipAverageWeight: relationshipItem.averageWeight || 0,
+          relationshipScorePercentage: relationshipItem.scorePercentage || 0
+        };
+      });
+      setTableData(mergedData);
 
       // Update chart data
       const selfResults = labels.map(label => {
@@ -390,7 +378,6 @@ export default function Reports() {
         });
         setNotSelfResults(notSelfResults);
       }
-
     } catch (error) {
       console.error("Error in fetchSpecificData:", error);
       toast.error("Error processing evaluation data");
@@ -1169,31 +1156,20 @@ export default function Reports() {
                                     <TableHead className="text-center">Self - Average Score</TableHead>
                                     <TableHead className="text-center">Self - Score Percentage</TableHead>
                                   </>
-                                ) : item.key === 'top_boss' ? (
-                                  <>
-                                    <TableHead className="text-center">Self - Average Score</TableHead>
-                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
-                                    <TableHead className="text-center">TopBoss - Average Score</TableHead>
-                                    <TableHead className="text-center">TopBoss - Score Percentage</TableHead>
-                                  </>
-                                ) : item.key === 'peer' ? (
-                                  <>
-                                    <TableHead className="text-center">Self - Average Score</TableHead>
-                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
-                                    <TableHead className="text-center">Peer - Average Score</TableHead>
-                                    <TableHead className="text-center">Peer - Score Percentage</TableHead>
-                                  </>
-                                ) : item.key === 'total' ? (
-                                  <>
-                                    <TableHead className="text-center">Self - Average Score</TableHead>
-                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
-                                    <TableHead className="text-center">Relationship - Average Score</TableHead>
-                                    <TableHead className="text-center">Relationship - Score Percentage</TableHead>
-                                  </>
                                 ) : (
                                   <>
-                                    <TableHead className="text-center">Average Score</TableHead>
-                                    <TableHead className="text-center">Score Percentage</TableHead>
+                                    <TableHead className="text-center">Self - Average Score</TableHead>
+                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
+                                    <TableHead className="text-center">
+                                      {(item.key || 'relationship').split('_').map(word => 
+                                        word.charAt(0).toUpperCase() + word.slice(1)
+                                      ).join(' ')} - Average Score
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      {(item.key || 'relationship').split('_').map(word => 
+                                        word.charAt(0).toUpperCase() + word.slice(1)
+                                      ).join(' ')} - Score Percentage
+                                    </TableHead>
                                   </>
                                 )}
                               </TableRow>
@@ -1204,38 +1180,24 @@ export default function Reports() {
                                   <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
                                     <TableCell className="text-center">{row.SrNo}</TableCell>
                                     <TableCell className="text-left">{row.attributeName}</TableCell>
-                                    {item.key === 'top_boss' ? (
-                                      <>
-                                        <TableCell className="text-center">{(row.selfAverageWeight || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.selfScorePercentage || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.topBossAverageWeight || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.topBossScorePercentage || 0).toFixed(2)}</TableCell>
-                                      </>
-                                    ) : item.key === 'peer' ? (
-                                      <>
-                                        <TableCell className="text-center">{(row.selfAverageWeight || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.selfScorePercentage || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.relationshipAverageWeight || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.relationshipScorePercentage || 0).toFixed(2)}</TableCell>
-                                      </>
-                                    ) : item.key === 'total' ? (
-                                      <>
-                                        <TableCell className="text-center">{(row.selfAverageWeight || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.selfScorePercentage || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.relationshipAverageWeight || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.relationshipScorePercentage || 0).toFixed(2)}</TableCell>
-                                      </>
-                                    ) : (
+                                    {item.key === 'self' ? (
                                       <>
                                         <TableCell className="text-center">{(row.averageWeight || 0).toFixed(2)}</TableCell>
                                         <TableCell className="text-center">{(row.scorePercentage || 0).toFixed(2)}</TableCell>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <TableCell className="text-center">{(row.selfAverageWeight || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.selfScorePercentage || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.relationshipAverageWeight || 0).toFixed(2)}</TableCell>
+                                        <TableCell className="text-center">{(row.relationshipScorePercentage || 0).toFixed(2)}</TableCell>
                                       </>
                                     )}
                                   </TableRow>
                                 ))
                               ) : (
                                 <TableRow>
-                                  <TableCell colSpan={item.key === 'top_boss' ? 6 : item.key === 'total' ? 5 : 4} className="text-center py-2">
+                                  <TableCell colSpan={item.key === 'self' ? 4 : 5} className="text-center py-2">
                                     No data available
                                   </TableCell>
                                 </TableRow>
