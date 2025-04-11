@@ -1870,19 +1870,64 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
   const handleDelete = async () => {
     try {
       setLoading(true);
-      const { error } = await supabase
+
+      // First check for evaluations
+      const { data: evaluations, error: evalCheckError } = await supabase
+        .from('evaluation_assignments')
+        .select('id')
+        .eq('attribute_bank_id', bank.id);
+
+      if (evalCheckError) throw evalCheckError;
+
+      if (evaluations && evaluations.length > 0) {
+        toast.error(
+          `Cannot delete this bank as it is being used in ${evaluations.length} evaluation(s). Please delete the evaluations first.`,
+          { duration: 5000 }
+        );
+        setShowDeleteDialog(false);
+        return;
+      }
+
+      // Delete statement options first
+      const { data: statements, error: stmtFetchError } = await supabase
+        .from('attribute_statements')
+        .select('id')
+        .eq('attribute_bank_id', bank.id);
+
+      if (stmtFetchError) throw stmtFetchError;
+
+      if (statements?.length > 0) {
+        // Delete options for all statements
+        const { error: optionsError } = await supabase
+          .from('attribute_statement_options')
+          .delete()
+          .in('statement_id', statements.map(s => s.id));
+
+        if (optionsError) throw optionsError;
+
+        // Delete the statements
+        const { error: statementsError } = await supabase
+          .from('attribute_statements')
+          .delete()
+          .eq('attribute_bank_id', bank.id);
+
+        if (statementsError) throw statementsError;
+      }
+
+      // Finally delete the bank
+      const { error: bankError } = await supabase
         .from('attribute_banks')
         .delete()
         .eq('id', bank.id);
 
-      if (error) throw error;
+      if (bankError) throw bankError;
 
       toast.success('Bank deleted successfully');
       onRefresh?.();
       setSelectedBank(null);
     } catch (error) {
       console.error('Error deleting bank:', error);
-      toast.error('Failed to delete bank');
+      toast.error(`Failed to delete bank: ${error.message}`);
     } finally {
       setLoading(false);
       setShowDeleteDialog(false);
