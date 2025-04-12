@@ -1,0 +1,19 @@
+,,,,,,,,,
+,,,,,,,,,
+,,,,,,,,,1. All sheets hidden
+,Name ,Atul Joshi,,,,,,,2. Data entry in information
+,Designation,HR & Logistics,,,,,,,"3. When Submit, unhide Self, Total, Demography "
+,No of top bosses,2,,,,,,,"4. if C6>0, unhide Top boss, if C6 = 0,hide top boss"
+,No. of reporting bosses,0,,,,,,,"5. if C7>0, unhide reporting boss, if C7 = 0,hide reporting boss"
+,No of Peers,9,,,,,,,"6. if C8>0, unhide peers, if C8 = 0,hide peers"
+,No of Subordinates,0,,,,,,,"7. if C9>0, unhide subordinates, if C9 = 0,hide subordinates"
+,Other employees,0,,,,,,,
+,Total reports,11,,,,,,,
+,,,,,,,,,
+,,22,,,,,,How to Save As this Workbook,
+,,,,,,,,,Save As
+,,,,,,,,,Define Destination
+,,,,,,,,,Give File Name
+,,,,,,,,,Save As Type - Select Top one
+,,,,,,,,,Save
+,,,,,,,,,Yes
