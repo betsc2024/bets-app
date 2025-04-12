@@ -283,11 +283,45 @@ export default function Reports() {
 
       // Process self evaluations
       const selfEvals = data.filter(e => e.relationship_type === "self" || e.relationship_type === null);
-      const selfData = selfEvals.map(e => ({
-        attributeName: e.attribute_name,
-        averageWeight: e.average_weight || 0,
-        scorePercentage: e.average_score_percentage || 0
-      }));
+      
+      // Group by attribute and statements
+      const attributeMap = {};
+      selfEvals.forEach(evaluation => {
+        const attributeName = evaluation.attribute_name;
+        if (!attributeMap[attributeName]) {
+          attributeMap[attributeName] = {
+            statements: []
+          };
+        }
+        // For self evaluations, each statement has one weight
+        attributeMap[attributeName].statements.push({
+          weight: evaluation.average_weight || 0
+        });
+      });
+
+      // Calculate scores using our verified formula
+      const selfData = Object.entries(attributeMap).map(([attributeName, attribute]) => {
+        // 1. Statement Level Calculations
+        const statementScores = attribute.statements.map(stmt => {
+          const rawScore = stmt.weight;
+          const maxPossible = 100;  // For self, always 1 evaluator × 100
+          const percentage = (rawScore / maxPossible) * 100;
+          return { rawScore, percentage };
+        });
+
+        // 2. Attribute Level Calculations
+        const averageWeight = statementScores
+          .reduce((sum, stmt) => sum + stmt.rawScore, 0) / statementScores.length;
+          
+        const scorePercentage = statementScores
+          .reduce((sum, stmt) => sum + stmt.percentage, 0) / statementScores.length;
+
+        return {
+          attributeName,
+          averageWeight,
+          scorePercentage
+        };
+      });
 
       // For self accordion, we only need self data
       if (type === 'self') {
