@@ -14,6 +14,10 @@ import RadarChartTotal from '@/components/RadarChartTotal';
 import SelfEvaluation from '@/components/evaluations/SelfEvaluation';
 import TopBossEvaluation from '@/components/evaluations/TopBossEvaluation';
 import PeerEvaluation from '@/components/evaluations/PeerEvaluation';
+import HREvaluation from '@/components/evaluations/HREvaluation';
+import SubordinateEvaluation from '@/components/evaluations/SubordinateEvaluation';
+import ReportingBossEvaluation from '@/components/evaluations/ReportingBossEvaluation';
+import TotalEvaluation from '@/components/evaluations/TotalEvaluation';
 import CopyToClipboard from '@/components/CopyToClipboard';
 import html2canvas from "html2canvas";
 
@@ -690,27 +694,39 @@ export default function Reports() {
         <div className="space-y-6" ref={barChartRef}>
           {data && data.length > 0 && (
             <>
-              {/* Self Evaluation Component */}
-              <div className="mb-8">
+              {/* Evaluations */}
+              <div className="space-y-8">
                 <SelfEvaluation 
                   companyId={selectedCompany?.id}
                   userId={selectedUser?.id}
                   bankId={bank}
                 />
-              </div>
-
-              {/* Top Boss Evaluation Component */}
-              <div className="mb-8">
                 <TopBossEvaluation 
                   companyId={selectedCompany?.id}
                   userId={selectedUser?.id}
                   bankId={bank}
                 />
-              </div>
-
-              {/* Peer Evaluation Component */}
-              <div className="mb-8">
                 <PeerEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+                <HREvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+                <SubordinateEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+                <ReportingBossEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+                <TotalEvaluation 
                   companyId={selectedCompany?.id}
                   userId={selectedUser?.id}
                   bankId={bank}
