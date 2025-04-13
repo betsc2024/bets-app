@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Bar } from 'react-chartjs-2';
 import {
   Table,
@@ -9,11 +9,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { supabase } from '@/supabase';
+import { toast } from 'sonner';
+import CopyToClipboard from '@/components/CopyToClipboard';
 
 export default function SelfEvaluation({ companyId, userId, bankId }) {
   const [viewType, setViewType] = useState('table');
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
+
+  const tableRef = useRef(null);
+  const chartRef = useRef(null);
 
   useEffect(() => {
     if (companyId && userId) {
@@ -151,89 +156,113 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
           datasets: [{
             label: 'Self Evaluation Score (%)',
             data: processedData.map(item => item.percentageScore),
-            backgroundColor: '#3498db'
+            backgroundColor: '#733e93'
           }]
         };
-        setChartData(chartData);
+
+        const chartOptions = {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              title: {
+                display: true,
+                text: 'Score Percentage'
+              }
+            }
+          },
+          plugins: {
+            datalabels: {
+              anchor: 'end',
+              align: 'top',
+              offset: 4,
+              font: {
+                weight: 'bold'
+              },
+              formatter: (value) => `${value}%`
+            },
+            legend: {
+              position: 'top',
+            },
+            title: {
+              display: true,
+              text: 'Self Evaluation Scores'
+            }
+          }
+        };
+
+        setChartData({ chartData, chartOptions });
       }
     } catch (error) {
       console.error("Error processing self evaluation data:", error);
     }
   };
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      y: {
-        beginAtZero: true,
-        max: 100,
-        title: {
-          display: true,
-          text: 'Score Percentage'
-        }
-      }
-    },
-    plugins: {
-      legend: {
-        position: 'top',
-      },
-      title: {
-        display: true,
-        text: 'Self Evaluation Scores'
-      }
-    }
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Self Evaluation</h2>
-        <div className="space-x-2">
-          <button
-            className={`px-4 py-2 rounded ${viewType === 'table' ? 'bg-primary text-white' : 'bg-gray-200'}`}
-            onClick={() => setViewType('table')}
-          >
-            Table
-          </button>
-          <button
-            className={`px-4 py-2 rounded ${viewType === 'chart' ? 'bg-primary text-white' : 'bg-gray-200'}`}
-            onClick={() => setViewType('chart')}
-          >
-            Chart
-          </button>
+        <h2 className="text-xl font-semibold text-primary">Self Evaluation</h2>
+        <div className="flex items-center gap-4">
+          <div className="flex gap-2">
+            <button
+              className={`px-4 py-2 rounded-lg ${viewType === 'table' ? 'bg-primary text-white' : 'bg-gray-200'}`}
+              onClick={() => setViewType('table')}
+            >
+              Table
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg ${viewType === 'chart' ? 'bg-primary text-white' : 'bg-gray-200'}`}
+              onClick={() => setViewType('chart')}
+            >
+              Chart
+            </button>
+          </div>
+          <CopyToClipboard 
+            targetRef={viewType === 'table' ? tableRef : chartRef} 
+            buttonText={`Copy ${viewType === 'table' ? 'Table' : 'Chart'}`} 
+          />
         </div>
       </div>
 
-      {tableData.length === 0 ? (
-        <div className="text-center py-4 text-gray-500">
-          No self evaluation data available
+      {/* Table View */}
+      {viewType === 'table' && (
+        <div ref={tableRef} className="border rounded-lg p-4 bg-white">
+          {tableData.length === 0 ? (
+            <div className="text-center py-4 text-gray-500">
+              No self evaluation data available
+            </div>
+          ) : (
+            <Table className="border">
+              <TableHeader>
+                <TableRow className="border-b">
+                  <TableHead className="border-r w-16 font-semibold">Sr. No.</TableHead>
+                  <TableHead className="border-r font-semibold">Attribute Name</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Average Score</TableHead>
+                  <TableHead className="text-right font-semibold">Score Percentage</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableData.map((row) => (
+                  <TableRow key={row.srNo} className="border-b">
+                    <TableCell className="border-r">{row.srNo}</TableCell>
+                    <TableCell className="border-r">{row.attributeName}</TableCell>
+                    <TableCell className="border-r text-right">{row.averageScore.toFixed(1)}</TableCell>
+                    <TableCell className="text-right">{row.percentageScore.toFixed(1)}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </div>
-      ) : viewType === 'table' ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-16">Sr. No.</TableHead>
-              <TableHead>Attribute Name</TableHead>
-              <TableHead className="text-right">Average Score</TableHead>
-              <TableHead className="text-right">Score Percentage</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tableData.map((row) => (
-              <TableRow key={row.srNo}>
-                <TableCell>{row.srNo}</TableCell>
-                <TableCell>{row.attributeName}</TableCell>
-                <TableCell className="text-right">{row.averageScore.toFixed(1)}</TableCell>
-                <TableCell className="text-right">{row.percentageScore.toFixed(1)}%</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ) : (
-        <div className="w-full h-[400px]">
+      )}
+
+      {/* Chart View */}
+      {viewType === 'chart' && (
+        <div ref={chartRef} className="border rounded-lg p-4 bg-white h-[400px]">
           {chartData ? (
-            <Bar data={chartData} options={chartOptions} />
+            <Bar data={chartData.chartData} options={chartData.chartOptions} />
           ) : (
             <div className="text-center py-4 text-gray-500">
               No data available for chart

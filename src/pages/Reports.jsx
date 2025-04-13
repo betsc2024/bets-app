@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import RadarChartTotal from '@/components/RadarChartTotal';
 import SelfEvaluation from '@/components/evaluations/SelfEvaluation';
-
+import CopyToClipboard from '@/components/CopyToClipboard';
 import html2canvas from "html2canvas";
 
 import {
@@ -49,16 +49,14 @@ export default function Reports() {
   // Chart data states
   const [data, setData] = useState([]);
   const [labels, setLabels] = useState(null);
-  const [selfResults, setSelfResults] = useState(null);
-  const [notSelfResults, setNotSelfResults] = useState(null);
+  const [relationResults, setRelationResults] = useState(null);
   const [selectedChart, setSelectedChart] = useState("table");
   const [barData, setBarData] = useState(null);
   const [scoreType, setScoreType] = useState(null);
   const [selectedAttribute, setSelectedAttribute] = useState(null);
 
   // Table data states
-  const [selfTableData, setSelfTableData] = useState([]);
-  const [notSelfTableData, setNotSelfTableData] = useState([]);
+  const [relationTableData, setRelationTableData] = useState([]);
   const [tableData, setTableData] = useState([]);
   const [relationCountMap, setRelationCountMap] = useState([]);
   const [total, setTotal] = useState([]);
@@ -82,72 +80,6 @@ export default function Reports() {
   const [bankList, setBankList] = useState([]);
 
   const barChartRef = useRef(null);
-
-  const copyToClipboard = async () => {
-    try {
-      if (!barChartRef.current) {
-        toast.error("Chart not found");
-        return;
-      }
-
-      const canvas = await html2canvas(barChartRef.current);
-      
-      // Try using modern Clipboard API first
-      if (navigator.clipboard && navigator.clipboard.write) {
-        canvas.toBlob(async (blob) => {
-          if (blob) {
-            try {
-              const item = new ClipboardItem({ "image/png": blob });
-              await navigator.clipboard.write([item]);
-              toast.success("Chart copied to clipboard!");
-            } catch (err) {
-              console.error("Clipboard write failed:", err);
-              // Fallback: Offer download if clipboard fails
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = 'chart.png';
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-              toast.info("Chart downloaded as image (clipboard access denied)");
-            }
-          }
-        });
-      } else {
-        // Fallback for browsers without Clipboard API support
-        const url = canvas.toDataURL();
-        const img = document.createElement('img');
-        img.src = url;
-        document.body.appendChild(img);
-        const range = document.createRange();
-        range.selectNode(img);
-        window.getSelection().removeAllRanges();
-        window.getSelection().addRange(range);
-        try {
-          document.execCommand('copy');
-          window.getSelection().removeAllRanges();
-          document.body.removeChild(img);
-          toast.success("Chart copied to clipboard!");
-        } catch (err) {
-          console.error("Legacy clipboard copy failed:", err);
-          // Offer download as last resort
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'chart.png';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          toast.info("Chart downloaded as image (clipboard not supported)");
-        }
-      }
-    } catch (error) {
-      console.error("Copy to clipboard failed:", error);
-      toast.error("Failed to copy chart. Please try again.");
-    }
-  };
-
 
   const fetchData = async (selectedCompany, selectedUser , selectedAnalysis = "",selectedBank = "") => {
     try {
@@ -231,7 +163,7 @@ export default function Reports() {
 
       const relationCountArray = Object.entries(relation_count_map_temp).map(([relationship_type, count], index) => ({
         SrNo: index + 1,
-        RelationshipType: relationship_type === "null" ? "self" : relationship_type, // Handling null case
+        RelationshipType: relationship_type === "null" ? "unknown" : relationship_type, // Handling null case
         Count: count
       }));
 
@@ -282,94 +214,6 @@ export default function Reports() {
       const labels = [...new Set(data.map(item => item.attribute_name))];
       setLabels(labels);
 
-      // Process self evaluations
-      const selfEvals = data.filter(e => e.relationship_type === "self" || e.relationship_type === null);
-      
-      // Group by attribute and statements
-      const attributeMap = {};
-      selfEvals.forEach(evaluation => {
-        const attributeName = evaluation.attribute_name;
-        if (!attributeMap[attributeName]) {
-          attributeMap[attributeName] = {
-            statements: []
-          };
-        }
-        // For self evaluations, each statement has one weight
-        attributeMap[attributeName].statements.push({
-          weight: evaluation.average_weight || 0
-        });
-      });
-
-      // Calculate scores using our verified formula
-      const selfData = Object.entries(attributeMap).map(([attributeName, attribute]) => {
-        // 1. Statement Level Calculations
-        const statementScores = attribute.statements.map(stmt => {
-          const rawScore = stmt.weight;
-          const maxPossible = 100;  // For self, always 1 evaluator × 100
-          const percentage = (rawScore / maxPossible) * 100;
-          return { rawScore, percentage };
-        });
-
-        // 2. Attribute Level Calculations
-        const averageWeight = statementScores
-          .reduce((sum, stmt) => sum + stmt.rawScore, 0) / statementScores.length;
-          
-        const scorePercentage = statementScores
-          .reduce((sum, stmt) => sum + stmt.percentage, 0) / statementScores.length;
-
-        return {
-          attributeName,
-          averageWeight,
-          scorePercentage
-        };
-      });
-
-      // For self accordion, we only need self data
-      if (type === 'self') {
-        const selfTableRows = selfData.map((row, index) => ({
-          SrNo: index + 1,
-          attributeName: row.attributeName,
-          averageWeight: row.averageWeight || 0,
-          scorePercentage: row.scorePercentage || 0
-        }));
-        setTableData(selfTableRows);
-        return;
-      }
-
-      // For total, combine all non-self evaluations
-      if (type === 'total') {
-        const nonSelfEvals = data.filter(e => e.relationship_type !== 'self' && e.relationship_type !== null);
-        const totalData = labels.map(label => {
-          const items = nonSelfEvals.filter(e => e.attribute_name === label);
-          const avgWeight = items.length > 0 
-            ? items.reduce((sum, item) => sum + (item.average_weight || 0), 0) / items.length 
-            : 0;
-          const avgPercentage = items.length > 0
-            ? items.reduce((sum, item) => sum + (item.average_score_percentage || 0), 0) / items.length
-            : 0;
-          
-          const selfItem = selfData.find(d => d.attributeName === label) || {
-            averageWeight: 0,
-            scorePercentage: 0
-          };
-          
-          return {
-            SrNo: labels.indexOf(label) + 1,
-            attributeName: label,
-            selfAverageWeight: selfItem.averageWeight || 0,
-            selfScorePercentage: selfItem.scorePercentage || 0,
-            relationshipAverageWeight: avgWeight,
-            relationshipScorePercentage: avgPercentage
-          };
-        });
-        setTableData(totalData);
-        
-        // Update chart data for total
-        const totalResults = totalData.map(item => item.relationshipScorePercentage || 0);
-        setNotSelfResults(totalResults);
-        return;
-      }
-
       const relationshipEvals = data.filter(e => e.relationship_type === type);
       const relationshipData = relationshipEvals.map(e => ({
         attributeName: e.attribute_name,
@@ -377,12 +221,8 @@ export default function Reports() {
         scorePercentage: e.average_score_percentage || 0
       }));
       
-      // For all relationship types, show both self and relationship data
+      // For all relationship types, show relationship data
       const mergedData = labels.map((label, index) => {
-        const selfItem = selfData.find(d => d.attributeName === label) || {
-          averageWeight: 0,
-          scorePercentage: 0
-        };
         const relationshipItem = relationshipData.find(d => d.attributeName === label) || {
           averageWeight: 0,
           scorePercentage: 0
@@ -391,8 +231,6 @@ export default function Reports() {
         return {
           SrNo: index + 1,
           attributeName: label,
-          selfAverageWeight: selfItem.averageWeight || 0,
-          selfScorePercentage: selfItem.scorePercentage || 0,
           relationshipAverageWeight: relationshipItem.averageWeight || 0,
           relationshipScorePercentage: relationshipItem.scorePercentage || 0
         };
@@ -400,19 +238,11 @@ export default function Reports() {
       setTableData(mergedData);
 
       // Update chart data
-      const selfResults = labels.map(label => {
-        const item = selfData.find(d => d.attributeName === label);
+      const relationResults = labels.map(label => {
+        const item = relationshipData.find(d => d.attributeName === label);
         return item ? (item.scorePercentage || 0) : 0;
       });
-      setSelfResults(selfResults);
-
-      if (type !== 'self') {
-        const notSelfResults = labels.map(label => {
-          const item = relationshipData.find(d => d.attributeName === label);
-          return item ? (item.scorePercentage || 0) : 0;
-        });
-        setNotSelfResults(notSelfResults);
-      }
+      setRelationResults(relationResults);
     } catch (error) {
       console.error("Error in fetchSpecificData:", error);
       toast.error("Error processing evaluation data");
@@ -507,58 +337,45 @@ export default function Reports() {
     }
   }
 
-  const handleCopyChart = async (ref) => {
-    try {
-      if (!ref.current) {
-        toast.error('Chart not available');
-        return;
-      }
-
-      // For Bar chart, we need to get the canvas from the chart instance
-      const canvas = ref.current.firstChild;
-      if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
-        toast.error('Chart canvas not found');
-        return;
-      }
-
-      const imageData = canvas.toDataURL('image/png');
-      
-      // Create a temporary canvas to add white background
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      
-      // Fill white background
-      tempCtx.fillStyle = 'white';
-      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-      
-      // Draw the chart on top
-      const image = new Image();
-      image.src = imageData;
-      await new Promise(resolve => {
-        image.onload = () => {
-          tempCtx.drawImage(image, 0, 0);
-          resolve();
-        };
-      });
-
-      // Convert to blob and copy
-      const blob = await new Promise(resolve => 
-        tempCanvas.toBlob(resolve, 'image/png')
-      );
-      
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'image/png': blob
-        })
-      ]);
-      
-      toast.success('Chart copied to clipboard');
-    } catch (err) {
-      console.error('Error copying chart:', err);
-      toast.error('Failed to copy chart');
+  const handleAnalysisChange = (value) => {
+    setAnalysis(value);
+    if (selectedCompany && selectedUser) {
+      fetchData(selectedCompany, selectedUser, value, bank);
     }
+  };
+
+  const handleRelationshipTypeSelect = (type) => {
+    fetchSpecificData(type);
+    updateChartData(type);
+    setScoreType(type);
+    setSelectedChart("bar");
+    
+    if (type === 'demography') {
+      fetchSpecificData('top_boss');
+      processDemographicData();
+    }
+  };
+
+  const processRelationshipData = (type) => {
+    if (!data || data.length === 0) return;
+
+    const relationshipData = data.filter(item => 
+      type === 'total' ? true : item.relationship_type === type
+    );
+
+    const processedData = relationshipData.map(e => ({
+      attributeName: e.attribute_name,
+      averageWeight: e.average_weight || 0,
+      scorePercentage: e.average_score_percentage || 0
+    }));
+    
+    if (type === 'total') {
+      setTotal(processedData);
+    } else {
+      setDemographicData(processedData);
+    }
+
+    updateChartData(type);
   };
 
   useEffect(() => {
@@ -613,9 +430,9 @@ export default function Reports() {
   }, []);
 
   useEffect(() => {
-    // Fetch self data and max data
+    // Fetch relationship data when filters change
     if (data && data.length > 0 && selectedCompany && selectedUser && analysis && bank) {
-      fetchSpecificData('self');  // Process self data when filters change
+      fetchSpecificData('top_boss');
     }
   }, [data, selectedCompany, selectedUser, analysis, bank]);
 
@@ -623,216 +440,15 @@ export default function Reports() {
     if (labels) {  
       const chartData = {
         labels: labels,
-        datasets: [
-          {
-            label: "Self",
-            data: selfResults,
-            backgroundColor: "#3498db"
-          }
-        ]
-      };
-
-      if (type !== 'self') {
-        chartData.datasets.push({
+        datasets: [{
           label: type === 'total' ? "Total" : type,
-          data: notSelfResults,
+          data: relationResults,
           backgroundColor: "#e74c3c"
-        });
-      }
+        }]
+      };
 
       setBarData(chartData);
     }
-  };
-
-  const handleAnalysisChange = (value) => {
-    setAnalysis(value);
-    if (selectedCompany && selectedUser) {
-      fetchData(selectedCompany, selectedUser, value, bank);
-    }
-  };
-
-  const handleRelationshipTypeSelect = (type) => {
-    fetchSpecificData(type);
-    updateChartData(type);
-    setScoreType(type);
-    setSelectedChart("bar");
-    
-    if (type === 'demography') {
-      fetchSpecificData('self');
-      processDemographicData();
-    }
-  };
-
-  const processRelationshipData = (type) => {
-    if (!data || data.length === 0) return;
-
-    const relationshipData = data.filter(item => 
-      type === 'total' ? true : item.relationship_type === type
-    );
-
-    const processedData = relationshipData.map(e => ({
-      attributeName: e.attribute_name,
-      averageWeight: e.average_weight || 0,
-      scorePercentage: e.average_score_percentage || 0
-    }));
-    
-    if (type === 'total') {
-      setTotal(processedData);
-    } else {
-      setDemographicData(processedData);
-    }
-
-    updateChartData(type);
-  };
-
-  useEffect(() => {
-    // If we have relationship data but no self data, create table from relationship data
-    if (notSelfTableData.length > 0) {
-      if (selfTableData.length === 0) {
-        // Create table data directly from relationship data
-        const tableRows = notSelfTableData.map(relationshipScore => ({
-          attributeName: relationshipScore.attributeName,
-          averageWeight: 0, // No self weight
-          scorePercentage: 0, // No self percentage
-          avgRelnWeight: relationshipScore.averageWeight || 0,
-          avgRelnPerc: relationshipScore.scorePercentage || 0
-        }));
-        setTableData(tableRows);
-      } else {
-        // Original merging logic when both self and relationship data exist
-        const mergedScores = selfTableData.map((selfScore) => {
-          const relationshipScore = notSelfTableData.find(
-            (reln) => reln.attributeName === selfScore.attributeName
-          );
-
-          return {
-            attributeName: selfScore.attributeName,
-            averageWeight: selfScore.averageWeight || 0,
-            scorePercentage: selfScore.scorePercentage || 0,
-            avgRelnWeight: relationshipScore ? relationshipScore.averageWeight || 0 : 0,
-            avgRelnPerc: relationshipScore ? relationshipScore.scorePercentage || 0 : 0
-          };
-        });
-        setTableData(mergedScores);
-      }
-    } else if (selfTableData.length > 0) {
-      // Only self data exists
-      const tableRows = selfTableData.map(selfScore => ({
-        attributeName: selfScore.attributeName,
-        averageWeight: selfScore.averageWeight || 0,
-        scorePercentage: selfScore.scorePercentage || 0,
-        avgRelnWeight: 0,
-        avgRelnPerc: 0
-      }));
-      setTableData(tableRows);
-    }
-  }, [selfTableData, notSelfTableData]);
-
-  const items = [
-    {
-      id: 1,
-      title: "Self",
-      key: null,
-    },
-    {
-      id: 2,
-      title: "Top Boss",
-      key: "top_boss",
-    },
-    {
-      id: 3,
-      title: "Peer",
-      key: "peer",
-    },
-    {
-      id: 4,
-      title: "Hr",
-      key: "hr",
-    }, {
-      id: 5,
-      title: "Sub Ordinate",
-      key: "subordinate",
-    },
-    {
-      id: 6,
-      title: "Reporting Boss",
-      key: "reporting_boss",
-    },
-    {
-      id: 7,
-      title: "Total",
-      key: "total",
-    },
-    {
-      id: 8,
-      title: "Demography",
-      key: "demography",
-    },
-  ];
-  const chartOptionsList = [
-    { id: "table", label: "Table" },
-    { id: "bar", label: "Bar Chart" },
-    { id: "radar", label: "Radar Chart" }
-  ];
-
-  useEffect(() => {
-    if (selectedCompany && selectedUser && analysis) {
-      fetchData(selectedCompany, selectedUser, analysis, bank);
-    }
-  }, [selectedCompany, selectedUser, analysis, bank]);
-
-  useEffect(() => {
-    if (data && data.length > 0 && selectedCompany && selectedUser && analysis && bank) {
-      processRelationshipData('self');  // Process self data when filters change
-    }
-  }, [data, selectedCompany, selectedUser, analysis, bank]);
-
-  const Demography_bar_data = (attribute) => {
-
-    let selfresult = [];
-
-    if (demographicData) {
-      demographicData.map((item, index) => {
-        if (item.Attribute === attribute) {
-          for (let key in item) {
-            if (key !== "Attribute" && key !== "SrNo") {
-              selfresult.push(
-               item[key]
-              );
-            }
-          }
-        }
-      })
-    }
-    const colors = ["#733e93", "#FF5733", "#33FF57", "#3357FF", "#FF33A1", "#F4A261", "#2A9D8F"];
-
-    setDemographicBarData({
-      labels: demographicTypes,
-      datasets: [
-        {
-          label:"",
-          data: selfresult,
-          backgroundColor: selfresult.map((_, index) => colors[index % colors.length]),
-          borderColor: selfresult.map((_, index) => colors[index % colors.length]),
-          borderWidth: 1,
-        },
-      ],
-    });
-  }
-  useEffect(() => {
-    Demography_bar_data(selectedAttribute);
-  }, [selectedAttribute])
-  useEffect(()=>{
-    processDemographicData();
-  },[total]);
-
-  const isSelectionsValid = () => {
-    return (
-      selectedCompany !== null &&
-      selectedUser !== null &&
-      analysis !== "" &&
-      bank !== ""
-    );
   };
 
   const chartOptions = {
@@ -895,7 +511,8 @@ export default function Reports() {
       let relationshipTypes = new Set();
 
       data.forEach((item) => {
-        const relationshipType = item.relationship_type || "self"; // Treat null as "Self"
+        const relationshipType = item.relationship_type || "unknown"; // Treat null as "unknown"
+
         relationshipTypes.add(relationshipType);
 
         // Process each item based on the new data structure
@@ -939,6 +556,52 @@ export default function Reports() {
       console.error("Error processing demographic data:", error);
       toast.error("Failed to process demographic data");
     }
+  };
+
+  const Demography_bar_data = (attribute) => {
+
+    let relationResult = [];
+
+    if (demographicData) {
+      demographicData.map((item, index) => {
+        if (item.Attribute === attribute) {
+          for (let key in item) {
+            if (key !== "Attribute" && key !== "SrNo") {
+              relationResult.push(item[key]);
+            }
+          }
+        }
+      })
+    }
+    const colors = ["#733e93", "#FF5733", "#33FF57", "#3357FF", "#FF33A1", "#F4A261", "#2A9D8F"];
+
+    setDemographicBarData({
+      labels: demographicTypes,
+      datasets: [
+        {
+          label:"",
+          data: relationResult,
+          backgroundColor: relationResult.map((_, index) => colors[index % colors.length]),
+          borderColor: relationResult.map((_, index) => colors[index % colors.length]),
+          borderWidth: 1,
+        },
+      ],
+    });
+  }
+  useEffect(() => {
+    Demography_bar_data(selectedAttribute);
+  }, [selectedAttribute])
+  useEffect(()=>{
+    processDemographicData();
+  },[total]);
+
+  const isSelectionsValid = () => {
+    return (
+      selectedCompany !== null &&
+      selectedUser !== null &&
+      analysis !== "" &&
+      bank !== ""
+    );
   };
 
   return (
@@ -1024,48 +687,83 @@ export default function Reports() {
         <div className="space-y-6" ref={barChartRef}>
           {data && data.length > 0 && (
             <>
-              {console.log('Reports data before SelfEvaluation:', data)}
-              {console.log('Reports data relationship types:', data?.map(d => d.relationship_type))}
-              <SelfEvaluation 
-                companyId={selectedCompany?.id}
-                userId={selectedUser?.id}
-                bankId={bank}
-              />
+              {/* Self Evaluation Component */}
+              <div className="mb-8">
+                <SelfEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+              </div>
+
+              {/* Relationship Count Table */}
+              <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
+                <TableHeader className="text-white">
+                  <TableRow>
+                    <TableHead className="w-12 text-center">Sr. No.</TableHead>
+                    <TableHead className="text-left">Relationship Type</TableHead>
+                    <TableHead className="text-center">Count</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {relationCountMap.length > 0 ? (
+                    relationCountMap.map((row, index) => (
+                      <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
+                        <TableCell className="text-center">{row.SrNo}</TableCell>
+                        <TableCell className="text-left">{row.RelationshipType}</TableCell>
+                        <TableCell className="text-center">{row.Count}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-2">
+                        No data available
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </>
           )}
-          {selectedCompany && selectedUser  ?
-            <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
-              <TableHeader className="text-white">
-                <TableRow>
-                  <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                  <TableHead className="text-left">Relationship Type</TableHead>
-                  <TableHead className="text-center">Count</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {relationCountMap.length > 0 ? (
-                  relationCountMap.map((row, index) => (
-                    <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
-                      <TableCell className="text-center">{row.SrNo}</TableCell>
-                      <TableCell className="text-left">{row.RelationshipType}</TableCell>
-                      <TableCell className="text-center">{row.Count}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={3} className="text-center py-2">
-                      No data available
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table> : <></>
-          }
-
           {(selectedCompany != null && selectedUser != null) ?
             <div style={{ width: "1000px", margin: "0 auto" }}>
               <Accordion.Root type="single" collapsible className="w-full  space-y-2">
-                {items.map((item, index) => (
+                {[
+                  {
+                    id: 2,
+                    title: "Top Boss",
+                    key: "top_boss",
+                  },
+                  {
+                    id: 3,
+                    title: "Peer",
+                    key: "peer",
+                  },
+                  {
+                    id: 4,
+                    title: "Hr",
+                    key: "hr",
+                  }, {
+                    id: 5,
+                    title: "Sub Ordinate",
+                    key: "subordinate",
+                  },
+                  {
+                    id: 6,
+                    title: "Reporting Boss",
+                    key: "reporting_boss",
+                  },
+                  {
+                    id: 7,
+                    title: "Total",
+                    key: "total",
+                  },
+                  {
+                    id: 8,
+                    title: "Demography",
+                    key: "demography",
+                  },
+                ].map((item, index) => (
                   <Accordion.Item key={item.id} value={item.id} className="border rounded-md">
                     <Accordion.Header className="w-full">
                       <Accordion.Trigger
@@ -1091,7 +789,11 @@ export default function Reports() {
                             onValueChange={setSelectedChart}
                             className="grid grid-cols-3 gap-4"
                           >
-                            {chartOptionsList.map((option) => {
+                            {[
+                              { id: "table", label: "Table" },
+                              { id: "bar", label: "Bar Chart" },
+                              { id: "radar", label: "Radar Chart" }
+                            ].map((option) => {
                               // Only show radar option for total accordion
                               if (option.id === "radar" && item.key !== "total") {
                                 return null;
@@ -1181,15 +883,6 @@ export default function Reports() {
                             <div ref={barChartRef}>
                               <Bar data={barData} options={chartOptions} plugins={[ChartDataLabels]} />
                             </div>
-                            <div className="flex justify-center">
-                              <Button
-                                variant="secondary"
-                                onClick={() => handleCopyChart(barChartRef)}
-                                className="bg-purple-600 text-white hover:bg-purple-700"
-                              >
-                                Copy Chart to Clipboard
-                              </Button>
-                            </div>
                           </div>
                         ) : selectedChart === "table" ? (
                           <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
@@ -1197,27 +890,8 @@ export default function Reports() {
                               <TableRow>
                                 <TableHead className="w-12 text-center">Sr. No.</TableHead>
                                 <TableHead className="text-left">Attribute Name</TableHead>
-                                {item.key === 'self' ? (
-                                  <>
-                                    <TableHead className="text-center">Self - Average Score</TableHead>
-                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
-                                  </>
-                                ) : (
-                                  <>
-                                    <TableHead className="text-center">Self - Average Score</TableHead>
-                                    <TableHead className="text-center">Self - Score Percentage</TableHead>
-                                    <TableHead className="text-center">
-                                      {(item.key || 'relationship').split('_').map(word => 
-                                        word.charAt(0).toUpperCase() + word.slice(1)
-                                      ).join(' ')} - Average Score
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      {(item.key || 'relationship').split('_').map(word => 
-                                        word.charAt(0).toUpperCase() + word.slice(1)
-                                      ).join(' ')} - Score Percentage
-                                    </TableHead>
-                                  </>
-                                )}
+                                <TableHead className="text-center">Relationship - Average Score</TableHead>
+                                <TableHead className="text-center">Relationship - Score Percentage</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -1226,24 +900,13 @@ export default function Reports() {
                                   <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
                                     <TableCell className="text-center">{row.SrNo}</TableCell>
                                     <TableCell className="text-left">{row.attributeName}</TableCell>
-                                    {item.key === 'self' ? (
-                                      <>
-                                        <TableCell className="text-center">{(row.averageWeight || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.scorePercentage || 0).toFixed(2)}</TableCell>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <TableCell className="text-center">{(row.selfAverageWeight || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.selfScorePercentage || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.relationshipAverageWeight || 0).toFixed(2)}</TableCell>
-                                        <TableCell className="text-center">{(row.relationshipScorePercentage || 0).toFixed(2)}</TableCell>
-                                      </>
-                                    )}
+                                    <TableCell className="text-center">{(row.relationshipAverageWeight || 0).toFixed(2)}</TableCell>
+                                    <TableCell className="text-center">{(row.relationshipScorePercentage || 0).toFixed(2)}</TableCell>
                                   </TableRow>
                                 ))
                               ) : (
                                 <TableRow>
-                                  <TableCell colSpan={item.key === 'self' ? 4 : 5} className="text-center py-2">
+                                  <TableCell colSpan={4} className="text-center py-2">
                                     No data available
                                   </TableCell>
                                 </TableRow>
