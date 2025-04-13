@@ -10,8 +10,6 @@ import {
   Legend
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
 
 // Register ChartJS components
 ChartJS.register(
@@ -23,7 +21,7 @@ ChartJS.register(
   Legend
 );
 
-const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
+export const RadarChartTotal = ({ companyId, userId, attribute, bankId, onDataLoad }) => {
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -38,12 +36,21 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
         // First get the evaluation assignment
         const { data: assignments, error: assignError } = await supabase
           .from('evaluation_assignments')
-          .select('id')
+          .select(`
+            id,
+            attribute_banks!inner (
+              id
+            )
+          `)
           .eq('company_id', companyId)
           .eq('user_to_evaluate_id', userId)
+          .eq('attribute_banks.id', bankId)
           .single();
 
-        if (assignError) throw assignError;
+        if (assignError) {
+          console.error('Error fetching assignments:', assignError);
+          return;
+        }
 
         // Then get all evaluations (both self and others)
         const { data: evaluations, error: evalError } = await supabase
@@ -60,7 +67,10 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
           .eq('evaluation_assignment_id', assignments.id)
           .eq('status', 'completed');
 
-        if (evalError) throw evalError;
+        if (evalError) {
+          console.error('Error fetching evaluations:', evalError);
+          return;
+        }
 
         // Separate self and other evaluations
         const selfEval = evaluations.find(e => e.is_self_evaluator);
@@ -128,7 +138,13 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
               statementAverages[statement].count += 1;
             });
 
-          return statementAverages;
+          // Convert to percentage scores
+          return Object.entries(statementAverages).reduce((acc, [statement, data]) => {
+            const averageScore = data.total / data.count;
+            const percentageScore = (averageScore / 100) * 100;
+            acc[statement] = Number(percentageScore.toFixed(1)); // Round to 1 decimal place
+            return acc;
+          }, {});
         };
 
         const selfAverages = processData(selfResponseIds);
@@ -143,13 +159,13 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
         // Prepare data for radar chart
         const chartData = {
           labels: allStatements.map(statement => {
-            // Split statement into lines of max 25 characters
+            // Split statement into lines of max 30 characters
             const words = statement.split(' ');
             let lines = [''];
             let currentLine = 0;
             
             words.forEach(word => {
-              if ((lines[currentLine] + ' ' + word).length > 25) {
+              if ((lines[currentLine] + ' ' + word).length > 30) {
                 currentLine++;
                 lines[currentLine] = '';
               }
@@ -162,78 +178,102 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
             {
               label: 'Self',
               data: allStatements.map(statement => 
-                selfAverages[statement] 
-                  ? selfAverages[statement].total / selfAverages[statement].count 
-                  : 0
+                selfAverages[statement] || 0
               ),
-              backgroundColor: 'rgba(255, 99, 132, 0.2)',
-              borderColor: 'rgb(255, 99, 132)',
-              borderWidth: 1
+              backgroundColor: 'rgba(115, 62, 147, 0.1)',  // More transparent
+              borderColor: '#733e93',
+              borderWidth: 2,  // Thicker border
+              pointBackgroundColor: '#733e93',
+              pointBorderColor: '#ffffff',
+              pointHoverBackgroundColor: '#ffffff',
+              pointHoverBorderColor: '#733e93',
+              pointRadius: 4,
+              pointHoverRadius: 6
             },
             {
               label: 'Total',
               data: allStatements.map(statement => 
-                otherAverages[statement] 
-                  ? otherAverages[statement].total / otherAverages[statement].count 
-                  : 0
+                otherAverages[statement] || 0
               ),
-              backgroundColor: 'rgba(54, 162, 235, 0.2)',
-              borderColor: 'rgb(54, 162, 235)',
-              borderWidth: 1
+              backgroundColor: 'rgba(74, 222, 128, 0.1)',  // More transparent
+              borderColor: '#4ade80',
+              borderWidth: 2,  // Thicker border
+              pointBackgroundColor: '#4ade80',
+              pointBorderColor: '#ffffff',
+              pointHoverBackgroundColor: '#ffffff',
+              pointHoverBorderColor: '#4ade80',
+              pointRadius: 4,
+              pointHoverRadius: 6
             },
             {
-              label: 'Max Score (100)',
+              label: 'Max Score',
               data: allStatements.map(() => 100),
-              backgroundColor: 'rgba(255, 206, 86, 0.2)',
+              backgroundColor: 'rgba(255, 206, 86, 0.1)',  // More transparent
               borderColor: 'rgb(255, 206, 86)',
               borderWidth: 1,
+              borderDash: [],  // Solid line for max
+              pointRadius: 0,  // Hide points for max line
               fill: true
             }
           ]
         };
 
         const chartOptions = {
+          responsive: true,
+          maintainAspectRatio: false,
           scales: {
             r: {
               angleLines: {
                 display: true,
-                color: 'rgba(0, 0, 0, 0.1)'
+                color: 'rgba(0, 0, 0, 0.1)',
+                lineWidth: 1
               },
               grid: {
-                color: 'rgba(0, 0, 0, 0.1)'
+                display: false  // Hide circular grid lines
               },
               beginAtZero: true,
               max: 100,
+              min: 0,
               ticks: {
-                stepSize: 20,
-                font: {
-                  size: 10
-                }
+                display: false  // Hide numbers
               },
               pointLabels: {
                 font: {
-                  size: 11
+                  size: 14,
+                  weight: '600'
                 },
-                callback: function(value) {
-                  // Handle wrapped text
-                  if (Array.isArray(value)) {
-                    return value;
-                  }
-                  return value;
-                }
+                padding: 25
               }
             }
           },
           plugins: {
             legend: {
               position: 'top',
+              align: 'center',
+              labels: {
+                usePointStyle: true,
+                padding: 25,
+                font: {
+                  size: 14,
+                  weight: '600'
+                }
+              }
             },
             tooltip: {
               callbacks: {
                 label: function(context) {
-                  return `${context.dataset.label}: ${context.formattedValue}%`;
+                  const value = Number(context.raw).toFixed(1);  // Format tooltip values
+                  return `${context.dataset.label}: ${value}%`;
                 }
-              }
+              },
+              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+              titleColor: '#000',
+              bodyColor: '#000',
+              borderColor: '#ddd',
+              borderWidth: 1,
+              padding: 12,
+              boxPadding: 6,
+              usePointStyle: true
             }
           }
         };
@@ -243,94 +283,34 @@ const RadarChartTotal = ({ companyId, userId, attribute, onDataLoad }) => {
       } catch (err) {
         console.error('Error fetching radar chart data:', err);
         setError(err.message);
-        toast.error('Failed to load radar chart data');
       } finally {
         setLoading(false);
       }
     };
 
-    if (companyId && userId && attribute) {
+    if (companyId && userId && attribute && bankId) {
       fetchData();
     }
-  }, [companyId, userId, attribute]);
-
-  // Copy chart to clipboard
-  const handleCopyChart = async () => {
-    try {
-      const chart = chartRef.current;
-      if (!chart) {
-        toast.error('Chart not available');
-        return;
-      }
-
-      const canvas = chart.canvas;
-      const imageData = canvas.toDataURL('image/png');
-      
-      // Create a temporary canvas to add white background
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      
-      // Fill white background
-      tempCtx.fillStyle = 'white';
-      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-      
-      // Draw the chart on top
-      const image = new Image();
-      image.src = imageData;
-      await new Promise(resolve => {
-        image.onload = () => {
-          tempCtx.drawImage(image, 0, 0);
-          resolve();
-        };
-      });
-
-      // Convert to blob and copy
-      const blob = await new Promise(resolve => 
-        tempCanvas.toBlob(resolve, 'image/png')
-      );
-      
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'image/png': blob
-        })
-      ]);
-      
-      toast.success('Chart copied to clipboard');
-    } catch (err) {
-      console.error('Error copying chart:', err);
-      toast.error('Failed to copy chart');
-    }
-  };
+  }, [companyId, userId, attribute, bankId]);
 
   return (
-    <div className="relative">
+    <div className="relative w-full">
       {loading && <div className="text-center py-4">Loading...</div>}
       {error && <div className="text-center text-red-500 py-4">{error}</div>}
       {chartData && !loading && !error && (
         <>
-          <Radar
-            ref={chartRef}
-            data={chartData.data}
-            options={chartData.options}
-          />
-          <div className="flex justify-center mt-4">
-            <Button 
-              variant="secondary" 
-              onClick={handleCopyChart}
-              className="bg-purple-600 text-white hover:bg-purple-700"
-            >
-              Copy Chart to Clipboard
-            </Button>
+          <div className="h-[700px] w-full">
+            <Radar
+              ref={chartRef}
+              data={chartData.data}
+              options={chartData.options}
+            />
           </div>
         </>
       )}
       {!chartData && !loading && !error && (
-        <div className="text-center py-4">No data available for the selected attribute</div>
+        <div className="text-center py-4 text-gray-500">No data available for the selected attribute</div>
       )}
     </div>
   );
 };
-
-export default RadarChartTotal;

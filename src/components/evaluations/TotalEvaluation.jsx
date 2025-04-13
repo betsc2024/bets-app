@@ -1,4 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/supabase';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -8,15 +16,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Bar } from 'react-chartjs-2';
-import { supabase } from '@/supabase';
-import CopyToClipboard from '../CopyToClipboard';
+import { RadarChartTotal } from '@/components/RadarChartTotal';
+import CopyToClipboard from '@/components/CopyToClipboard';
 
 const TotalEvaluation = ({ userId, companyId, bankId }) => {
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
   const [viewType, setViewType] = useState('table');
+  const [selectedAttribute, setSelectedAttribute] = useState('');
+  const [attributes, setAttributes] = useState([]);
   const tableRef = useRef(null);
   const chartRef = useRef(null);
+  const radarRef = useRef(null);
 
   useEffect(() => {
     if (userId && companyId && bankId) {
@@ -113,6 +124,13 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
       const processedData = processEvaluationData(filteredTotalData, filteredSelfEvals);
       setTableData(processedData);
       generateChartData(processedData);
+
+      // Extract unique attributes for the dropdown
+      const uniqueAttributes = [...new Set(processedData.map(item => item.attributeName))];
+      setAttributes(uniqueAttributes);
+      if (uniqueAttributes.length > 0 && !selectedAttribute) {
+        setSelectedAttribute(uniqueAttributes[0]);
+      }
     } catch (error) {
       console.error('Error in fetchData:', error);
     }
@@ -320,11 +338,19 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
             >
               Chart
             </button>
+            <button
+              className={`px-4 py-2 rounded-lg ${viewType === 'radar' ? 'bg-primary text-white' : 'bg-gray-200'}`}
+              onClick={() => setViewType('radar')}
+            >
+              Radar
+            </button>
           </div>
-          <CopyToClipboard 
-            targetRef={viewType === 'table' ? tableRef : chartRef} 
-            buttonText={`Copy ${viewType === 'table' ? 'Table' : 'Chart'}`} 
-          />
+          {viewType !== 'radar' && (
+            <CopyToClipboard 
+              targetRef={viewType === 'table' ? tableRef : chartRef} 
+              buttonText={`Copy ${viewType === 'table' ? 'Table' : 'Chart'}`} 
+            />
+          )}
         </div>
       </div>
 
@@ -374,6 +400,46 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
               No data available for chart
             </div>
           )}
+        </div>
+      )}
+
+      {/* Radar View */}
+      {viewType === 'radar' && (
+        <div className="border rounded-lg p-8 bg-white relative">
+          <div className="absolute top-4 right-4">
+            <CopyToClipboard
+              targetRef={radarRef}
+              title="Radar Chart"
+            />
+          </div>
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Attribute
+            </label>
+            <Select
+              value={selectedAttribute}
+              onValueChange={setSelectedAttribute}
+            >
+              <SelectTrigger className="w-[400px] bg-white border-gray-300">
+                <SelectValue placeholder="Select an attribute to view detailed scores" />
+              </SelectTrigger>
+              <SelectContent>
+                {attributes.map((attr) => (
+                  <SelectItem key={attr} value={attr}>
+                    {attr}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="h-[700px] w-full bg-white" ref={radarRef}>
+            <RadarChartTotal
+              companyId={companyId}
+              userId={userId}
+              attribute={selectedAttribute}
+              bankId={bankId}
+            />
+          </div>
         </div>
       )}
     </div>

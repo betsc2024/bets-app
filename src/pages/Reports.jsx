@@ -10,7 +10,7 @@ import { supabase } from '@/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
-import RadarChartTotal from '@/components/RadarChartTotal';
+import { RadarChartTotal } from '@/components/RadarChartTotal';
 import SelfEvaluation from '@/components/evaluations/SelfEvaluation';
 import TopBossEvaluation from '@/components/evaluations/TopBossEvaluation';
 import PeerEvaluation from '@/components/evaluations/PeerEvaluation';
