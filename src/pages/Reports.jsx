@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import RadarChartTotal from '@/components/RadarChartTotal';
+import SelfEvaluation from '@/components/evaluations/SelfEvaluation';
 
 import html2canvas from "html2canvas";
 
@@ -1021,6 +1022,17 @@ export default function Reports() {
         </div>
       ) : (
         <div className="space-y-6" ref={barChartRef}>
+          {data && data.length > 0 && (
+            <>
+              {console.log('Reports data before SelfEvaluation:', data)}
+              {console.log('Reports data relationship types:', data?.map(d => d.relationship_type))}
+              <SelfEvaluation 
+                companyId={selectedCompany?.id}
+                userId={selectedUser?.id}
+                bankId={bank}
+              />
+            </>
+          )}
           {selectedCompany && selectedUser  ?
             <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
               <TableHeader className="text-white">
