@@ -81,8 +81,12 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
       const foundRelationTypes = new Set();
 
       filteredEvals.forEach(evalItem => {
-        evalItem.evaluations.forEach(evaluation => {
+        evalItem.evaluations?.forEach(evaluation => {
+          if (!evaluation) return;
+          
           const relationType = evaluation.is_self_evaluator ? 'self' : evaluation.relationship_type;
+          if (!relationType) return;
+          
           foundRelationTypes.add(relationType);
           
           if (!relationshipData[relationType]) {
@@ -92,7 +96,9 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
             };
           }
 
-          evaluation.evaluation_responses.forEach(response => {
+          evaluation.evaluation_responses?.forEach(response => {
+            if (!response?.attribute_statement_options?.attribute_statements?.attributes?.name) return;
+            
             const option = response.attribute_statement_options;
             const attributeName = option.attribute_statements.attributes.name;
             allAttributes.add(attributeName);
@@ -104,7 +110,7 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
               };
             }
 
-            relationshipData[relationType].scores[attributeName].total += option.weight;
+            relationshipData[relationType].scores[attributeName].total += option.weight || 0;
             relationshipData[relationType].scores[attributeName].count++;
           });
         });

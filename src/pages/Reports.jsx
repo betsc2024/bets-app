@@ -19,6 +19,7 @@ import SubordinateEvaluation from '@/components/evaluations/SubordinateEvaluatio
 import ReportingBossEvaluation from '@/components/evaluations/ReportingBossEvaluation';
 import TotalEvaluation from '@/components/evaluations/TotalEvaluation';
 import DemographyEvaluation from '@/components/evaluations/DemographyEvaluation';
+import Status from '@/components/evaluations/Status';
 import CopyToClipboard from '@/components/CopyToClipboard';
 import html2canvas from "html2canvas";
 
@@ -32,11 +33,8 @@ import {
   SelectItem,
   SelectSeparator,
 } from '@/components/ui/select';
-import * as Accordion from "@radix-ui/react-accordion";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import * as RadioGroup from "@radix-ui/react-radio-group";
-import { Label } from "@radix-ui/react-label";
 import { Button } from '@/components/ui/button';
 
 import {
@@ -57,15 +55,12 @@ export default function Reports() {
   const [data, setData] = useState([]);
   const [labels, setLabels] = useState(null);
   const [relationResults, setRelationResults] = useState(null);
-  const [selectedChart, setSelectedChart] = useState("table");
   const [barData, setBarData] = useState(null);
   const [scoreType, setScoreType] = useState(null);
   const [selectedAttribute, setSelectedAttribute] = useState(null);
 
   // Table data states
-  const [relationTableData, setRelationTableData] = useState([]);
   const [tableData, setTableData] = useState([]);
-  const [relationCountMap, setRelationCountMap] = useState([]);
   const [total, setTotal] = useState([]);
 
   // Company and user states
@@ -157,25 +152,6 @@ export default function Reports() {
         evaluation.evaluation_assignments?.company_id === id &&
         evaluation.evaluation_assignments?.user_to_evaluate_id === user_id
       )
-      const relation_count_map_temp = {};
-
-      filteredData.map((item) => {
-        const id = item.relationship_type;
-        if (!relation_count_map_temp[id]) {
-          relation_count_map_temp[id] = 1;
-        } else {
-          relation_count_map_temp[id] += 1;
-        }
-      })
-
-
-      const relationCountArray = Object.entries(relation_count_map_temp).map(([relationship_type, count], index) => ({
-        SrNo: index + 1,
-        RelationshipType: relationship_type === "null" ? "unknown" : relationship_type, // Handling null case
-        Count: count
-      }));
-
-      setRelationCountMap(relationCountArray);
       setData(filteredData);
 
       // Transform data to match expected structure
@@ -200,7 +176,7 @@ export default function Reports() {
           company_name: e.evaluation_assignments?.companies?.name || "N/A",
           attribute_name,
           average_weight: count > 0 ? totalWeight / count : 0,
-          average_score_percentage: (totalWeight / count) / relation_count_map_temp[e.relationship_type],
+          average_score_percentage: (totalWeight / count) / 1,
           analysis_type : analysis_type
         }));
       }).flat();
@@ -349,18 +325,6 @@ export default function Reports() {
     setAnalysis(value);
     if (selectedCompany && selectedUser) {
       fetchData(selectedCompany, selectedUser, value, bank);
-    }
-  };
-
-  const handleRelationshipTypeSelect = (type) => {
-    fetchSpecificData(type);
-    updateChartData(type);
-    setScoreType(type);
-    setSelectedChart("bar");
-    
-    if (type === 'demography') {
-      fetchSpecificData('top_boss');
-      processDemographicData();
     }
   };
 
@@ -613,18 +577,18 @@ export default function Reports() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-full">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
       <div className="flex flex-wrap gap-4 mb-6">
-        <div className="flex flex-wrap gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
           <Select value={selectedCompany?.id} onValueChange={(value) => {
             const company = companies.find(c => c.id === value);
             setSelectedCompany(company);
           }}>
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a company" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
               {companies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name}
@@ -637,10 +601,10 @@ export default function Reports() {
             const user = users.find(c => c.id === value);
             setSelectedUser(user);
           }}>
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a Employee" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
               {users.map((user) => (
                 <SelectItem key={user.id} value={user.id}>
                   {user.full_name}
@@ -649,10 +613,10 @@ export default function Reports() {
             </SelectContent>
           </Select>
           <Select value={analysis} onValueChange={handleAnalysisChange}>
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Select an Analysis Type" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
               {analysisTypeList?.map((item) => (
                 item?.id && item?.name ? (
                   <SelectItem 
@@ -668,10 +632,10 @@ export default function Reports() {
           <Select value={bank} onValueChange={(value) => {
             setBank(value);
           }}>
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a Bank" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
               {bankList?.map((item) => (
                 item?.id && item?.name ? (
                   <SelectItem 
@@ -693,280 +657,62 @@ export default function Reports() {
         </div>
       ) : (
         <div className="space-y-6" ref={barChartRef}>
-          {data && data.length > 0 && (
-            <>
-              {/* Evaluations */}
-              <div className="space-y-8">
-                <SelfEvaluation 
-                  companyId={selectedCompany?.id}
-                  userId={selectedUser?.id}
-                  bankId={bank}
-                />
-                <TopBossEvaluation 
-                  companyId={selectedCompany?.id}
-                  userId={selectedUser?.id}
-                  bankId={bank}
-                />
-                <PeerEvaluation 
-                  companyId={selectedCompany?.id}
-                  userId={selectedUser?.id}
-                  bankId={bank}
-                />
-                <HREvaluation 
-                  companyId={selectedCompany?.id}
-                  userId={selectedUser?.id}
-                  bankId={bank}
-                />
-                <SubordinateEvaluation 
-                  companyId={selectedCompany?.id}
-                  userId={selectedUser?.id}
-                  bankId={bank}
-                />
-                <ReportingBossEvaluation 
-                  companyId={selectedCompany?.id}
-                  userId={selectedUser?.id}
-                  bankId={bank}
-                />
-                <TotalEvaluation 
-                  companyId={selectedCompany?.id}
-                  userId={selectedUser?.id}
-                  bankId={bank}
-                />
-                <DemographyEvaluation 
-                  companyId={selectedCompany?.id}
-                  userId={selectedUser?.id}
-                  bankId={bank}
-                />
-              </div>
-
-              {/* Relationship Count Table */}
-              <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
-                <TableHeader className="text-white">
-                  <TableRow>
-                    <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                    <TableHead className="text-left">Relationship Type</TableHead>
-                    <TableHead className="text-center">Count</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {relationCountMap.length > 0 ? (
-                    relationCountMap.map((row, index) => (
-                      <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
-                        <TableCell className="text-center">{row.SrNo}</TableCell>
-                        <TableCell className="text-left">{row.RelationshipType}</TableCell>
-                        <TableCell className="text-center">{row.Count}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-2">
-                        No data available
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </>
-          )}
-          {(selectedCompany != null && selectedUser != null) ?
-            <div style={{ width: "1000px", margin: "0 auto" }}>
-              <Accordion.Root type="single" collapsible className="w-full  space-y-2">
-                {[
-                  {
-                    id: 2,
-                    title: "Top Boss",
-                    key: "top_boss",
-                  },
-                  {
-                    id: 3,
-                    title: "Peer",
-                    key: "peer",
-                  },
-                  {
-                    id: 4,
-                    title: "Hr",
-                    key: "hr",
-                  }, {
-                    id: 5,
-                    title: "Sub Ordinate",
-                    key: "subordinate",
-                  },
-                  {
-                    id: 6,
-                    title: "Reporting Boss",
-                    key: "reporting_boss",
-                  },
-                  {
-                    id: 7,
-                    title: "Total",
-                    key: "total",
-                  },
-                  {
-                    id: 8,
-                    title: "Demography",
-                    key: "demography",
-                  },
-                ].map((item, index) => (
-                  <Accordion.Item key={item.id} value={item.id} className="border rounded-md">
-                    <Accordion.Header className="w-full">
-                      <Accordion.Trigger
-                        className={cn(
-                          "flex items-center justify-between w-full px-4 py-3 text-left font-medium",
-                          "hover:bg-gray-100 transition-all"
-                        )}
-                        onClick={() => {
-                          handleRelationshipTypeSelect(item.key);
-                        }}
-
-                      >
-                        {item.title}
-
-                        <ChevronDown className="w-5 h-5 transition-transform data-[state=open]:rotate-180" />
-                      </Accordion.Trigger>
-                    </Accordion.Header>
-                    <Accordion.Content className="overflow-hidden data-[state=open]:animate-slideDown data-[state=closed]:animate-slideUp">
-                      <div className="px-4 py-2 text-gray-700">
-                        {isSelectionsValid() && (
-                          <RadioGroup.Root
-                            value={selectedChart}
-                            onValueChange={setSelectedChart}
-                            className="grid grid-cols-3 gap-4"
-                          >
-                            {[
-                              { id: "table", label: "Table" },
-                              { id: "bar", label: "Bar Chart" },
-                              { id: "radar", label: "Radar Chart" }
-                            ].map((option) => {
-                              // Only show radar option for total accordion
-                              if (option.id === "radar" && item.key !== "total") {
-                                return null;
-                              }
-                              return (
-                                <div
-                                  key={option.id}
-                                  onClick={() => {
-                                    setSelectedChart(option.id);
-                                    if (option.id === "bar") {
-                                      updateChartData(item.key);
-                                    }
-                                    if (option.id === "radar") {
-                                      setBarData(null);
-                                    }
-                                  }}
-                                >
-                                  <RadioGroup.Item
-                                    value={option.id}
-                                    id={`${item.key}-${option.id}`}
-                                    className="peer sr-only"
-                                  />
-                                  <Label
-                                    htmlFor={`${item.key}-${option.id}`}
-                                    className={cn(
-                                      "flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4",
-                                      "hover:bg-accent hover:text-accent-foreground",
-                                      "peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary",
-                                      "cursor-pointer transition-all"
-                                    )}
-                                  >
-                                    <span className="text-sm font-medium">
-                                      {option.label}
-                                    </span>
-                                  </Label>
-                                </div>
-                              );
-                            })}
-                          </RadioGroup.Root>
-                        )}
-                        {selectedChart === "radar" && item.key === "total" ? (
-                          <div className="mt-4 p-4 border rounded-lg bg-white shadow-sm">
-                            <div className="mb-4">
-                              <Select
-                                value={selectedAttribute}
-                                onValueChange={(value) => {
-                                  setSelectedAttribute(value);
-                                }}
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Select Attribute" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectGroup>
-                                    <SelectLabel>Attributes</SelectLabel>
-                                    {demographicAttributes.map((attribute) => (
-                                      <SelectItem 
-                                        key={attribute} 
-                                        value={attribute}
-                                      >
-                                        {attribute}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            {selectedAttribute ? (
-                              <div className="space-y-4">
-                                <RadarChartTotal 
-                                  companyId={selectedCompany?.id} 
-                                  userId={selectedUser?.id}
-                                  attribute={selectedAttribute}
-                                  onDataLoad={(data) => {
-                                    console.log('Radar chart data loaded:', data);
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <div className="text-center text-gray-500 py-4">
-                                Please select an attribute to view the radar chart
-                              </div>
-                            )}
-                          </div>
-                        ) : selectedChart === "bar" && barData ? (
-                          <div className="space-y-4">
-                            <div ref={barChartRef}>
-                              <Bar data={barData} options={chartOptions} plugins={[ChartDataLabels]} />
-                            </div>
-                          </div>
-                        ) : selectedChart === "table" ? (
-                          <Table className="border border-gray-300 rounded-lg overflow-hidden shadow-md mt-5 mb-5">
-                            <TableHeader className="text-white">
-                              <TableRow>
-                                <TableHead className="w-12 text-center">Sr. No.</TableHead>
-                                <TableHead className="text-left">Attribute Name</TableHead>
-                                <TableHead className="text-center">Relationship - Average Score</TableHead>
-                                <TableHead className="text-center">Relationship - Score Percentage</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {tableData && tableData.length > 0 ? (
-                                tableData.map((row, index) => (
-                                  <TableRow key={`item-${index}`} className="border-b hover:bg-gray-100">
-                                    <TableCell className="text-center">{row.SrNo}</TableCell>
-                                    <TableCell className="text-left">{row.attributeName}</TableCell>
-                                    <TableCell className="text-center">{(row.relationshipAverageWeight || 0).toFixed(2)}</TableCell>
-                                    <TableCell className="text-center">{(row.relationshipScorePercentage || 0).toFixed(2)}</TableCell>
-                                  </TableRow>
-                                ))
-                              ) : (
-                                <TableRow>
-                                  <TableCell colSpan={4} className="text-center py-2">
-                                    No data available
-                                  </TableCell>
-                                </TableRow>
-                              )}
-                            </TableBody>
-                          </Table>
-                        ) : (
-                          <></>
-                        )}
-                      </div>
-                    </Accordion.Content>
-                  </Accordion.Item>
-                ))}
-              </Accordion.Root>
-
+          {/* Always show Status component if selections are valid */}
+          <Status 
+            companyId={selectedCompany?.id}
+            userId={selectedUser?.id}
+            bankId={bank}
+          />
+          
+          {/* Show other evaluation components only if data exists */}
+          {data && data.length > 0 ? (
+            <div className="space-y-8 w-full">
+              <SelfEvaluation 
+                companyId={selectedCompany?.id}
+                userId={selectedUser?.id}
+                bankId={bank}
+              />
+              <TopBossEvaluation 
+                companyId={selectedCompany?.id}
+                userId={selectedUser?.id}
+                bankId={bank}
+              />
+              <PeerEvaluation 
+                companyId={selectedCompany?.id}
+                userId={selectedUser?.id}
+                bankId={bank}
+              />
+              <HREvaluation 
+                companyId={selectedCompany?.id}
+                userId={selectedUser?.id}
+                bankId={bank}
+              />
+              <SubordinateEvaluation 
+                companyId={selectedCompany?.id}
+                userId={selectedUser?.id}
+                bankId={bank}
+              />
+              <ReportingBossEvaluation 
+                companyId={selectedCompany?.id}
+                userId={selectedUser?.id}
+                bankId={bank}
+              />
+              <TotalEvaluation 
+                companyId={selectedCompany?.id}
+                userId={selectedUser?.id}
+                bankId={bank}
+              />
+              <DemographyEvaluation 
+                companyId={selectedCompany?.id}
+                userId={selectedUser?.id}
+                bankId={bank}
+              />
             </div>
-            : <> Please Select a Company and User</>}
+          ) : (
+            <div className="text-center text-gray-500 mt-8 text-lg">
+              No evaluation data available yet
+            </div>
+          )}
         </div>
       )}
     </div>

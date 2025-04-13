@@ -175,9 +175,9 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
       const numStatements = Object.keys(statementScores).length;
       const rawScore = Object.values(statementScores).reduce((sum, { total }) => sum + total, 0);
       const evaluatorsPerStatement = Object.values(statementScores)[0]?.evaluators || 0;
-      const hrAverageScore = rawScore / numStatements;
+      const hrAverageScore = numStatements > 0 ? rawScore / numStatements : 0;
       const maxPossible = evaluatorsPerStatement * 100;
-      const hrPercentageScore = maxPossible ? (hrAverageScore / maxPossible) * 100 : 0;
+      const hrPercentageScore = maxPossible > 0 ? (hrAverageScore / maxPossible) * 100 : 0;
 
       // Calculate self evaluation scores
       const selfStatementScores = {};
@@ -195,16 +195,16 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
 
       const selfNumStatements = Object.keys(selfStatementScores).length;
       const selfRawScore = Object.values(selfStatementScores).reduce((sum, { total }) => sum + total, 0);
-      const selfAverageScore = selfRawScore / selfNumStatements;
-      const selfPercentageScore = (selfAverageScore / 100) * 100;
+      const selfAverageScore = selfNumStatements > 0 ? selfRawScore / selfNumStatements : 0;
+      const selfPercentageScore = selfAverageScore > 0 ? (selfAverageScore / 100) * 100 : 0;
 
       return {
         srNo: index + 1,
         attributeName: attribute,
-        selfAverageScore: Number(selfAverageScore.toFixed(1)),
-        selfPercentageScore: Number(selfPercentageScore.toFixed(1)),
-        hrAverageScore: Number(hrAverageScore.toFixed(1)),
-        hrPercentageScore: Number(hrPercentageScore.toFixed(1)),
+        selfAverageScore: Number((selfAverageScore || 0).toFixed(1)),
+        selfPercentageScore: Number((selfPercentageScore || 0).toFixed(1)),
+        hrAverageScore: Number((hrAverageScore || 0).toFixed(1)),
+        hrPercentageScore: Number((hrPercentageScore || 0).toFixed(1))
       };
     });
   };
