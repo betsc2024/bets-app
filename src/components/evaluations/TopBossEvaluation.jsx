@@ -175,16 +175,10 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
 
     // Calculate scores
     return Object.entries(attributeResponses).map(([attribute, data], index) => {
-      console.log(`\n=== Processing ${attribute} ===`);
-      console.log('Raw scores:', data.topBossScores.map(s => s.weight));
-      
       // First calculate per-statement scores for top boss
       const statementScores = {};
       data.topBossScores.forEach((score) => {
-        // Get statement ID from the correct path
         const statementId = score.attribute_statement_options.attribute_statements.statement;
-        console.log('Statement:', statementId, 'Weight:', score.weight);
-        
         if (!statementScores[statementId]) {
           statementScores[statementId] = {
             total: 0,
@@ -195,31 +189,13 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
         statementScores[statementId].evaluators += 1;
       });
 
-      console.log('Top Boss Statement Scores:', JSON.stringify(statementScores, null, 2));
-      
       // Calculate top boss scores exactly as per SQL
       const numStatements = Object.keys(statementScores).length;
-      console.log('Number of Statements:', numStatements);
-      
-      // Sum up raw scores per statement first
       const rawScore = Object.values(statementScores).reduce((sum, { total }) => sum + total, 0);
-      console.log('Raw Score (sum of all ratings):', rawScore);
-      
-      // Get evaluators per statement (should be same for all statements)
       const evaluatorsPerStatement = Object.values(statementScores)[0]?.evaluators || 0;
-      console.log('Evaluators per Statement:', evaluatorsPerStatement);
-      
-      // Calculate average score
       const topBossAverageScore = rawScore / numStatements;
-      console.log('Average Score (raw score / num statements):', topBossAverageScore);
-      
-      // Calculate max possible score
       const maxPossible = evaluatorsPerStatement * 100;
-      console.log('Max Possible (evaluators × 100):', maxPossible);
-      
-      // Calculate percentage
       const topBossPercentageScore = maxPossible ? (topBossAverageScore / maxPossible) * 100 : 0;
-      console.log('Percentage Score (average / max possible × 100):', topBossPercentageScore);
 
       // Self evaluation follows same pattern
       const selfStatementScores = {};
@@ -235,19 +211,10 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
         selfStatementScores[statementId].evaluators += 1;
       });
 
-      console.log('\nSelf Statement Scores:', JSON.stringify(selfStatementScores, null, 2));
-      
       const selfNumStatements = Object.keys(selfStatementScores).length;
-      console.log('Self Number of Statements:', selfNumStatements);
-      
       const selfRawScore = Object.values(selfStatementScores).reduce((sum, { total }) => sum + total, 0);
-      console.log('Self Raw Score:', selfRawScore);
-      
       const selfAverageScore = selfRawScore / selfNumStatements;
-      console.log('Self Average Score:', selfAverageScore);
-      
       const selfPercentageScore = (selfAverageScore / 100) * 100;
-      console.log('Self Percentage Score:', selfPercentageScore);
 
       return {
         srNo: index + 1,
@@ -267,14 +234,14 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
           labels: data.map(item => item.attributeName),
           datasets: [
             {
-              label: 'Top Boss Score (%)',
-              data: data.map(item => item.topBossPercentageScore),
+              label: 'Self Score (%)',
+              data: data.map(item => item.selfPercentageScore),
               backgroundColor: '#733e93',  // primary purple
               borderWidth: 0
             },
             {
-              label: 'Self Score (%)',
-              data: data.map(item => item.selfPercentageScore),
+              label: 'Top Boss Score (%)',
+              data: data.map(item => item.topBossPercentageScore),
               backgroundColor: '#4ade80',  // green
               borderWidth: 0
             }
