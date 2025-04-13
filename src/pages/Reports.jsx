@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import RadarChartTotal from '@/components/RadarChartTotal';
 import SelfEvaluation from '@/components/evaluations/SelfEvaluation';
+import TopBossEvaluation from '@/components/evaluations/TopBossEvaluation';
 import CopyToClipboard from '@/components/CopyToClipboard';
 import html2canvas from "html2canvas";
 
@@ -690,6 +691,15 @@ export default function Reports() {
               {/* Self Evaluation Component */}
               <div className="mb-8">
                 <SelfEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+              </div>
+
+              {/* Top Boss Evaluation Component */}
+              <div className="mb-8">
+                <TopBossEvaluation 
                   companyId={selectedCompany?.id}
                   userId={selectedUser?.id}
                   bankId={bank}
