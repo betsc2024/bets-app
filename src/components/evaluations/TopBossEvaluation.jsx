@@ -10,6 +10,7 @@ import {
 import { supabase } from '@/supabase';
 import { toast } from 'sonner';
 import { Bar } from 'react-chartjs-2';
+import CopyToClipboard from '../CopyToClipboard';
 
 const TopBossEvaluation = ({ userId, companyId, bankId }) => {
   const [viewType, setViewType] = useState('table');
@@ -117,15 +118,14 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
     }
   };
 
-  const processTopBossData = (topBossEvals, selfEvals) => {
+  const processTopBossData = (topBossEvaluations, selfEvaluations) => {
     const attributeResponses = {};
 
-    // Process top boss evaluations
-    topBossEvals?.forEach(assignment => {
-      const evaluationsList = Array.isArray(assignment.evaluations) ? 
-        assignment.evaluations : [assignment.evaluations];
-
-      evaluationsList.forEach(evaluation => {
+    // First collect top boss evaluations
+    topBossEvaluations.forEach(assignment => {
+      // Handle nested evaluations array
+      const evaluations = assignment.evaluations || [];
+      evaluations.forEach(evaluation => {
         if (!evaluation?.evaluation_responses) return;
 
         evaluation.evaluation_responses.forEach(response => {
@@ -141,13 +141,16 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
             };
           }
 
-          attributeResponses[attributeName].topBossScores.push(weight);
+          attributeResponses[attributeName].topBossScores.push({
+            weight,
+            attribute_statement_options: response.attribute_statement_options
+          });
         });
       });
     });
 
-    // Process self evaluations
-    selfEvals?.forEach(evaluation => {
+    // Then collect self evaluations
+    selfEvaluations.forEach(evaluation => {
       if (!evaluation?.evaluation_responses) return;
 
       evaluation.evaluation_responses.forEach(response => {
@@ -163,25 +166,96 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
           };
         }
 
-        attributeResponses[attributeName].selfScores.push(weight);
+        attributeResponses[attributeName].selfScores.push({
+          weight,
+          attribute_statement_options: response.attribute_statement_options
+        });
       });
     });
 
     // Calculate scores
     return Object.entries(attributeResponses).map(([attribute, data], index) => {
-      const topBossRawScore = data.topBossScores.reduce((sum, weight) => sum + weight, 0);
-      const selfRawScore = data.selfScores.reduce((sum, weight) => sum + weight, 0);
+      console.log(`\n=== Processing ${attribute} ===`);
+      console.log('Raw scores:', data.topBossScores.map(s => s.weight));
+      
+      // First calculate per-statement scores for top boss
+      const statementScores = {};
+      data.topBossScores.forEach((score) => {
+        // Get statement ID from the correct path
+        const statementId = score.attribute_statement_options.attribute_statements.statement;
+        console.log('Statement:', statementId, 'Weight:', score.weight);
+        
+        if (!statementScores[statementId]) {
+          statementScores[statementId] = {
+            total: 0,
+            evaluators: 0
+          };
+        }
+        statementScores[statementId].total += score.weight;
+        statementScores[statementId].evaluators += 1;
+      });
 
-      const topBossMaxPossible = data.topBossScores.length * 100;
-      const selfMaxPossible = data.selfScores.length * 100;
+      console.log('Top Boss Statement Scores:', JSON.stringify(statementScores, null, 2));
+      
+      // Calculate top boss scores exactly as per SQL
+      const numStatements = Object.keys(statementScores).length;
+      console.log('Number of Statements:', numStatements);
+      
+      // Sum up raw scores per statement first
+      const rawScore = Object.values(statementScores).reduce((sum, { total }) => sum + total, 0);
+      console.log('Raw Score (sum of all ratings):', rawScore);
+      
+      // Get evaluators per statement (should be same for all statements)
+      const evaluatorsPerStatement = Object.values(statementScores)[0]?.evaluators || 0;
+      console.log('Evaluators per Statement:', evaluatorsPerStatement);
+      
+      // Calculate average score
+      const topBossAverageScore = rawScore / numStatements;
+      console.log('Average Score (raw score / num statements):', topBossAverageScore);
+      
+      // Calculate max possible score
+      const maxPossible = evaluatorsPerStatement * 100;
+      console.log('Max Possible (evaluators × 100):', maxPossible);
+      
+      // Calculate percentage
+      const topBossPercentageScore = maxPossible ? (topBossAverageScore / maxPossible) * 100 : 0;
+      console.log('Percentage Score (average / max possible × 100):', topBossPercentageScore);
+
+      // Self evaluation follows same pattern
+      const selfStatementScores = {};
+      data.selfScores.forEach((score) => {
+        const statementId = score.attribute_statement_options.attribute_statements.statement;
+        if (!selfStatementScores[statementId]) {
+          selfStatementScores[statementId] = {
+            total: 0,
+            evaluators: 0
+          };
+        }
+        selfStatementScores[statementId].total += score.weight;
+        selfStatementScores[statementId].evaluators += 1;
+      });
+
+      console.log('\nSelf Statement Scores:', JSON.stringify(selfStatementScores, null, 2));
+      
+      const selfNumStatements = Object.keys(selfStatementScores).length;
+      console.log('Self Number of Statements:', selfNumStatements);
+      
+      const selfRawScore = Object.values(selfStatementScores).reduce((sum, { total }) => sum + total, 0);
+      console.log('Self Raw Score:', selfRawScore);
+      
+      const selfAverageScore = selfRawScore / selfNumStatements;
+      console.log('Self Average Score:', selfAverageScore);
+      
+      const selfPercentageScore = (selfAverageScore / 100) * 100;
+      console.log('Self Percentage Score:', selfPercentageScore);
 
       return {
         srNo: index + 1,
         attributeName: attribute,
-        selfAverageScore: data.selfScores.length ? selfRawScore / data.selfScores.length : 0,
-        selfPercentageScore: selfMaxPossible ? (selfRawScore / selfMaxPossible) * 100 : 0,
-        topBossAverageScore: data.topBossScores.length ? topBossRawScore / data.topBossScores.length : 0,
-        topBossPercentageScore: topBossMaxPossible ? (topBossRawScore / topBossMaxPossible) * 100 : 0,
+        selfAverageScore: Number(selfAverageScore.toFixed(1)),
+        selfPercentageScore: Number(selfPercentageScore.toFixed(1)),
+        topBossAverageScore: Number(topBossAverageScore.toFixed(1)),
+        topBossPercentageScore: Number(topBossPercentageScore.toFixed(1)),
       };
     });
   };
@@ -281,19 +355,25 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-primary">Top Boss Evaluation</h2>
-        <div className="flex gap-2">
-          <button
-            className={`px-4 py-2 rounded-lg ${viewType === 'table' ? 'bg-primary text-white' : 'bg-gray-200'}`}
-            onClick={() => setViewType('table')}
-          >
-            Table
-          </button>
-          <button
-            className={`px-4 py-2 rounded-lg ${viewType === 'chart' ? 'bg-primary text-white' : 'bg-gray-200'}`}
-            onClick={() => setViewType('chart')}
-          >
-            Chart
-          </button>
+        <div className="flex items-center gap-4">
+          <div className="flex gap-2">
+            <button
+              className={`px-4 py-2 rounded-lg ${viewType === 'table' ? 'bg-primary text-white' : 'bg-gray-200'}`}
+              onClick={() => setViewType('table')}
+            >
+              Table
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg ${viewType === 'chart' ? 'bg-primary text-white' : 'bg-gray-200'}`}
+              onClick={() => setViewType('chart')}
+            >
+              Chart
+            </button>
+          </div>
+          <CopyToClipboard 
+            targetRef={viewType === 'table' ? tableRef : chartRef} 
+            buttonText={`Copy ${viewType === 'table' ? 'Table' : 'Chart'}`} 
+          />
         </div>
       </div>
 
@@ -334,8 +414,8 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
       )}
 
       {/* Chart View */}
-      {viewType === 'chart' && (
-        <div ref={chartRef} className="border rounded-lg p-4 bg-white h-[400px]">
+      {viewType === 'chart' && chartData && (
+        <div ref={chartRef} className="h-[400px] border rounded-lg p-4 bg-white">
           {chartData ? (
             <Bar data={chartData.chartData} options={chartData.chartOptions} />
           ) : (
