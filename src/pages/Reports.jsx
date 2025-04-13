@@ -13,6 +13,7 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 import RadarChartTotal from '@/components/RadarChartTotal';
 import SelfEvaluation from '@/components/evaluations/SelfEvaluation';
 import TopBossEvaluation from '@/components/evaluations/TopBossEvaluation';
+import PeerEvaluation from '@/components/evaluations/PeerEvaluation';
 import CopyToClipboard from '@/components/CopyToClipboard';
 import html2canvas from "html2canvas";
 
@@ -79,6 +80,7 @@ export default function Reports() {
   const [analysisTypeList, setAnalysisTypeList] = useState([]);
   const [bank, setBank] = useState("");
   const [bankList, setBankList] = useState([]);
+  const [selectedAttributeBank, setSelectedAttributeBank] = useState("");
 
   const barChartRef = useRef(null);
 
@@ -700,6 +702,15 @@ export default function Reports() {
               {/* Top Boss Evaluation Component */}
               <div className="mb-8">
                 <TopBossEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+              </div>
+
+              {/* Peer Evaluation Component */}
+              <div className="mb-8">
+                <PeerEvaluation 
                   companyId={selectedCompany?.id}
                   userId={selectedUser?.id}
                   bankId={bank}
