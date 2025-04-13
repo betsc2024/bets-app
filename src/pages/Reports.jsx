@@ -18,6 +18,7 @@ import HREvaluation from '@/components/evaluations/HREvaluation';
 import SubordinateEvaluation from '@/components/evaluations/SubordinateEvaluation';
 import ReportingBossEvaluation from '@/components/evaluations/ReportingBossEvaluation';
 import TotalEvaluation from '@/components/evaluations/TotalEvaluation';
+import DemographyEvaluation from '@/components/evaluations/DemographyEvaluation';
 import CopyToClipboard from '@/components/CopyToClipboard';
 import html2canvas from "html2canvas";
 
@@ -727,6 +728,11 @@ export default function Reports() {
                   bankId={bank}
                 />
                 <TotalEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+                <DemographyEvaluation 
                   companyId={selectedCompany?.id}
                   userId={selectedUser?.id}
                   bankId={bank}
