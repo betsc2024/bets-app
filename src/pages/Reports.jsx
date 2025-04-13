@@ -589,11 +589,17 @@ export default function Reports() {
               <SelectValue placeholder="Select a company" />
             </SelectTrigger>
             <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
-              {companies.map((company) => (
-                <SelectItem key={company.id} value={company.id}>
-                  {company.name}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                <SelectLabel className="flex items-center justify-between">
+                  Companies
+                  
+                </SelectLabel>
+                {[...companies].sort((a, b) => a.name.localeCompare(b.name)).map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
 
@@ -605,11 +611,17 @@ export default function Reports() {
               <SelectValue placeholder="Select a Employee" />
             </SelectTrigger>
             <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
-              {users.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.full_name}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                <SelectLabel className="flex items-center justify-between">
+                  Users
+                  
+                </SelectLabel>
+                {[...users].sort((a, b) => a.full_name.localeCompare(b.full_name)).map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.full_name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <Select value={analysis} onValueChange={handleAnalysisChange}>
@@ -617,18 +629,25 @@ export default function Reports() {
               <SelectValue placeholder="Select an Analysis Type" />
             </SelectTrigger>
             <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
-              {analysisTypeList?.map((item) => (
-                item?.id && item?.name ? (
-                  <SelectItem 
-                    key={item.id} 
-                    value={item.name}
-                  >
-                    {item.name}
-                  </SelectItem>
-                ) : null
-              ))}
+              <SelectGroup>
+                <SelectLabel className="flex items-center justify-between">
+                  Analysis Types
+                  
+                </SelectLabel>
+                {[...analysisTypeList].sort((a, b) => a.name.localeCompare(b.name)).map((item) => (
+                  item?.id && item?.name ? (
+                    <SelectItem 
+                      key={item.id} 
+                      value={item.name}
+                    >
+                      {item.name}
+                    </SelectItem>
+                  ) : null
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
+
           <Select value={bank} onValueChange={(value) => {
             setBank(value);
           }}>
@@ -636,16 +655,22 @@ export default function Reports() {
               <SelectValue placeholder="Select a Bank" />
             </SelectTrigger>
             <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
-              {bankList?.map((item) => (
-                item?.id && item?.name ? (
-                  <SelectItem 
-                    key={item.id} 
-                    value={item.id}
-                  >
-                    {item.name}
-                  </SelectItem>
-                ) : null
-              ))}
+              <SelectGroup>
+                <SelectLabel className="flex items-center justify-between">
+                  Banks
+                  
+                </SelectLabel>
+                {[...bankList].sort((a, b) => a.name.localeCompare(b.name)).map((item) => (
+                  item?.id && item?.name ? (
+                    <SelectItem 
+                      key={item.id} 
+                      value={item.id}
+                    >
+                      {item.name}
+                    </SelectItem>
+                  ) : null
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>
