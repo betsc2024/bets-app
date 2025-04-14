@@ -16,11 +16,13 @@ const Status = ({ userId, companyId, bankId }) => {
 
   const fetchStatusData = async () => {
     try {
-      const { data, error } = await supabase
+      // Get all evaluations for this assignment
+      const { data: evaluationsData, error: evaluationsError } = await supabase
         .from('evaluations')
         .select(`
           relationship_type,
           status,
+          evaluator_id,
           evaluation_assignments!inner(
             user_to_evaluate_id,
             company_id,
@@ -32,34 +34,47 @@ const Status = ({ userId, companyId, bankId }) => {
         .eq('evaluation_assignments.attribute_bank_id', bankId)
         .not('relationship_type', 'is', null);
 
-      if (error) throw error;
+      if (evaluationsError) throw evaluationsError;
 
-      // Group by relationship type and count status
-      const statusByRelation = {};
-      data.forEach(item => {
-        if (!statusByRelation[item.relationship_type]) {
-          statusByRelation[item.relationship_type] = {
-            completed: 0,
-            total: 0
-          };
+      // Process evaluations to get counts
+      const evaluatorsByType = {};
+      const completedByType = {};
+
+      evaluationsData.forEach(evaluation => {
+        const type = evaluation.relationship_type;
+        
+        // Initialize if not exists
+        if (!evaluatorsByType[type]) {
+          evaluatorsByType[type] = new Set();
+          completedByType[type] = new Set();
         }
-        statusByRelation[item.relationship_type].total++;
-        if (item.status === 'completed') {
-          statusByRelation[item.relationship_type].completed++;
+        
+        // Add evaluator to total count
+        evaluatorsByType[type].add(evaluation.evaluator_id);
+        
+        // If completed, add to completed count
+        if (evaluation.status === 'completed') {
+          completedByType[type].add(evaluation.evaluator_id);
         }
       });
 
-      // Convert to table format with proper formatting
-      const tableData = Object.entries(statusByRelation).map(([type, counts], index) => ({
-        srNo: index + 1,
-        relationType: type
-          .split('_')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' '),
-        count: counts.total,
-        status: `${counts.completed}/${counts.total}`,
-        isComplete: counts.completed === counts.total
-      }));
+      // Fixed relationship types in order
+      const relationOrder = ['Hr', 'Reporting Boss', 'Peer', 'Subordinate', 'Top Boss'];
+      const tableData = relationOrder.map((type, index) => {
+        const relationKey = type.toLowerCase().replace(' ', '_');
+        const totalCount = evaluatorsByType[relationKey]?.size || 0;
+        const completed = completedByType[relationKey]?.size || 0;
+        
+        return {
+          srNo: index + 1,
+          relationType: type,
+          count: totalCount,
+          completed: completed,
+          status: `${completed}/${totalCount}`,
+          completionPercentage: totalCount ? Math.round((completed / totalCount) * 100) : 0,
+          isComplete: completed === totalCount && totalCount > 0
+        };
+      });
 
       setStatusData(tableData);
     } catch (error) {
@@ -84,8 +99,8 @@ const Status = ({ userId, companyId, bankId }) => {
             <TableRow className="border-b">
               <TableHead className="border-r w-16 font-semibold text-primary">Sr. No.</TableHead>
               <TableHead className="border-r font-semibold text-primary">Relation Type</TableHead>
-              <TableHead className="border-r text-right font-semibold text-primary">Count</TableHead>
-              <TableHead className="text-right font-semibold text-primary">Status</TableHead>
+              <TableHead className="border-r text-right font-semibold text-primary">Evaluators</TableHead>
+              <TableHead className="text-right font-semibold text-primary">Completed</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -101,10 +116,10 @@ const Status = ({ userId, companyId, bankId }) => {
                   <TableCell className="border-r">{row.srNo}</TableCell>
                   <TableCell className="border-r">{row.relationType}</TableCell>
                   <TableCell className="border-r text-right">{row.count}</TableCell>
-                  <TableCell className={`text-right ${
-                    row.isComplete ? 'text-green-600' : 'text-yellow-600'
-                  }`}>
-                    {row.status}
+                  <TableCell className="text-right">
+                    <span className={row.isComplete ? 'text-green-600' : ''}>
+                      {row.status} ({row.completionPercentage}%)
+                    </span>
                   </TableCell>
                 </TableRow>
               ))
