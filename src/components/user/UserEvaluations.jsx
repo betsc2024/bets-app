@@ -94,7 +94,13 @@ const UserEvaluations = () => {
         })
         setEvalCount(temp_Data);
       }
-      setEvaluations(data || []);
+      // Sort the data to show self evaluations first
+      const sortedData = [...(data || [])].sort((a, b) => {
+        if (a.is_self_evaluator && !b.is_self_evaluator) return -1;
+        if (!a.is_self_evaluator && b.is_self_evaluator) return 1;
+        return 0;
+      });
+      setEvaluations(sortedData);
     } catch (error) {
       console.error('Error fetching evaluations:', error);
       setError(error.message || 'Failed to load evaluations');
@@ -394,7 +400,9 @@ const UserEvaluations = () => {
           <DialogHeader>
             <DialogTitle className="text-2xl">
             { selectedEvaluation?.status === 'completed' ? toast.warning("Already Evaluated") : <></>}
-            {selectedEvaluation?.is_self_evaluator ? selectedEvaluation?.evaluation_assignments?.evaluation_name + ": Self Evaluation" : selectedEvaluation?.evaluation_assignments?.evaluation_name + ": Evaluate " +selectedEvaluation?.evaluation_assignments?.users?.full_name + " as " + user.user_metadata?.full_name }              
+            {selectedEvaluation?.is_self_evaluator 
+              ? `${selectedEvaluation?.evaluation_assignments?.evaluation_name}: Self Evaluation` 
+              : `${selectedEvaluation?.evaluation_assignments?.attribute_banks?.name}: Evaluate ${selectedEvaluation?.evaluation_assignments?.users?.full_name} as ${selectedEvaluation?.relationship_type?.replace(/_/g, ' ')} ${user.user_metadata?.full_name}`}              
             </DialogTitle>
             <DialogDescription className="text-gray-600">
               Evaluating: {selectedEvaluation?.evaluation_assignments?.user_to_evaluate?.full_name}
@@ -443,14 +451,14 @@ const UserEvaluations = () => {
                     <RadioGroup
                       value={responses[flattenedStatements[currentStatementIndex].statement.id]?.toString()}
                       onValueChange={(value) => handleOptionSelect(flattenedStatements[currentStatementIndex].statement.id, value)}
-                      className="space-y-2"
+                      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
                     >
                       {flattenedStatements[currentStatementIndex].statement.attribute_statement_options
                         ?.sort((a, b) => b.weight - a.weight)
                         .map((option) => (
                           <div 
                             key={option.id}
-                            className="flex items-center space-x-2 bg-white p-3 rounded-md shadow-sm hover:bg-gray-50"
+                            className="flex items-center space-x-2 bg-white p-3 rounded-md shadow-sm hover:bg-gray-50 h-full"
                           >
                             <RadioGroupItem 
                               value={option.id.toString()} 
