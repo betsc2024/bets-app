@@ -176,14 +176,14 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
 
       // Prepare chart data if attribute is selected
       if (selectedAttribute) {
-        const attributeScores = processedData[selectedAttribute];
+        const attributeScores = processedData[selectedAttribute] || {};
         const chartLabels = relationTypes.map(type =>
           type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
         );
         chartLabels.push('Total');
 
-        const chartScores = relationTypes.map(type => attributeScores[type] || 0);
-        chartScores.push(totalScores[selectedAttribute] || 0);
+        const chartScores = relationTypes.map(type => (attributeScores[type] ?? 0));
+        chartScores.push(totalScores[selectedAttribute] ?? 0);
 
         const chartData = {
           labels: chartLabels,
