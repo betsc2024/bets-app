@@ -43,7 +43,8 @@ export default function UserManagement() {
     password: '',
     full_name: '',
     role: 'user',
-    companyId: null
+    companyId: null,
+    department: ''
   });
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
@@ -146,7 +147,7 @@ export default function UserManagement() {
 
     try {
       // Validate input
-      if (!formData.email || !formData.password || !formData.full_name) {
+      if (!formData.email || !formData.password || !formData.full_name || !formData.department || !formData.companyId) {
         toast.error('Please fill in all required fields');
         return;
       }
@@ -162,7 +163,8 @@ export default function UserManagement() {
         p_password: formData.password,
         p_full_name: formData.full_name.trim(),
         p_role: formData.role,
-        p_company_id: formData.companyId
+        p_company_id: formData.companyId,
+        p_department: formData.department.trim()
       });
 
       if (error) {
@@ -184,7 +186,8 @@ export default function UserManagement() {
         password: '',
         full_name: '',
         role: 'user',
-        companyId: null
+        companyId: null,
+        department: ''
       });
       
       // Refresh user list
@@ -269,7 +272,8 @@ export default function UserManagement() {
         password: '',
         full_name: '',
         role: 'user',
-        companyId: null
+        companyId: null,
+        department: ''
       });
     } catch (error) {
       toast.error('Error updating user: ' + error.message);
@@ -283,6 +287,7 @@ export default function UserManagement() {
       full_name: user.full_name,
       role: user.role,
       companyId: user.company_id,
+      department: user.department,
       password: ''
     });
     setIsEditDialogOpen(true);
@@ -380,20 +385,14 @@ export default function UserManagement() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Role</label>
-                  <Select
-                    value={formData.role}
-                    onValueChange={(value) => handleInputChange({ target: { name: 'role', value } })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="super_admin">Super Admin</SelectItem>
-                      <SelectItem value="company_admin">Company Admin</SelectItem>
-                      <SelectItem value="user">User</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <label className="text-sm font-medium">Department</label>
+                  <Input
+                    type="text"
+                    name="department"
+                    value={formData.department}
+                    onChange={handleInputChange}
+                    required
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -462,6 +461,22 @@ export default function UserManagement() {
                       </DialogContent>
                     </Dialog>
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Role</label>
+                  <Select
+                    value={formData.role}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, role: value }))}
+                    disabled
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">User</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -640,6 +655,17 @@ export default function UserManagement() {
                   </Dialog>
                 </div>
               </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="department" className="text-right">
+                  Department
+                </label>
+                <Input
+                  id="department"
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
             </div>
             <div className="flex justify-end space-x-2 mt-4">
               <Button
@@ -679,6 +705,7 @@ export default function UserManagement() {
                 <TableHead>Full Name</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Company</TableHead>
+                <TableHead>Department</TableHead>
                 <TableHead>Created At</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -686,13 +713,13 @@ export default function UserManagement() {
             <TableBody>
               {loadingUsers ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">
+                  <TableCell colSpan={8} className="text-center">
                     Loading users...
                   </TableCell>
                 </TableRow>
               ) : currentPageUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">
+                  <TableCell colSpan={8} className="text-center">
                     No users found.
                   </TableCell>
                 </TableRow>
@@ -717,6 +744,7 @@ export default function UserManagement() {
                       </span>
                     </TableCell>
                     <TableCell>{user.companies?.name || 'No Company'}</TableCell>
+                    <TableCell>{user.department || 'No Department'}</TableCell>
                     <TableCell>{formatDate(user.created_at)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
