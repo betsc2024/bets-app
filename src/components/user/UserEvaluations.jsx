@@ -13,6 +13,7 @@ import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import EvaluationCheckpoint from './EvaluationCheckpoint';
 
 const UserEvaluations = () => {
   const [evaluations, setEvaluations] = useState([]);
@@ -232,9 +233,10 @@ const UserEvaluations = () => {
   }, [attributeGroups]);
 
   const handleOptionSelect = (statementId, optionId) => {
+    console.log('Selected option:', { statementId, optionId });
     setResponses(prev => ({
       ...prev,
-      [statementId]: optionId
+      [statementId]: optionId  // Don't parse as integer, keep as string for UUID
     }));
   };
 
@@ -335,7 +337,7 @@ const UserEvaluations = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-6">
+    <div className="container mx-auto py-6">
       <h3 className="text-xl font-bold text-purple-800 mb-8">{ userCompany !== "" ? user.user_metadata?.full_name +" - "+ userCompany : ""}</h3>
 
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -399,10 +401,9 @@ const UserEvaluations = () => {
         <DialogContent className="max-w-4xl h-auto max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-2xl">
-            { selectedEvaluation?.status === 'completed' ? toast.warning("Already Evaluated") : <></>}
-            {selectedEvaluation?.is_self_evaluator 
-              ? `${selectedEvaluation?.evaluation_assignments?.evaluation_name}: Self Evaluation` 
-              : `${selectedEvaluation?.evaluation_assignments?.attribute_banks?.name}: Evaluate ${selectedEvaluation?.evaluation_assignments?.users?.full_name} as ${selectedEvaluation?.relationship_type?.replace(/_/g, ' ')} ${user.user_metadata?.full_name}`}              
+              {selectedEvaluation?.is_self_evaluator 
+                ? `${selectedEvaluation?.evaluation_assignments?.attribute_banks?.name}: Self Evaluation` 
+                : `${selectedEvaluation?.evaluation_assignments?.attribute_banks?.name}: Evaluate ${selectedEvaluation?.evaluation_assignments?.users?.full_name} as ${selectedEvaluation?.relationship_type?.replace(/_/g, ' ')} ${user.user_metadata?.full_name}`}              
             </DialogTitle>
             <DialogDescription className="text-gray-600">
               Evaluating: {selectedEvaluation?.evaluation_assignments?.user_to_evaluate?.full_name}
@@ -449,7 +450,7 @@ const UserEvaluations = () => {
                     </div>
 
                     <RadioGroup
-                      value={responses[flattenedStatements[currentStatementIndex].statement.id]?.toString()}
+                      value={responses[flattenedStatements[currentStatementIndex].statement.id]}
                       onValueChange={(value) => handleOptionSelect(flattenedStatements[currentStatementIndex].statement.id, value)}
                       className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
                     >
@@ -461,7 +462,7 @@ const UserEvaluations = () => {
                             className="flex items-center space-x-2 bg-white p-3 rounded-md shadow-sm hover:bg-gray-50 h-full"
                           >
                             <RadioGroupItem 
-                              value={option.id.toString()} 
+                              value={option.id} 
                               id={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
                               className="h-4 w-4"
                             />
@@ -509,28 +510,15 @@ const UserEvaluations = () => {
             )}
           </div>
 
-          <div className="flex justify-end gap-4 mt-6 px-4 py-3 border-t">
-            <Button
-              variant="outline"
-              onClick={() => setSelectedEvaluation(null)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmitEvaluation}
-              disabled={isSubmitting || flattenedStatements.length === 0}
-              className="bg-purple-600 hover:bg-purple-700"
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="animate-spin mr-2">↻</span>
-                  Submitting...
-                </>
-              ) : (
-                'Submit Evaluation'
-              )}
-            </Button>
+          <div className="border-t">
+            <EvaluationCheckpoint 
+              evaluationId={selectedEvaluation?.id}
+              responses={responses}
+              setResponses={setResponses}
+              isSubmitting={isSubmitting}
+              onCancel={() => setSelectedEvaluation(null)}
+              onSubmit={handleSubmitEvaluation}
+            />
           </div>
         </DialogContent>
       </Dialog>
