@@ -1,18 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "../../components/ui/dialog";
-import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
-import { Button } from "../../components/ui/button";
-import { Label } from "../../components/ui/label";
-import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+  DialogDescription,
+} from "../ui/dialog";
+import { Button } from "../ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
+import { Label } from "../ui/label";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import EvaluationCheckpoint from './EvaluationCheckpoint';
 
 const UserEvaluations = () => {
@@ -30,6 +31,7 @@ const UserEvaluations = () => {
   const [currentStatementIndex, setCurrentStatementIndex] = useState(0);
   const [flattenedStatements, setFlattenedStatements] = useState([]);
   const [currentAttributeIndex, setCurrentAttributeIndex] = useState(0);
+  const evaluationCheckpointRef = useRef(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -320,6 +322,18 @@ const UserEvaluations = () => {
     }
   };
 
+  const handleDialogClose = (open) => {
+    // If dialog is being closed and there are unsaved changes
+    if (!open && evaluationCheckpointRef.current?.hasUnsavedChanges) {
+      if (window.confirm('You have unsaved changes. Are you sure you want to close?')) {
+        setSelectedEvaluation(null);
+      }
+      return;
+    }
+    // No unsaved changes, close normally
+    if (!open) setSelectedEvaluation(null);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -338,54 +352,54 @@ const UserEvaluations = () => {
 
   return (
     <div className="container mx-auto py-6">
-      <h3 className="text-xl font-bold text-purple-800 mb-8">{ userCompany !== "" ? user.user_metadata?.full_name +" - "+ userCompany : ""}</h3>
+      <h3 className="text-xl font-bold text-purple-800 mb-8">
+        {userCompany !== "" ? user.user_metadata?.full_name + " - " + userCompany : ""}
+      </h3>
 
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {evaluations.map((evaluation) => {
-          return (
-            <div
-              key={evaluation.id}
-              className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow cursor-pointer"
-              onClick={() => fetchEvaluationDetails(evaluation.id)}
-            >
-              <div className="flex flex-col gap-4">
-                <h3 className="text-xl font-semibold text-gray-800">
-                  {evaluation.is_self_evaluator ? (
-                    'Self Evaluation : '+ user.user_metadata?.full_name
-                  ) : (
-                    <>
-                      Evaluate: {evaluation.evaluation_assignments?.users?.full_name} as 
-                      <span className="text-purple-600 ml-2">
-                        ({evaluation.relationship_type?.replace(/_/g, ' ') || 'Peer'})
-                      </span>
-                      {user.user_metadata?.full_name}
-                    </>
-                  )}
-                </h3>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">Evaluation:</span>
-                    <span className="text-gray-600">
-                      {evaluation.evaluation_assignments?.evaluation_name || 'Unnamed Evaluation'}
+        {evaluations.map((evaluation) => (
+          <div
+            key={evaluation.id}
+            className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow cursor-pointer"
+            onClick={() => fetchEvaluationDetails(evaluation.id)}
+          >
+            <div className="flex flex-col gap-4">
+              <h3 className="text-xl font-semibold text-gray-800">
+                {evaluation.is_self_evaluator ? (
+                  'Self Evaluation : '+ user.user_metadata?.full_name
+                ) : (
+                  <>
+                    Evaluate: {evaluation.evaluation_assignments?.users?.full_name} as 
+                    <span className="text-purple-600 ml-2">
+                      ({evaluation.relationship_type?.replace(/_/g, ' ') || 'Peer'})
                     </span>
-                  </div>
+                    {user.user_metadata?.full_name}
+                  </>
+                )}
+              </h3>
+              
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Evaluation:</span>
+                  <span className="text-gray-600">
+                    {evaluation.evaluation_assignments?.evaluation_name || 'Unnamed Evaluation'}
+                  </span>
+                </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">Status:</span>
-                    <span className={`px-3 py-1 rounded-full text-sm ${
-                      evaluation.status === 'completed' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {evaluation.status?.charAt(0).toUpperCase() + evaluation.status?.slice(1)}
-                    </span>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Status:</span>
+                  <span className={`px-3 py-1 rounded-full text-sm ${
+                    evaluation.status === 'completed' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {evaluation.status?.charAt(0).toUpperCase() + evaluation.status?.slice(1)}
+                  </span>
                 </div>
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
 
         {evaluations.length === 0 && (
           <div className="col-span-full text-center text-gray-500 py-8">
@@ -396,17 +410,19 @@ const UserEvaluations = () => {
         
       <Dialog 
         open={!!selectedEvaluation} 
-        onOpenChange={(open) => !open && setSelectedEvaluation(null)}
+        onOpenChange={handleDialogClose}
       >
         <DialogContent className="max-w-4xl h-auto max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle className="text-2xl">
+            <DialogTitle>
               {selectedEvaluation?.is_self_evaluator 
-                ? `${selectedEvaluation?.evaluation_assignments?.attribute_banks?.name}: Self Evaluation` 
-                : `${selectedEvaluation?.evaluation_assignments?.attribute_banks?.name}: Evaluate ${selectedEvaluation?.evaluation_assignments?.users?.full_name} as ${selectedEvaluation?.relationship_type?.replace(/_/g, ' ')} ${user.user_metadata?.full_name}`}              
+                ? 'Self Evaluation' 
+                : `${selectedEvaluation?.relationship_type.charAt(0).toUpperCase() + selectedEvaluation?.relationship_type.slice(1)} Evaluation`}
             </DialogTitle>
-            <DialogDescription className="text-gray-600">
-              Evaluating: {selectedEvaluation?.evaluation_assignments?.user_to_evaluate?.full_name}
+            <DialogDescription>
+              {selectedEvaluation?.is_self_evaluator 
+                ? 'Rate your performance on each statement.'
+                : 'Rate the performance of your team member on each statement.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -512,11 +528,12 @@ const UserEvaluations = () => {
 
           <div className="border-t">
             <EvaluationCheckpoint 
+              ref={evaluationCheckpointRef}
               evaluationId={selectedEvaluation?.id}
               responses={responses}
               setResponses={setResponses}
               isSubmitting={isSubmitting}
-              onCancel={() => setSelectedEvaluation(null)}
+              onCancel={() => handleDialogClose(false)}
               onSubmit={handleSubmitEvaluation}
             />
           </div>

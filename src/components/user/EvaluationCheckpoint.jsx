@@ -1,20 +1,26 @@
-import React, { useEffect, useState } from 'react';
-import { Button } from "../../components/ui/button";
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { Button } from "../ui/button";
+import { Loader2 } from "lucide-react";
 import { toast } from 'sonner';
 import { supabase } from '../../supabase';
 
-const EvaluationCheckpoint = ({ 
+const EvaluationCheckpoint = forwardRef(({ 
   evaluationId, 
   responses, 
   setResponses, 
   isSubmitting, 
   onCancel, 
   onSubmit 
-}) => {
+}, ref) => {
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [initialResponses, setInitialResponses] = useState(null);
+
+  // Expose hasUnsavedChanges to parent
+  useImperativeHandle(ref, () => ({
+    hasUnsavedChanges
+  }));
 
   // Load existing draft responses
   useEffect(() => {
@@ -148,41 +154,47 @@ const EvaluationCheckpoint = ({
   };
 
   return (
-    <div className="flex justify-between items-center gap-4 mt-6 px-4 py-3 border-t">
-      <div className="flex items-center gap-2 text-sm">
-        {isSaving ? (
-          <span className="text-yellow-600 flex items-center gap-1">
-            <span className="animate-spin">↻</span> Auto-saving...
-          </span>
-        ) : hasUnsavedChanges ? (
-          <span className="text-yellow-600">
-            Unsaved changes
-          </span>
-        ) : lastSavedTime && (
-          <span className="text-green-600">
-            ✓ Saved at {lastSavedTime.toLocaleTimeString()}
-          </span>
-        )}
-      </div>
-      
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          onClick={onCancel}
-          disabled={isSubmitting || isSaving}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={onSubmit}
-          disabled={isSubmitting || isSaving || Object.keys(responses).length === 0}
-          className="bg-purple-600 hover:bg-purple-700 text-white"
-        >
-          {isSubmitting ? 'Submitting...' : 'Submit Evaluation'}
-        </Button>
+    <div className="p-4 space-y-4">
+      <div className="flex justify-between items-center">
+        <div className="text-sm text-gray-500">
+          {isSaving ? (
+            <span className="flex items-center">
+              <Loader2 className="animate-spin h-3 w-3 mr-2" />
+              Auto-saving...
+            </span>
+          ) : hasUnsavedChanges ? (
+            <span className="text-yellow-600">Unsaved changes</span>
+          ) : lastSavedTime ? (
+            <span className="text-green-600">✓ Saved at {lastSavedTime.toLocaleTimeString()}</span>
+          ) : null}
+        </div>
+        <div className="space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={onCancel}
+            disabled={isSaving || isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={onSubmit}
+            disabled={isSaving || isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="animate-spin h-3 w-3 mr-2" />
+                Submitting...
+              </>
+            ) : (
+              'Submit Evaluation'
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
-};
+});
 
 export default EvaluationCheckpoint;
