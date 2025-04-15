@@ -71,7 +71,10 @@ const UserEvaluations = () => {
         .select(`
   id,
     status,
-    evaluator_id,
+    evaluator:users!evaluations_evaluator_id_fkey (
+      id,
+      full_name
+    ),
     is_self_evaluator,
     relationship_type,
     started_at,
@@ -126,6 +129,10 @@ const UserEvaluations = () => {
           status,
           relationship_type,
           is_self_evaluator,
+          evaluator:users!evaluations_evaluator_id_fkey (
+            id,
+            full_name
+          ),
           evaluation_assignments!inner(
             evaluation_name,
             attribute_banks!inner(
@@ -136,7 +143,7 @@ const UserEvaluations = () => {
             users!evaluation_assignments_user_to_evaluate_id_fkey (
              id,
              full_name
-             )
+            )
           )
         `)
         .eq('id', evaluationId)
@@ -439,17 +446,53 @@ const UserEvaluations = () => {
         onOpenChange={handleDialogClose}
       >
         <DialogContent className="max-w-4xl h-auto max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>
+          <DialogHeader className="pb-6 border-b">
+            <DialogTitle className="text-2xl font-semibold">
               {selectedEvaluation?.is_self_evaluator 
                 ? 'Self Evaluation' 
-                : `${selectedEvaluation?.relationship_type.charAt(0).toUpperCase() + selectedEvaluation?.relationship_type.slice(1)} Evaluation`}
+                : (
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-gray-600">Evaluate:</span>
+                    <span className="text-purple-800">{selectedEvaluation?.evaluation_assignments?.users?.full_name}</span>
+                    <span className="text-gray-600">as</span>
+                    <span className="text-purple-700">{selectedEvaluation?.relationship_type?.replace(/_/g, ' ') || 'Peer'}</span>
+                    <span className="text-gray-600">by</span>
+                    <span className="text-purple-800">{selectedEvaluation?.evaluator?.full_name || 'Unknown User'}</span>
+                  </div>
+                )}
             </DialogTitle>
-            <DialogDescription>
-              {selectedEvaluation?.is_self_evaluator 
-                ? 'Rate your performance on each statement.'
-                : 'Rate the performance of your team member on each statement.'}
-            </DialogDescription>
+            <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-gray-700 min-w-[120px]">Evaluation Type:</span>
+                <span className="text-gray-600">
+                  {selectedEvaluation?.is_self_evaluator 
+                    ? 'Self Evaluation'
+                    : selectedEvaluation?.relationship_type?.replace(/_/g, ' ') || 'Peer Evaluation'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-gray-700 min-w-[120px]">Bank Name:</span>
+                <span className="text-gray-600">
+                  {selectedEvaluation?.evaluation_assignments?.attribute_banks?.name || 'N/A'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-gray-700 min-w-[120px]">Evaluation Name:</span>
+                <span className="text-gray-600">
+                  {selectedEvaluation?.evaluation_assignments?.evaluation_name || 'Unnamed Evaluation'}
+                </span>
+              </div>
+              {selectedEvaluation?.status === 'completed' && (
+                <div className="col-span-2">
+                  <div className="flex items-center gap-2 text-gray-500 bg-gray-50 px-4 py-2.5 rounded-md border border-gray-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    This evaluation is in read-only mode
+                  </div>
+                </div>
+              )}
+            </div>
           </DialogHeader>
 
           <div className="flex-grow px-4 py-2 overflow-auto">
