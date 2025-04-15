@@ -125,103 +125,133 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
       console.log("Attribute map:", attributeMap);
 
       // Calculate scores using the documented formula
-      const processedData = Object.entries(attributeMap).map(([attributeName, data], index) => {
-        // Calculate statement level scores
-        const statementScores = data.statements.map(statement => {
-          // Statement % = (Raw Score / Max Possible) × 100
-          return (statement.weight / statement.maxPossible) * 100;
+      const processEvaluationData = (evaluations) => {
+        // Helper function for consistent decimal formatting
+        const formatScore = (score) => {
+          return Number(Number(score).toFixed(1));
+        };
+
+        const attributeResponses = Object.entries(attributeMap).map(([attribute, data], index) => {
+          // Calculate statement level scores
+          const statementScores = data.statements.map(statement => {
+            // Statement % = (Raw Score / Max Possible) × 100
+            return (statement.weight / statement.maxPossible) * 100;
+          });
+
+          const numStatements = statementScores.length;
+          const rawScore = statementScores.reduce((sum, score) => sum + score, 0);
+          const selfAverageScore = numStatements > 0 ? rawScore / numStatements : 0;
+          const selfPercentageScore = selfAverageScore > 0 ? (selfAverageScore / 100) * 100 : 0;
+
+          return {
+            srNo: index + 1,
+            attributeName: attribute,
+            averageScore: formatScore(selfAverageScore),
+            percentageScore: formatScore(selfPercentageScore),
+          };
         });
 
-        const numStatements = statementScores.length;
-        const rawScore = statementScores.reduce((sum, score) => sum + score, 0);
-        const selfAverageScore = numStatements > 0 ? rawScore / numStatements : 0;
-        const selfPercentageScore = selfAverageScore > 0 ? (selfAverageScore / 100) * 100 : 0;
+        return attributeResponses;
+      };
 
-        return {
-          srNo: index + 1,
-          attributeName,
-          averageScore: Number(selfAverageScore.toFixed(1)),
-          percentageScore: Number(selfPercentageScore.toFixed(1))
-        };
-      });
-
+      const processedData = processEvaluationData(evaluations);
       console.log("Processed data:", processedData);
       setTableData(processedData);
 
       if (processedData.length > 0) {
-        const chartData = {
-          labels: processedData.map(item => item.attributeName),
-          datasets: [{
-            label: 'Self Evaluation Score (%)',
-            data: processedData.map(item => item.percentageScore),
-            backgroundColor: '#733e93'
-          }]
-        };
+        const generateChartData = (data) => {
+          try {
+            const chartData = {
+              labels: data.map(item => item.attributeName),
+              datasets: [
+                {
+                  label: 'Score (%)',
+                  data: data.map(item => item.percentageScore),
+                  backgroundColor: '#733e93',  // primary purple
+                  borderWidth: 0
+                }
+              ]
+            };
 
-        const chartOptions = {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: 100,
-              title: {
-                display: true,
-                text: 'Score Percentage'
-              }
-            },
-            x: {
-              grid: {
-                display: false
-              },
-              ticks: {
-                callback: function(val) {
-                  const label = this.getLabelForValue(val);
-                  const words = label.split(' ');
-                  const lines = [];
-                  let currentLine = words[0];
-                  
-                  for(let i = 1; i < words.length; i++) {
-                    if (currentLine.length + words[i].length < 15) {
-                      currentLine += ' ' + words[i];
-                    } else {
-                      lines.push(currentLine);
-                      currentLine = words[i];
-                    }
+            const chartOptions = {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  max: 100,
+                  title: {
+                    display: true,
+                    text: 'Score'
+                  },
+                  ticks: {
+                    callback: value => Number(value).toFixed(1)
                   }
-                  lines.push(currentLine);
-                  return lines;
                 },
-                maxRotation: 0,
-                minRotation: 0
-              }
-            }
-          },
-          plugins: {
-            datalabels: {
-              anchor: 'end',
-              align: 'top',
-              offset: 4,
-              font: {
-                weight: 'bold'
+                x: {
+                  grid: {
+                    display: false
+                  },
+                  ticks: {
+                    callback: function(val) {
+                      const label = this.getLabelForValue(val);
+                      const words = label.split(' ');
+                      const lines = [];
+                      let currentLine = words[0];
+                      
+                      for(let i = 1; i < words.length; i++) {
+                        if (currentLine.length + words[i].length < 15) {
+                          currentLine += ' ' + words[i];
+                        } else {
+                          lines.push(currentLine);
+                          currentLine = words[i];
+                        }
+                      }
+                      lines.push(currentLine);
+                      return lines;
+                    },
+                    maxRotation: 0,
+                    minRotation: 0
+                  }
+                }
               },
-              formatter: (value) => `${value}%`
-            },
-            legend: {
-              position: 'top',
-            },
-            title: {
-              display: true,
-              text: 'Self Evaluation Scores',
-              font: {
-                size: 16,
-                weight: 'bold'
+              plugins: {
+                datalabels: {
+                  anchor: 'end',
+                  align: 'top',
+                  offset: 4,
+                  font: {
+                    weight: 'bold'
+                  },
+                  formatter: value => Number(value).toFixed(1)
+                },
+                legend: {
+                  position: 'top',
+                },
+                tooltip: {
+                  callbacks: {
+                    label: context => `${context.dataset.label.replace(' (%)', '')}: ${Number(context.raw).toFixed(1)}`
+                  }
+                },
+                title: {
+                  display: true,
+                  text: 'Self Evaluation Scores',
+                  font: {
+                    size: 16,
+                    weight: 'bold'
+                  }
+                }
               }
-            }
+            };
+
+            return { chartData, chartOptions };
+          } catch (error) {
+            console.error("Error generating chart data:", error);
           }
         };
 
-        setChartData({ chartData, chartOptions });
+        const chartData = generateChartData(processedData);
+        setChartData(chartData);
       }
     } catch (error) {
       console.error("Error processing self evaluation data:", error);
@@ -267,8 +297,8 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                 <TableRow className="border-b">
                   <TableHead className="border-r w-16 font-semibold">Sr. No.</TableHead>
                   <TableHead className="border-r font-semibold">Attribute Name</TableHead>
-                  <TableHead className="border-r text-right font-semibold">Average Score</TableHead>
-                  <TableHead className="text-right font-semibold">Score Percentage</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Self - Average Score</TableHead>
+                  <TableHead className="text-right font-semibold">Self - % Score</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -276,8 +306,8 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                   <TableRow key={row.srNo} className="border-b">
                     <TableCell className="border-r">{row.srNo}</TableCell>
                     <TableCell className="border-r">{row.attributeName}</TableCell>
-                    <TableCell className="border-r text-right">{row.averageScore.toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{row.percentageScore.toFixed(1)}%</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.averageScore).toFixed(1)}</TableCell>
+                    <TableCell className="text-right">{Number(row.percentageScore).toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

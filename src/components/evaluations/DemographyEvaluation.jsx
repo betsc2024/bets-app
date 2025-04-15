@@ -148,6 +148,11 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
         }
       });
 
+      // Create a helper function for consistent number formatting
+      const formatScore = (score) => {
+        return score === '-' ? '-' : Number(score).toFixed(1);
+      };
+
       // Get actual available relationship types and sort them in a specific order
       const sortOrder = ['self', 'top_boss', 'reporting_boss', 'peers', 'subordinates', 'hr'];
       const relationTypes = Array.from(foundRelationTypes).sort((a, b) => {
@@ -163,8 +168,8 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
       const tableRows = Array.from(allAttributes).map((attr, index) => ({
         srNo: index + 1,
         attribute: attr,
-        ...Object.fromEntries(relationTypes.map(type => [type, processedData[attr]?.[type] || '-'])),
-        total: totalScores[attr]
+        ...Object.fromEntries(relationTypes.map(type => [type, formatScore(processedData[attr]?.[type] || '-')])),
+        total: formatScore(totalScores[attr])
       }));
 
       setAttributes(Array.from(allAttributes));
@@ -188,7 +193,7 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
         const chartData = {
           labels: chartLabels,
           datasets: [{
-            label: 'Score (%)',
+            label: 'Score',
             data: chartScores,
             backgroundColor: [
               '#a855f7',  // Self (Purple)
@@ -220,7 +225,7 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
               beginAtZero: true,
               max: 100,
               ticks: {
-                callback: value => `${value}%`
+                callback: value => Number(value).toFixed(1)
               }
             }
           },
@@ -230,7 +235,7 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
             },
             tooltip: {
               callbacks: {
-                label: context => `Score: ${context.formattedValue}%`
+                label: context => `Score: ${Number(context.raw).toFixed(1)}`
               }
             },
             datalabels: {
@@ -240,7 +245,7 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
               font: {
                 weight: 'bold'
               },
-              formatter: value => value
+              formatter: value => Number(value).toFixed(1)
             },
             title: {
               display: true,
@@ -328,10 +333,10 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
                     key={type}
                     className={`text-right font-semibold border-r`}
                   >
-                    {type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')} (%)
+                    {type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                   </TableHead>
                 ))}
-                <TableHead className="text-right font-semibold">Total (%)</TableHead>
+                <TableHead className="text-right font-semibold">Total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

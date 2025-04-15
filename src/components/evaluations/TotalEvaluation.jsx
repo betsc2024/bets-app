@@ -139,6 +139,11 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
   const processEvaluationData = (totalData, selfData) => {
     const attributeResponses = {};
 
+    // Create a helper function for consistent number formatting
+    const formatScore = (score) => {
+      return Number(score).toFixed(1);
+    };
+
     // Process all evaluations except self
     totalData.forEach(assignment => {
       assignment.evaluations.forEach(evaluation => {
@@ -221,10 +226,10 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
       return {
         srNo: index + 1,
         attributeName: attribute,
-        selfAverageScore: Number(selfAverageScore.toFixed(1)),
-        selfPercentageScore: Number(selfPercentageScore.toFixed(1)),
-        totalAverageScore: Number(totalAverageScore.toFixed(1)),
-        totalPercentageScore: Number(totalPercentageScore.toFixed(1)),
+        selfAverageScore: formatScore(selfAverageScore),
+        selfPercentageScore: formatScore(selfPercentageScore),
+        totalAverageScore: formatScore(totalAverageScore),
+        totalPercentageScore: formatScore(totalPercentageScore),
       };
     });
   };
@@ -259,7 +264,10 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
               max: 100,
               title: {
                 display: true,
-                text: 'Score Percentage'
+                text: 'Score'
+              },
+              ticks: {
+                callback: value => Number(value).toFixed(1)
               }
             },
             x: {
@@ -297,10 +305,15 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
               font: {
                 weight: 'bold'
               },
-              formatter: (value) => `${value}%`
+              formatter: value => Number(value).toFixed(1)
             },
             legend: {
               position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                label: context => `Score: ${Number(context.raw).toFixed(1)}`
+              }
             },
             title: {
               display: true,
@@ -379,9 +392,9 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
                     <TableCell className="border-r">{row.srNo}</TableCell>
                     <TableCell className="border-r">{row.attributeName}</TableCell>
                     <TableCell className="border-r text-right">{row.selfAverageScore}</TableCell>
-                    <TableCell className="border-r text-right">{row.selfPercentageScore}%</TableCell>
+                    <TableCell className="border-r text-right">{row.selfPercentageScore}</TableCell>
                     <TableCell className="border-r text-right">{row.totalAverageScore}</TableCell>
-                    <TableCell className="text-right">{row.totalPercentageScore}%</TableCell>
+                    <TableCell className="text-right">{row.totalPercentageScore}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -119,6 +119,11 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
   };
 
   const processEvaluationData = (reportingBossData, selfData) => {
+    // Helper function for consistent decimal formatting
+    const formatScore = (score) => {
+      return Number(Number(score).toFixed(1));
+    };
+
     const attributeResponses = {};
 
     // Process reporting boss evaluations
@@ -177,9 +182,9 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
       const numStatements = Object.keys(statementScores).length;
       const rawScore = Object.values(statementScores).reduce((sum, { total }) => sum + total, 0);
       const evaluatorsPerStatement = Object.values(statementScores)[0]?.evaluators || 0;
-      const reportingBossAverageScore = numStatements > 0 ? rawScore / numStatements : 0;
+      const reportingBossAverageScore = rawScore / numStatements;
       const maxPossible = evaluatorsPerStatement * 100;
-      const reportingBossPercentageScore = maxPossible > 0 ? (reportingBossAverageScore / maxPossible) * 100 : 0;
+      const reportingBossPercentageScore = maxPossible ? (reportingBossAverageScore / maxPossible) * 100 : 0;
 
       // Calculate self evaluation scores
       const selfStatementScores = {};
@@ -197,16 +202,16 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
 
       const selfNumStatements = Object.keys(selfStatementScores).length;
       const selfRawScore = Object.values(selfStatementScores).reduce((sum, { total }) => sum + total, 0);
-      const selfAverageScore = selfNumStatements > 0 ? selfRawScore / selfNumStatements : 0;
-      const selfPercentageScore = selfAverageScore > 0 ? (selfAverageScore / 100) * 100 : 0;
+      const selfAverageScore = selfRawScore / selfNumStatements;
+      const selfPercentageScore = (selfAverageScore / 100) * 100;
 
       return {
         srNo: index + 1,
         attributeName: attribute,
-        selfAverageScore: Number(selfAverageScore.toFixed(1)),
-        selfPercentageScore: Number(selfPercentageScore.toFixed(1)),
-        reportingBossAverageScore: Number(reportingBossAverageScore.toFixed(1)),
-        reportingBossPercentageScore: Number(reportingBossPercentageScore.toFixed(1)),
+        selfAverageScore: formatScore(selfAverageScore),
+        selfPercentageScore: formatScore(selfPercentageScore),
+        reportingBossAverageScore: formatScore(reportingBossAverageScore),
+        reportingBossPercentageScore: formatScore(reportingBossPercentageScore),
       };
     });
   };
@@ -241,7 +246,10 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
               max: 100,
               title: {
                 display: true,
-                text: 'Score Percentage'
+                text: 'Score'
+              },
+              ticks: {
+                callback: value => Number(value).toFixed(1)
               }
             },
             x: {
@@ -279,10 +287,15 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
               font: {
                 weight: 'bold'
               },
-              formatter: (value) => `${value}%`
+              formatter: value => Number(value).toFixed(1)
             },
             legend: {
               position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                label: context => `${context.dataset.label.replace(' (%)', '')}: ${Number(context.raw).toFixed(1)}`
+              }
             },
             title: {
               display: true,
@@ -352,10 +365,10 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
                   <TableRow key={row.srNo} className="border-b">
                     <TableCell className="border-r">{row.srNo}</TableCell>
                     <TableCell className="border-r">{row.attributeName}</TableCell>
-                    <TableCell className="border-r text-right">{row.selfAverageScore}</TableCell>
-                    <TableCell className="border-r text-right">{row.selfPercentageScore}%</TableCell>
-                    <TableCell className="border-r text-right">{row.reportingBossAverageScore}</TableCell>
-                    <TableCell className="text-right">{row.reportingBossPercentageScore}%</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.selfAverageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.selfPercentageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.reportingBossAverageScore).toFixed(1)}</TableCell>
+                    <TableCell className="text-right">{Number(row.reportingBossPercentageScore).toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

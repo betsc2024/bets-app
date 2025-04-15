@@ -121,6 +121,11 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
   const processPeerData = (peerEvaluations, selfEvaluations) => {
     const attributeResponses = {};
 
+    // Helper function for consistent decimal formatting
+    const formatScore = (score) => {
+      return Number(Number(score).toFixed(1));
+    };
+
     // First collect peer evaluations
     peerEvaluations.forEach(assignment => {
       const evaluations = assignment.evaluations || [];
@@ -218,10 +223,10 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
       return {
         srNo: index + 1,
         attributeName: attribute,
-        selfAverageScore: Number(selfAverageScore.toFixed(1)),
-        selfPercentageScore: Number(selfPercentageScore.toFixed(1)),
-        peerAverageScore: Number(peerAverageScore.toFixed(1)),
-        peerPercentageScore: Number(peerPercentageScore.toFixed(1)),
+        selfAverageScore: formatScore(selfAverageScore),
+        selfPercentageScore: formatScore(selfPercentageScore),
+        peerAverageScore: formatScore(peerAverageScore),
+        peerPercentageScore: formatScore(peerPercentageScore),
       };
     });
   };
@@ -256,7 +261,10 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
               max: 100,
               title: {
                 display: true,
-                text: 'Score Percentage'
+                text: 'Score'
+              },
+              ticks: {
+                callback: value => Number(value).toFixed(1)
               }
             },
             x: {
@@ -294,10 +302,15 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
               font: {
                 weight: 'bold'
               },
-              formatter: (value) => `${value}%`
+              formatter: value => Number(value).toFixed(1)
             },
             legend: {
               position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                label: context => `${context.dataset.label.replace(' (%)', '')}: ${Number(context.raw).toFixed(1)}`
+              }
             },
             title: {
               display: true,
@@ -364,13 +377,13 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
               </TableHeader>
               <TableBody>
                 {tableData.map((row, index) => (
-                  <TableRow key={index} className="border-b">
+                  <TableRow key={row.srNo} className="border-b">
                     <TableCell className="border-r">{row.srNo}</TableCell>
                     <TableCell className="border-r">{row.attributeName}</TableCell>
-                    <TableCell className="border-r text-right">{row.selfAverageScore}</TableCell>
-                    <TableCell className="border-r text-right">{row.selfPercentageScore}%</TableCell>
-                    <TableCell className="border-r text-right">{row.peerAverageScore}</TableCell>
-                    <TableCell className="text-right">{row.peerPercentageScore}%</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.selfAverageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.selfPercentageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.peerAverageScore).toFixed(1)}</TableCell>
+                    <TableCell className="text-right">{Number(row.peerPercentageScore).toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

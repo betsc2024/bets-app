@@ -121,6 +121,11 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
   const processTopBossData = (topBossEvaluations, selfEvaluations) => {
     const attributeResponses = {};
 
+    // Helper function for consistent decimal formatting
+    const formatScore = (score) => {
+      return Number(Number(score).toFixed(1));
+    };
+
     // First collect top boss evaluations
     topBossEvaluations.forEach(assignment => {
       // Handle nested evaluations array
@@ -219,10 +224,10 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
       return {
         srNo: index + 1,
         attributeName: attribute,
-        selfAverageScore: Number(selfAverageScore.toFixed(1)),
-        selfPercentageScore: Number(selfPercentageScore.toFixed(1)),
-        topBossAverageScore: Number(topBossAverageScore.toFixed(1)),
-        topBossPercentageScore: Number(topBossPercentageScore.toFixed(1)),
+        selfAverageScore: formatScore(selfAverageScore),
+        selfPercentageScore: formatScore(selfPercentageScore),
+        topBossAverageScore: formatScore(topBossAverageScore),
+        topBossPercentageScore: formatScore(topBossPercentageScore),
       };
     });
   };
@@ -257,7 +262,10 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
               max: 100,
               title: {
                 display: true,
-                text: 'Score Percentage'
+                text: 'Score'
+              },
+              ticks: {
+                callback: value => Number(value).toFixed(1)
               }
             },
             x: {
@@ -295,10 +303,15 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
               font: {
                 weight: 'bold'
               },
-              formatter: (value) => `${value}%`
+              formatter: value => Number(value).toFixed(1)
             },
             legend: {
               position: 'top',
+            },
+            tooltip: {
+              callbacks: {
+                label: context => `${context.dataset.label.replace(' (%)', '')}: ${Number(context.raw).toFixed(1)}`
+              }
             },
             title: {
               display: true,
@@ -368,10 +381,10 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
                   <TableRow key={row.srNo} className="border-b">
                     <TableCell className="border-r">{row.srNo}</TableCell>
                     <TableCell className="border-r">{row.attributeName}</TableCell>
-                    <TableCell className="border-r text-right">{row.selfAverageScore.toFixed(1)}</TableCell>
-                    <TableCell className="border-r text-right">{row.selfPercentageScore.toFixed(1)}%</TableCell>
-                    <TableCell className="border-r text-right">{row.topBossAverageScore.toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{row.topBossPercentageScore.toFixed(1)}%</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.selfAverageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.selfPercentageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.topBossAverageScore).toFixed(1)}</TableCell>
+                    <TableCell className="text-right">{Number(row.topBossPercentageScore).toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
