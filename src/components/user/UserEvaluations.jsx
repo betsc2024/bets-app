@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -32,6 +33,7 @@ const UserEvaluations = () => {
   const [flattenedStatements, setFlattenedStatements] = useState([]);
   const [currentAttributeIndex, setCurrentAttributeIndex] = useState(0);
   const evaluationCheckpointRef = useRef(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -199,7 +201,10 @@ const UserEvaluations = () => {
 
       console.log(responseMap);
 
-      setSelectedEvaluation(evaluationData);
+      setSelectedEvaluation({
+        ...evaluationData,
+        isReadOnly: evaluationData.status === 'completed'
+      });
       setStatements(statementsData || []);
       setResponses(responseMap);
       setAttributeGroups(attributeGroupsArray);
@@ -271,15 +276,20 @@ const UserEvaluations = () => {
 
   const handleSubmitEvaluation = async () => {
     try {
-      setIsSubmitting(true);
+      if (selectedEvaluation?.status === 'completed') {
+        toast.error('This evaluation has been completed and cannot be submitted again');
+        return;
+      }
 
-      // Validate all responses
-      const unanswered = statements.filter(stmt => !responses[stmt.id]);
+      const unanswered = flattenedStatements.filter(stmt => !responses[stmt.statement.id]);
       if (unanswered.length > 0) {
         toast.error('Please complete all questions before submitting');
         return;
       }
 
+      setIsSubmitting(true);
+
+      // Validate all responses
       console.log(responses);
 
       // Prepare response data
@@ -319,6 +329,22 @@ const UserEvaluations = () => {
       toast.error(error.message || 'Failed to submit evaluation');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmitClick = () => {
+    const unanswered = flattenedStatements.filter(stmt => !responses[stmt.statement.id]);
+    if (unanswered.length > 0) {
+      toast.error('Please complete all questions before submitting');
+      return;
+    }
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmSubmit = async (confirmed) => {
+    setShowConfirmDialog(false);
+    if (confirmed) {
+      handleSubmitEvaluation();
     }
   };
 
@@ -467,7 +493,13 @@ const UserEvaluations = () => {
 
                     <RadioGroup
                       value={responses[flattenedStatements[currentStatementIndex].statement.id]}
-                      onValueChange={(value) => handleOptionSelect(flattenedStatements[currentStatementIndex].statement.id, value)}
+                      onValueChange={(value) => {
+                        if (selectedEvaluation?.status === 'completed') {
+                          toast.error('This evaluation has been completed and cannot be edited');
+                          return;
+                        }
+                        handleOptionSelect(flattenedStatements[currentStatementIndex].statement.id, value);
+                      }}
                       className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
                     >
                       {flattenedStatements[currentStatementIndex].statement.attribute_statement_options
@@ -507,16 +539,29 @@ const UserEvaluations = () => {
                     Prev
                   </Button>
                   
-                  <Button
-                    onClick={handleNextStatement}
-                    disabled={currentStatementIndex === flattenedStatements.length - 1}
-                    variant="outline"
-                    className="flex items-center text-xs px-3 py-1 h-8"
-                    size="sm"
-                  >
-                    Next
-                    <ChevronRight className="ml-1 h-3 w-3" />
-                  </Button>
+                  {currentStatementIndex === flattenedStatements.length - 1 ? (
+                    selectedEvaluation?.status !== 'completed' && (
+                      <Button
+                        onClick={handleSubmitClick}
+                        disabled={isSubmitting}
+                        className="flex items-center text-xs px-3 py-1 h-8"
+                        size="sm"
+                      >
+                        Submit Evaluation
+                      </Button>
+                    )
+                  ) : (
+                    <Button
+                      onClick={handleNextStatement}
+                      disabled={currentStatementIndex === flattenedStatements.length - 1}
+                      variant="outline"
+                      className="flex items-center text-xs px-3 py-1 h-8"
+                      size="sm"
+                    >
+                      Next
+                      <ChevronRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -527,16 +572,53 @@ const UserEvaluations = () => {
           </div>
 
           <div className="border-t">
-            <EvaluationCheckpoint 
-              ref={evaluationCheckpointRef}
-              evaluationId={selectedEvaluation?.id}
-              responses={responses}
-              setResponses={setResponses}
-              isSubmitting={isSubmitting}
-              onCancel={() => handleDialogClose(false)}
-              onSubmit={handleSubmitEvaluation}
-            />
+            {selectedEvaluation?.status !== 'completed' && (
+              <EvaluationCheckpoint 
+                ref={evaluationCheckpointRef}
+                evaluationId={selectedEvaluation?.id}
+                responses={responses}
+                setResponses={setResponses}
+                isSubmitting={isSubmitting}
+                onCancel={() => handleDialogClose(false)}
+                onSubmit={handleSubmitEvaluation}
+              />
+            )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onOpenChange={() => setShowConfirmDialog(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Submit Evaluation</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to submit this evaluation? Once submitted, it cannot be edited.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => handleConfirmSubmit(false)}
+            >
+              Continue Editing
+            </Button>
+            <Button
+              type="button"
+              onClick={() => handleConfirmSubmit(true)}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit Evaluation'
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
