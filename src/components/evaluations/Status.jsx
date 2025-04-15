@@ -14,6 +14,18 @@ const Status = ({ userId, companyId, bankId }) => {
   const [statusData, setStatusData] = useState([]);
   const tableRef = useRef(null);
 
+  // Add a function to share status data with parent
+  const notifyParent = (data) => {
+    // Create an event with the status data
+    const event = new CustomEvent('evaluationStatusUpdate', {
+      detail: data.reduce((acc, item) => {
+        acc[item.relationType.toLowerCase().replace(' ', '_')] = item.count;
+        return acc;
+      }, {})
+    });
+    document.dispatchEvent(event);
+  };
+
   const fetchStatusData = async () => {
     try {
       // Get all evaluations for this assignment
@@ -77,6 +89,7 @@ const Status = ({ userId, companyId, bankId }) => {
       });
 
       setStatusData(tableData);
+      notifyParent(tableData); // Notify parent of status changes
     } catch (error) {
       console.error('Error fetching status data:', error);
       toast.error('Failed to fetch status data');

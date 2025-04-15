@@ -82,6 +82,9 @@ export default function Reports() {
   const [bankList, setBankList] = useState([]);
   const [selectedAttributeBank, setSelectedAttributeBank] = useState("");
 
+  // Evaluation counts state
+  const [evaluationCounts, setEvaluationCounts] = useState({});
+
   const barChartRef = useRef(null);
 
   const fetchData = async (selectedCompany, selectedUser , selectedAnalysis = "",selectedBank = "") => {
@@ -576,6 +579,17 @@ export default function Reports() {
     );
   };
 
+  useEffect(() => {
+    const handleStatusUpdate = (event) => {
+      setEvaluationCounts(event.detail);
+    };
+
+    document.addEventListener('evaluationStatusUpdate', handleStatusUpdate);
+    return () => {
+      document.removeEventListener('evaluationStatusUpdate', handleStatusUpdate);
+    };
+  }, []);
+
   return (
     <div className="p-6 max-w-full">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
@@ -689,39 +703,51 @@ export default function Reports() {
             bankId={bank}
           />
           
-          {/* Show other evaluation components only if data exists */}
+          {/* Show other evaluation components only if they have evaluators */}
           {data && data.length > 0 ? (
             <div className="space-y-8 w-full">
-              <SelfEvaluation 
-                companyId={selectedCompany?.id}
-                userId={selectedUser?.id}
-                bankId={bank}
-              />
-              <TopBossEvaluation 
-                companyId={selectedCompany?.id}
-                userId={selectedUser?.id}
-                bankId={bank}
-              />
-              <PeerEvaluation 
-                companyId={selectedCompany?.id}
-                userId={selectedUser?.id}
-                bankId={bank}
-              />
-              <HREvaluation 
-                companyId={selectedCompany?.id}
-                userId={selectedUser?.id}
-                bankId={bank}
-              />
-              <SubordinateEvaluation 
-                companyId={selectedCompany?.id}
-                userId={selectedUser?.id}
-                bankId={bank}
-              />
-              <ReportingBossEvaluation 
-                companyId={selectedCompany?.id}
-                userId={selectedUser?.id}
-                bankId={bank}
-              />
+              {evaluationCounts.self > 0 && (
+                <SelfEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+              )}
+              {evaluationCounts.top_boss > 0 && (
+                <TopBossEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+              )}
+              {evaluationCounts.peer > 0 && (
+                <PeerEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+              )}
+              {evaluationCounts.hr > 0 && (
+                <HREvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+              )}
+              {evaluationCounts.subordinate > 0 && (
+                <SubordinateEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+              )}
+              {evaluationCounts.reporting_boss > 0 && (
+                <ReportingBossEvaluation 
+                  companyId={selectedCompany?.id}
+                  userId={selectedUser?.id}
+                  bankId={bank}
+                />
+              )}
               <TotalEvaluation 
                 companyId={selectedCompany?.id}
                 userId={selectedUser?.id}
