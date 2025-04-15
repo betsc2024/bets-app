@@ -189,15 +189,15 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
         statementScores[statementId].evaluators += 1;
       });
 
-      // Calculate top boss scores exactly as per SQL
+      // Calculate top boss scores
       const numStatements = Object.keys(statementScores).length;
       const rawScore = Object.values(statementScores).reduce((sum, { total }) => sum + total, 0);
       const evaluatorsPerStatement = Object.values(statementScores)[0]?.evaluators || 0;
-      const topBossAverageScore = rawScore / numStatements;
+      const topBossAverageScore = numStatements > 0 ? rawScore / numStatements : 0;
       const maxPossible = evaluatorsPerStatement * 100;
-      const topBossPercentageScore = maxPossible ? (topBossAverageScore / maxPossible) * 100 : 0;
+      const topBossPercentageScore = maxPossible > 0 ? (topBossAverageScore / maxPossible) * 100 : 0;
 
-      // Self evaluation follows same pattern
+      // Calculate self evaluation scores
       const selfStatementScores = {};
       data.selfScores.forEach((score) => {
         const statementId = score.attribute_statement_options.attribute_statements.statement;
@@ -213,8 +213,8 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
 
       const selfNumStatements = Object.keys(selfStatementScores).length;
       const selfRawScore = Object.values(selfStatementScores).reduce((sum, { total }) => sum + total, 0);
-      const selfAverageScore = selfRawScore / selfNumStatements;
-      const selfPercentageScore = (selfAverageScore / 100) * 100;
+      const selfAverageScore = selfNumStatements > 0 ? selfRawScore / selfNumStatements : 0;
+      const selfPercentageScore = selfAverageScore > 0 ? (selfAverageScore / 100) * 100 : 0;
 
       return {
         srNo: index + 1,

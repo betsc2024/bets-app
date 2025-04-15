@@ -132,18 +132,16 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
           return (statement.weight / statement.maxPossible) * 100;
         });
 
-        // Calculate attribute level scores
-        // Average Score = Sum of Raw Scores / Number of Statements
-        const averageScore = data.rawScores.reduce((sum, score) => sum + score, 0) / data.rawScores.length;
-
-        // Percentage Score = Sum of Statement Percentages / Number of Statements
-        const percentageScore = statementScores.reduce((sum, score) => sum + score, 0) / statementScores.length;
+        const numStatements = statementScores.length;
+        const rawScore = statementScores.reduce((sum, score) => sum + score, 0);
+        const selfAverageScore = numStatements > 0 ? rawScore / numStatements : 0;
+        const selfPercentageScore = selfAverageScore > 0 ? (selfAverageScore / 100) * 100 : 0;
 
         return {
           srNo: index + 1,
           attributeName,
-          averageScore: Number(averageScore.toFixed(1)),
-          percentageScore: Number(percentageScore.toFixed(1))
+          averageScore: Number(selfAverageScore.toFixed(1)),
+          percentageScore: Number(selfPercentageScore.toFixed(1))
         };
       });
 
