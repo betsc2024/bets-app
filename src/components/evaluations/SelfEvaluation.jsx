@@ -169,6 +169,32 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                 display: true,
                 text: 'Score Percentage'
               }
+            },
+            x: {
+              grid: {
+                display: false
+              },
+              ticks: {
+                callback: function(val) {
+                  const label = this.getLabelForValue(val);
+                  const words = label.split(' ');
+                  const lines = [];
+                  let currentLine = words[0];
+                  
+                  for(let i = 1; i < words.length; i++) {
+                    if (currentLine.length + words[i].length < 15) {
+                      currentLine += ' ' + words[i];
+                    } else {
+                      lines.push(currentLine);
+                      currentLine = words[i];
+                    }
+                  }
+                  lines.push(currentLine);
+                  return lines;
+                },
+                maxRotation: 0,
+                minRotation: 0
+              }
             }
           },
           plugins: {
@@ -186,7 +212,11 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
             },
             title: {
               display: true,
-              text: 'Self Evaluation Scores'
+              text: 'Self Evaluation Scores',
+              font: {
+                size: 16,
+                weight: 'bold'
+              }
             }
           }
         };
