@@ -23,6 +23,7 @@ const Status = ({ userId, companyId, bankId }) => {
           relationship_type,
           status,
           evaluator_id,
+          is_self_evaluator,
           evaluation_assignments!inner(
             user_to_evaluate_id,
             company_id,
@@ -31,8 +32,7 @@ const Status = ({ userId, companyId, bankId }) => {
         `)
         .eq('evaluation_assignments.user_to_evaluate_id', userId)
         .eq('evaluation_assignments.company_id', companyId)
-        .eq('evaluation_assignments.attribute_bank_id', bankId)
-        .not('relationship_type', 'is', null);
+        .eq('evaluation_assignments.attribute_bank_id', bankId);
 
       if (evaluationsError) throw evaluationsError;
 
@@ -41,7 +41,7 @@ const Status = ({ userId, companyId, bankId }) => {
       const completedByType = {};
 
       evaluationsData.forEach(evaluation => {
-        const type = evaluation.relationship_type;
+        const type = evaluation.is_self_evaluator ? 'self' : evaluation.relationship_type;
         
         // Initialize if not exists
         if (!evaluatorsByType[type]) {
@@ -59,11 +59,11 @@ const Status = ({ userId, companyId, bankId }) => {
       });
 
       // Fixed relationship types in order
-      const relationOrder = ['Hr', 'Reporting Boss', 'Peer', 'Subordinate', 'Top Boss'];
+      const relationOrder = ['Self', 'Hr', 'Reporting Boss', 'Peer', 'Subordinate', 'Top Boss'];
       const tableData = relationOrder.map((type, index) => {
         const relationKey = type.toLowerCase().replace(' ', '_');
-        const totalCount = evaluatorsByType[relationKey]?.size || 0;
-        const completed = completedByType[relationKey]?.size || 0;
+        const totalCount = type === 'Self' ? 1 : (evaluatorsByType[relationKey]?.size || 0);
+        const completed = type === 'Self' ? (completedByType[relationKey]?.size || 0) : (completedByType[relationKey]?.size || 0);
         
         return {
           srNo: index + 1,
@@ -71,7 +71,7 @@ const Status = ({ userId, companyId, bankId }) => {
           count: totalCount,
           completed: completed,
           status: `${completed}/${totalCount}`,
-          completionPercentage: totalCount ? Math.round((completed / totalCount) * 100) : 0,
+          completionPercentage: totalCount > 0 ? Math.round((completed / totalCount) * 100) : 0,
           isComplete: completed === totalCount && totalCount > 0
         };
       });

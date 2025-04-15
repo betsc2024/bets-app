@@ -195,9 +195,9 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
       const numStatements = Object.keys(statementScores).length;
       const rawScore = Object.values(statementScores).reduce((sum, { total }) => sum + total, 0);
       const evaluatorsPerStatement = Object.values(statementScores)[0]?.evaluators || 0;
-      const totalAverageScore = rawScore / numStatements;
+      const totalAverageScore = numStatements > 0 ? rawScore / numStatements : 0;
       const maxPossible = evaluatorsPerStatement * 100;
-      const totalPercentageScore = maxPossible ? (totalAverageScore / maxPossible) * 100 : 0;
+      const totalPercentageScore = maxPossible > 0 ? (totalAverageScore / maxPossible) * 100 : 0;
 
       // Calculate self evaluation scores
       const selfStatementScores = {};
@@ -215,8 +215,8 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
 
       const selfNumStatements = Object.keys(selfStatementScores).length;
       const selfRawScore = Object.values(selfStatementScores).reduce((sum, { total }) => sum + total, 0);
-      const selfAverageScore = selfRawScore / selfNumStatements;
-      const selfPercentageScore = (selfAverageScore / 100) * 100;
+      const selfAverageScore = selfNumStatements > 0 ? selfRawScore / selfNumStatements : 0;
+      const selfPercentageScore = selfAverageScore > 0 ? (selfAverageScore / 100) * 100 : 0;
 
       return {
         srNo: index + 1,
