@@ -419,67 +419,42 @@ const UserEvaluations = () => {
   return (
     <div>
       <div style={{ marginBottom: 24, position: 'relative', maxWidth: 340 }}>
-        <label htmlFor="bank-select" style={{ marginRight: 8, fontWeight: 500 }}>
+        <label htmlFor="bank-select" className="text-sm font-medium mb-2 block text-foreground">
           Select Bank:
         </label>
-        <div style={{ position: 'relative', minHeight: 44 }}>
+        <div className="relative">
           <select
             id="bank-select"
             value={selectedBankId}
             onChange={e => setSelectedBankId(e.target.value)}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: '1.5px solid var(--primary, #a259e6)',
-              minWidth: 180,
-              maxWidth: '100%',
-              width: '100%',
-              fontSize: '1em',
-              color: 'var(--primary-foreground, #4b2067)',
-              background: 'var(--primary-bg, #f8f5fc)',
-              fontWeight: 500,
-              outline: 'none',
-              boxShadow: '0 1px 4px 0 rgba(162,89,230,0.04)',
-              transition: 'border-color 0.2s, box-shadow 0.2s',
-              WebkitAppearance: 'none',
-              MozAppearance: 'none',
-              appearance: 'none',
-              maxHeight: 200,
-              overflowY: 'auto',
-            }}
-            onFocus={e => (e.target.style.borderColor = 'var(--primary, #7c3aed)')}
-            onBlur={e => (e.target.style.borderColor = 'var(--primary, #a259e6)')}
+            className="w-full rounded-md border border-input bg-background px-4 py-2.5 text-sm
+              focus:border-primary hover:border-primary
+              file:border-0 file:bg-transparent file:text-sm file:font-medium 
+              placeholder:text-muted-foreground focus-visible:outline-none focus:ring-1
+              focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50
+              appearance-none pr-10 max-h-[200px] overflow-y-auto
+              scrollbar-thin scrollbar-thumb-primary scrollbar-track-primary/10"
           >
             <option value="">-- Choose a bank --</option>
             {assignedBanks.map(bank => (
-              <option key={bank.id} value={bank.id}>{bank.name}</option>
+              <option key={bank.id} value={bank.id} className="py-1">{bank.name}</option>
             ))}
           </select>
-          {/* Custom dropdown chevron icon */}
           <svg
-            style={{
-              position: 'absolute',
-              right: 14,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              pointerEvents: 'none',
-              width: 20,
-              height: 20,
-              fill: 'none',
-              stroke: 'var(--primary, #a259e6)',
-              strokeWidth: 2,
-              zIndex: 2,
-            }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary"
+            xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
-            aria-hidden="true"
-            focusable="false"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </div>
-        {/* Subtle evaluation count counter: Only show after a bank is selected */}
         {selectedBankId && (
-          <div style={{ fontSize: '0.95em', color: '#888', marginTop: 4, marginLeft: 2 }}>
+          <div className="text-sm text-muted-foreground mt-2 ml-1">
             Evaluations found: {
               evaluations.filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId).length
             }
