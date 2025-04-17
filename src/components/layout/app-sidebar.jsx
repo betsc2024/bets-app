@@ -163,19 +163,18 @@ export default function AppSidebar({ isOpen, onToggle }) {
             );
           })}
         </nav>
-      </div>
-
-      <div className={`p-4 border-t border-border ${!isOpen && 'lg:block hidden'} ${isOpen ? '' : 'flex justify-center'}`}>
-        <Button 
-          variant="default"
-          className={`${isOpen ? 'w-full' : 'w-10 px-0'} bg-primary hover:bg-primary/90 text-primary-foreground font-semibold`}
-          onClick={handleSignOut}
-          disabled={loading}
-          title={isOpen ? undefined : 'Sign Out'}
-        >
-          <LogOut className="h-4 w-4" />
-          {isOpen && <span className="ml-2">{loading ? 'Signing out...' : 'Sign Out'}</span>}
-        </Button>
+        <div className={`pt-28 ${!isOpen && 'lg:block hidden'} ${isOpen ? '' : 'flex justify-center'}`}>
+          <Button 
+            variant="default"
+            className={`${isOpen ? 'w-full' : 'w-10 px-0'} bg-primary hover:bg-primary/90 text-primary-foreground font-semibold`}
+            onClick={handleSignOut}
+            disabled={loading}
+            title={isOpen ? undefined : 'Sign Out'}
+          >
+            <LogOut className="h-4 w-4" />
+            {isOpen && <span className="ml-2">{loading ? 'Signing out...' : 'Sign Out'}</span>}
+          </Button>
+        </div>
       </div>
     </div>
   )
