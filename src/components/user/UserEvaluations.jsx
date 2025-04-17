@@ -34,6 +34,8 @@ const UserEvaluations = () => {
   const [currentAttributeIndex, setCurrentAttributeIndex] = useState(0);
   const evaluationCheckpointRef = useRef(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [assignedBanks, setAssignedBanks] = useState([]);
+  const [selectedBankId, setSelectedBankId] = useState("");
 
   useEffect(() => {
     if (user?.id) {
@@ -69,29 +71,32 @@ const UserEvaluations = () => {
       const { data, error } = await supabase
         .from('evaluations')
         .select(`
-  id,
-    status,
-    evaluator:users!evaluations_evaluator_id_fkey (
-      id,
-      full_name
-    ),
-    is_self_evaluator,
-    relationship_type,
-    started_at,
-    completed_at,
-    evaluation_assignments (
-      id,
-      evaluation_name,
-      users!evaluation_assignments_user_to_evaluate_id_fkey (
-        id,
-        full_name
-      )
-    )
-  `)
-  .eq('evaluator_id', user?.id)
+          id,
+          status,
+          evaluator:users!evaluations_evaluator_id_fkey (
+            id,
+            full_name
+          ),
+          is_self_evaluator,
+          relationship_type,
+          started_at,
+          completed_at,
+          evaluation_assignments (
+            id,
+            evaluation_name,
+            attribute_banks (
+              id,
+              name
+            ),
+            users!evaluation_assignments_user_to_evaluate_id_fkey (
+              id,
+              full_name
+            )
+          )
+        `)
+        .eq('evaluator_id', user?.id);
 
       if (error) throw error;
-      
       console.log('Fetched evaluations:', data);
       if(data){
         data.map((item)=>{
@@ -116,6 +121,21 @@ const UserEvaluations = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (evaluations.length > 0) {
+      const uniqueBanks = [];
+      const seen = new Set();
+      evaluations.forEach(ev => {
+        const bank = ev.evaluation_assignments?.attribute_banks;
+        if (bank && bank.id && !seen.has(bank.id)) {
+          uniqueBanks.push({ id: bank.id, name: bank.name });
+          seen.add(bank.id);
+        }
+      });
+      setAssignedBanks(uniqueBanks);
+    }
+  }, [evaluations]);
 
   const fetchEvaluationDetails = async (evaluationId) => {
     try {
@@ -152,6 +172,11 @@ const UserEvaluations = () => {
       if (evaluationError) throw evaluationError;
 
       console.log(evaluationData);
+
+      if (evaluationData.status === 'completed') {
+        toast.error('This evaluation has been completed and cannot be modified');
+        return;
+      }
 
       // Get statements for the attribute bank with attribute information
       const { data: statementsData, error: statementsError } = await supabase
@@ -367,6 +392,14 @@ const UserEvaluations = () => {
     if (!open) setSelectedEvaluation(null);
   };
 
+  const handleEvaluationClick = (evaluation) => {
+    if (evaluation.status === 'completed') {
+      toast.error('This evaluation has been completed and cannot be modified');
+      return;
+    }
+    fetchEvaluationDetails(evaluation.id);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -384,286 +417,347 @@ const UserEvaluations = () => {
   }
 
   return (
-    <div className="container mx-auto py-6">
-      <h3 className="text-xl font-bold text-purple-800 mb-8">
-        {userCompany !== "" ? user.user_metadata?.full_name + " - " + userCompany : ""}
-      </h3>
-
-      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {evaluations.map((evaluation) => (
-          <div
-            key={evaluation.id}
-            className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow cursor-pointer"
-            onClick={() => fetchEvaluationDetails(evaluation.id)}
+    <div>
+      <div style={{ marginBottom: 24, position: 'relative', maxWidth: 340 }}>
+        <label htmlFor="bank-select" style={{ marginRight: 8, fontWeight: 500 }}>
+          Select Bank:
+        </label>
+        <div style={{ position: 'relative', minHeight: 44 }}>
+          <select
+            id="bank-select"
+            value={selectedBankId}
+            onChange={e => setSelectedBankId(e.target.value)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: '1.5px solid var(--primary, #a259e6)',
+              minWidth: 180,
+              maxWidth: '100%',
+              width: '100%',
+              fontSize: '1em',
+              color: 'var(--primary-foreground, #4b2067)',
+              background: 'var(--primary-bg, #f8f5fc)',
+              fontWeight: 500,
+              outline: 'none',
+              boxShadow: '0 1px 4px 0 rgba(162,89,230,0.04)',
+              transition: 'border-color 0.2s, box-shadow 0.2s',
+              WebkitAppearance: 'none',
+              MozAppearance: 'none',
+              appearance: 'none',
+              maxHeight: 200,
+              overflowY: 'auto',
+            }}
+            onFocus={e => (e.target.style.borderColor = 'var(--primary, #7c3aed)')}
+            onBlur={e => (e.target.style.borderColor = 'var(--primary, #a259e6)')}
           >
-            <div className="flex flex-col gap-4">
-              <h3 className="text-xl font-semibold text-gray-800">
-                {evaluation.is_self_evaluator ? (
-                  'Self Evaluation : '+ user.user_metadata?.full_name
-                ) : (
-                  <>
-                    Evaluate: {evaluation.evaluation_assignments?.users?.full_name} as 
-                    <span className="text-purple-600 ml-2">
-                      ({evaluation.relationship_type?.replace(/_/g, ' ') || 'Peer'})
-                    </span>
-                    {user.user_metadata?.full_name}
-                  </>
-                )}
-              </h3>
-              
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">Evaluation:</span>
-                  <span className="text-gray-600">
-                    {evaluation.evaluation_assignments?.evaluation_name || 'Unnamed Evaluation'}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">Status:</span>
-                  <span className={`px-3 py-1 rounded-full text-sm ${
-                    evaluation.status === 'completed' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {evaluation.status?.charAt(0).toUpperCase() + evaluation.status?.slice(1)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {evaluations.length === 0 && (
-          <div className="col-span-full text-center text-gray-500 py-8">
-            No pending evaluations found
+            <option value="">-- Choose a bank --</option>
+            {assignedBanks.map(bank => (
+              <option key={bank.id} value={bank.id}>{bank.name}</option>
+            ))}
+          </select>
+          {/* Custom dropdown chevron icon */}
+          <svg
+            style={{
+              position: 'absolute',
+              right: 14,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              pointerEvents: 'none',
+              width: 20,
+              height: 20,
+              fill: 'none',
+              stroke: 'var(--primary, #a259e6)',
+              strokeWidth: 2,
+              zIndex: 2,
+            }}
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+        {/* Subtle evaluation count counter: Only show after a bank is selected */}
+        {selectedBankId && (
+          <div style={{ fontSize: '0.95em', color: '#888', marginTop: 4, marginLeft: 2 }}>
+            Evaluations found: {
+              evaluations.filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId).length
+            }
           </div>
         )}
       </div>
-        
-      <Dialog 
-        open={!!selectedEvaluation} 
-        onOpenChange={handleDialogClose}
-      >
-        <DialogContent className="max-w-4xl h-auto max-h-[90vh] flex flex-col">
-          <DialogHeader className="pb-6 border-b">
-            <DialogTitle className="text-2xl font-semibold">
-              {selectedEvaluation?.is_self_evaluator 
-                ? 'Self Evaluation' 
-                : (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-gray-600">Evaluate:</span>
-                    <span className="text-purple-800">{selectedEvaluation?.evaluation_assignments?.users?.full_name}</span>
-                    <span className="text-gray-600">as</span>
-                    <span className="text-purple-700">{selectedEvaluation?.relationship_type?.replace(/_/g, ' ') || 'Peer'}</span>
-                    <span className="text-gray-600">by</span>
-                    <span className="text-purple-800">{selectedEvaluation?.evaluator?.full_name || 'Unknown User'}</span>
+      {selectedBankId ? (
+        <div className="container mx-auto py-6">
+          <h3 className="text-xl font-bold text-purple-800 mb-8">
+            {userCompany !== "" ? user.user_metadata?.full_name + " - " + userCompany : ""}
+          </h3>
+
+          <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {evaluations.filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId).map((evaluation) => (
+              <div
+                key={evaluation.id}
+                className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow cursor-pointer"
+                onClick={() => handleEvaluationClick(evaluation)}
+              >
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-xl font-semibold text-gray-800">
+                    {evaluation.is_self_evaluator ? (
+                      'Self Evaluation : '+ user.user_metadata?.full_name
+                    ) : (
+                      <>
+                        Evaluate: {evaluation.evaluation_assignments?.users?.full_name} as 
+                        <span className="text-purple-600 ml-2">
+                          ({evaluation.relationship_type?.replace(/_/g, ' ') || 'Peer'})
+                        </span>
+                        {user.user_metadata?.full_name}
+                      </>
+                    )}
+                  </h3>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Evaluation:</span>
+                      <span className="text-gray-600">
+                        {evaluation.evaluation_assignments?.evaluation_name || 'Unnamed Evaluation'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Status:</span>
+                      <span className={`px-3 py-1 rounded-full text-sm ${
+                        evaluation.status === 'completed' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {evaluation.status?.charAt(0).toUpperCase() + evaluation.status?.slice(1)}
+                      </span>
+                    </div>
                   </div>
-                )}
-            </DialogTitle>
-            <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-              <div className="flex items-center gap-3">
-                <span className="font-medium text-gray-700 min-w-[120px]">Evaluation Type:</span>
-                <span className="text-gray-600">
+                </div>
+              </div>
+            ))}
+
+            {evaluations.filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId).length === 0 && (
+              <div className="col-span-full text-center text-gray-500 py-8">
+                No pending evaluations found
+              </div>
+            )}
+          </div>
+            
+          <Dialog 
+            open={!!selectedEvaluation} 
+            onOpenChange={handleDialogClose}
+          >
+            <DialogContent className="max-w-4xl h-auto max-h-[90vh] flex flex-col">
+              <DialogHeader className="pb-6 border-b">
+                <DialogTitle className="text-2xl font-semibold">
                   {selectedEvaluation?.is_self_evaluator 
-                    ? 'Self Evaluation'
-                    : selectedEvaluation?.relationship_type?.replace(/_/g, ' ') || 'Peer Evaluation'}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-medium text-gray-700 min-w-[120px]">Bank Name:</span>
-                <span className="text-gray-600">
-                  {selectedEvaluation?.evaluation_assignments?.attribute_banks?.name || 'N/A'}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-medium text-gray-700 min-w-[120px]">Evaluation Name:</span>
-                <span className="text-gray-600">
-                  {selectedEvaluation?.evaluation_assignments?.evaluation_name || 'Unnamed Evaluation'}
-                </span>
-              </div>
-              {selectedEvaluation?.status === 'completed' && (
-                <div className="col-span-2">
-                  <div className="flex items-center gap-2 text-gray-500 bg-gray-50 px-4 py-2.5 rounded-md border border-gray-100">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                    </svg>
-                    This evaluation is in read-only mode
+                    ? 'Self Evaluation' 
+                    : (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-600">Evaluate:</span>
+                        <span className="text-purple-800">{selectedEvaluation?.evaluation_assignments?.users?.full_name}</span>
+                        <span className="text-gray-600">as</span>
+                        <span className="text-purple-700">{selectedEvaluation?.relationship_type?.replace(/_/g, ' ') || 'Peer'}</span>
+                        <span className="text-gray-600">by</span>
+                        <span className="text-purple-800">{selectedEvaluation?.evaluator?.full_name || 'Unknown User'}</span>
+                      </div>
+                    )}
+                </DialogTitle>
+                <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium text-gray-700 min-w-[120px]">Bank Name:</span>
+                    <span className="text-gray-600">
+                      {selectedEvaluation?.evaluation_assignments?.attribute_banks?.name || 'N/A'}
+                    </span>
                   </div>
-                </div>
-              )}
-            </div>
-          </DialogHeader>
-
-          <div className="flex-grow px-4 py-2 overflow-auto">
-            {attributeGroups.length > 0 && flattenedStatements.length > 0 ? (
-              <div className="space-y-4">
-                {/* Progress indicator */}
-                <div className="bg-purple-50 rounded-lg p-3 mb-4 border-l-4 border-purple-600 sticky top-0 z-10">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-lg font-bold text-purple-800">
-                      {flattenedStatements[currentStatementIndex]?.attributeName}
-                    </h3>
-                    <div className="text-sm text-gray-600">
-                      Statement {flattenedStatements[currentStatementIndex]?.statementNumberInSection} of {attributeGroups[currentAttributeIndex]?.statements.length}
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium text-gray-700 min-w-[120px]">Evaluation Name:</span>
+                    <span className="text-gray-600">
+                      {selectedEvaluation?.evaluation_assignments?.evaluation_name || 'Unnamed Evaluation'}
+                    </span>
+                  </div>
+                  {selectedEvaluation?.status === 'completed' && (
+                    <div className="col-span-2">
+                      <div className="flex items-center gap-2 text-gray-500 bg-gray-50 px-4 py-2.5 rounded-md border border-gray-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        This evaluation is in read-only mode
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Attribute description if available */}
-                  {flattenedStatements[currentStatementIndex]?.attributeDescription && (
-                    <p className="text-gray-700 mb-2 text-sm">
-                      {flattenedStatements[currentStatementIndex].attributeDescription}
-                    </p>
                   )}
-                  
-                  {/* Progress bar for current section */}
-                  <div className="w-full bg-gray-200 rounded-full h-1.5">
-                    <div 
-                      className="bg-purple-600 h-1.5 rounded-full" 
-                      style={{ width: `${(flattenedStatements[currentStatementIndex]?.statementNumberInSection / attributeGroups[currentAttributeIndex]?.statements.length) * 100}%` }}
-                    ></div>
-                  </div>
                 </div>
+              </DialogHeader>
 
-                {/* Current statement with its options */}
-                {flattenedStatements[currentStatementIndex] && (
-                  <div className="bg-gray-50 rounded-lg p-4 shadow-inner mb-4">
-                    <div className="mb-3">
-                      <h4 className="text-base font-semibold text-purple-800">
-                        {flattenedStatements[currentStatementIndex].statementNumberInSection + ". " + flattenedStatements[currentStatementIndex].statement.statement}
-                      </h4>
+              <div className="flex-grow px-6 py-4 overflow-auto">
+                {attributeGroups.length > 0 && flattenedStatements.length > 0 ? (
+                  <div className="space-y-6">
+                    {/* Progress indicator */}
+                    <div className="bg-purple-50 rounded-lg p-4 mb-6 border-l-4 border-purple-600 sticky top-0 z-10">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h3 className="text-lg font-bold text-purple-800">
+                            {flattenedStatements[currentStatementIndex]?.attributeName}
+                          </h3>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Attribute {currentAttributeIndex + 1} of {attributeGroups.length}
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Statement {flattenedStatements[currentStatementIndex]?.statementNumberInSection} of {attributeGroups[currentAttributeIndex]?.statements.length}
+                        </div>
+                      </div>
+                      
+                      {/* Attribute description if available */}
+                      {flattenedStatements[currentStatementIndex]?.attributeDescription && (
+                        <p className="text-gray-700 mt-2 text-sm">
+                          {flattenedStatements[currentStatementIndex].attributeDescription}
+                        </p>
+                      )}
                     </div>
 
-                    <RadioGroup
-                      value={responses[flattenedStatements[currentStatementIndex].statement.id]}
-                      onValueChange={(value) => {
-                        if (selectedEvaluation?.status === 'completed') {
-                          toast.error('This evaluation has been completed and cannot be edited');
-                          return;
-                        }
-                        handleOptionSelect(flattenedStatements[currentStatementIndex].statement.id, value);
-                      }}
-                      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-                    >
-                      {flattenedStatements[currentStatementIndex].statement.attribute_statement_options
-                        ?.sort((a, b) => b.weight - a.weight)
-                        .map((option) => (
-                          <div 
-                            key={option.id}
-                            className="flex items-center space-x-2 bg-white p-3 rounded-md shadow-sm hover:bg-gray-50 h-full"
-                          >
-                            <RadioGroupItem 
-                              value={option.id} 
-                              id={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
-                              className="h-4 w-4"
-                            />
-                            <Label 
-                              htmlFor={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
-                              className="flex-1 text-gray-700 cursor-pointer text-sm"
-                            >
-                              {option.option_text}
-                            </Label>
-                          </div>
-                        ))}
-                    </RadioGroup>
+                    {/* Current statement with its options */}
+                    {flattenedStatements[currentStatementIndex] && (
+                      <div className="bg-gray-50 rounded-lg p-4 shadow-inner mb-4">
+                        <div className="mb-3">
+                          <h4 className="text-base font-semibold text-purple-800">
+                            {flattenedStatements[currentStatementIndex].statementNumberInSection + ". " + flattenedStatements[currentStatementIndex].statement.statement}
+                          </h4>
+                        </div>
+
+                        <RadioGroup
+                          value={responses[flattenedStatements[currentStatementIndex].statement.id]}
+                          onValueChange={(value) => {
+                            if (selectedEvaluation?.status === 'completed') {
+                              toast.error('This evaluation has been completed and cannot be edited');
+                              return;
+                            }
+                            handleOptionSelect(flattenedStatements[currentStatementIndex].statement.id, value);
+                          }}
+                          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+                        >
+                          {flattenedStatements[currentStatementIndex].statement.attribute_statement_options
+                            ?.sort((a, b) => b.weight - a.weight)
+                            .map((option) => (
+                              <div 
+                                key={option.id}
+                                className="flex items-center space-x-2 bg-white p-3 rounded-md shadow-sm hover:bg-gray-50 h-full"
+                              >
+                                <RadioGroupItem 
+                                  value={option.id} 
+                                  id={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
+                                  className="h-4 w-4"
+                                />
+                                <Label 
+                                  htmlFor={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
+                                  className="flex-1 text-gray-700 cursor-pointer text-sm"
+                                >
+                                  {option.option_text}
+                                </Label>
+                              </div>
+                            ))}
+                        </RadioGroup>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    Loading statements...
                   </div>
                 )}
+              </div>
 
-                {/* Navigation buttons */}
-                <div className="flex justify-between items-center mt-4 pb-2">
-                  <Button
-                    onClick={handlePreviousStatement}
-                    disabled={currentStatementIndex === 0}
-                    variant="outline"
-                    className="flex items-center text-xs px-3 py-1 h-8"
-                    size="sm"
-                  >
-                    <ChevronLeft className="mr-1 h-3 w-3" />
-                    Prev
-                  </Button>
-                  
-                  {currentStatementIndex === flattenedStatements.length - 1 ? (
-                    selectedEvaluation?.status !== 'completed' && (
-                      <Button
-                        onClick={handleSubmitClick}
-                        disabled={isSubmitting}
-                        className="flex items-center text-xs px-3 py-1 h-8"
-                        size="sm"
-                      >
-                        Submit Evaluation
-                      </Button>
-                    )
+              <div className="border-t">
+                {selectedEvaluation?.status !== 'completed' && (
+                  <div className="p-4">
+                    <EvaluationCheckpoint 
+                      ref={evaluationCheckpointRef}
+                      evaluationId={selectedEvaluation?.id}
+                      responses={responses}
+                      setResponses={setResponses}
+                      isSubmitting={isSubmitting}
+                      onCancel={() => handleDialogClose(false)}
+                      onSubmit={handleSubmitEvaluation}
+                      rightContent={
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            onClick={handlePreviousStatement}
+                            disabled={currentStatementIndex === 0}
+                            variant="outline"
+                            className="flex items-center text-xs px-3 py-1 h-8"
+                            size="sm"
+                          >
+                            <ChevronLeft className="mr-1 h-3 w-3" />
+                            Prev
+                          </Button>
+
+                          {currentStatementIndex !== flattenedStatements.length - 1 ? (
+                            <Button
+                              onClick={handleNextStatement}
+                              disabled={currentStatementIndex === flattenedStatements.length - 1}
+                              variant="outline"
+                              className="flex items-center text-xs px-3 py-1 h-8"
+                              size="sm"
+                            >
+                              Next
+                              <ChevronRight className="ml-1 h-3 w-3" />
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={handleSubmitClick}
+                              disabled={isSubmitting}
+                              className="flex items-center text-xs px-3 py-1 h-8"
+                              size="sm"
+                            >
+                              Submit Evaluation
+                            </Button>
+                          )}
+                        </div>
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Confirmation Dialog */}
+          <Dialog open={showConfirmDialog} onOpenChange={() => setShowConfirmDialog(false)}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Submit Evaluation</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to submit this evaluation? Once submitted, it cannot be edited.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex justify-between sm:justify-between">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => handleConfirmSubmit(false)}
+                >
+                  Continue Editing
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => handleConfirmSubmit(true)}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                      Submitting...
+                    </>
                   ) : (
-                    <Button
-                      onClick={handleNextStatement}
-                      disabled={currentStatementIndex === flattenedStatements.length - 1}
-                      variant="outline"
-                      className="flex items-center text-xs px-3 py-1 h-8"
-                      size="sm"
-                    >
-                      Next
-                      <ChevronRight className="ml-1 h-3 w-3" />
-                    </Button>
+                    'Submit Evaluation'
                   )}
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                Loading statements...
-              </div>
-            )}
-          </div>
-
-          <div className="border-t">
-            {selectedEvaluation?.status !== 'completed' && (
-              <EvaluationCheckpoint 
-                ref={evaluationCheckpointRef}
-                evaluationId={selectedEvaluation?.id}
-                responses={responses}
-                setResponses={setResponses}
-                isSubmitting={isSubmitting}
-                onCancel={() => handleDialogClose(false)}
-                onSubmit={handleSubmitEvaluation}
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirmation Dialog */}
-      <Dialog open={showConfirmDialog} onOpenChange={() => setShowConfirmDialog(false)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Submit Evaluation</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to submit this evaluation? Once submitted, it cannot be edited.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex justify-between sm:justify-between">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => handleConfirmSubmit(false)}
-            >
-              Continue Editing
-            </Button>
-            <Button
-              type="button"
-              onClick={() => handleConfirmSubmit(true)}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                  Submitting...
-                </>
-              ) : (
-                'Submit Evaluation'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      ) : null}
     </div>
   );
 };
