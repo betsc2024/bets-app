@@ -211,49 +211,54 @@ export default function Evaluations() {
    fetch_companies();
  }, []);
 
-//  const sendMail = (to_mail,to_name) => {
-//   const service_Id = import.meta.env.VITE_EMAIL_SERVICE_ID;
-//   const template_Id = import.meta.env.VITE_EMAIL_TEMPLATE_ID;
-//   const public_Key = import.meta.env.VITE_EMAIL_PUBLIC_KEY;
-//   const message = {
-//     to_name : to_name,
-//     to_email : to_mail,
-//     from_name : "bets",
-//     message : `
-//      You have new Evalution please complete it.
-//      Invite link : "http://localhost:5173/login"
-//      UserName : ${to_mail}
-//      Password : "123123"
-//     `,
-//   }
+  const sendEvaluationEmail = async (to_email, to_name, subject = 'New Evaluation', message = null) => {
+    const service_id = import.meta.env.VITE_EMAIL_SERVICE_ID;
+    const template_id = import.meta.env.VITE_EMAIL_TEMPLATE_ID;
+    const public_key = import.meta.env.VITE_EMAIL_PUBLIC_KEY;
 
-//   setShowProgress(true);
-//   setProgress(0);
-  
-//   emailjs.send(service_Id,template_Id,message,public_Key).then(() => {
-//     let value = 0;
-//     const interval = setInterval(()=>{
-//       value += 10;
-//       setProgress(value);
-//       if(value >=100){
-//         clearInterval(interval);
-//         setTimeout(() => setShowProgress(false), 500); // Hide after completion
-//       }
-//     },100)
-//     console.log("Email sent successfully");
-//     const date = new Date();
-//     toast.message(`Email send successfully on ${date.toString()} ${to_mail}`);
+    const emailParams = {
+      to_name: to_name,
+      to_email: to_email,
+      from_name: "BETS Evaluation System",
+      subject: subject,
+      message: message || `
+        You have a new evaluation to complete.
+        Please use the following details to access your evaluation:
+        
+        Login URL: ${window.location.origin}/login
+        Username: ${to_email}
+        Password: 123123
+        
+        Please complete your evaluation at your earliest convenience.
+      `,
+    };
 
-//   },
-//   (error)=>{
-//     console.log(error);
-//     toast.error(error);
-//     setShowProgress(false);
+    setShowProgress(true);
+    setProgress(0);
 
-//   }
-//   );
-//  };
- 
+    try {
+      await emailjs.send(service_id, template_id, emailParams, public_key);
+      
+      // Simulate progress for better UX
+      let value = 0;
+      const interval = setInterval(() => {
+        value += 10;
+        setProgress(value);
+        if (value >= 100) {
+          clearInterval(interval);
+          setTimeout(() => setShowProgress(false), 500);
+        }
+      }, 100);
+
+      toast.success(`Email sent successfully to ${to_email}`);
+      return true;
+    } catch (error) {
+      console.error('Email sending failed:', error);
+      toast.error(error.message || 'Failed to send email');
+      setShowProgress(false);
+      return false;
+    }
+  };
 
   const fetchUsers = async (company_id) => {
     try {
@@ -1596,10 +1601,24 @@ export default function Evaluations() {
       user.email.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+  const testEmailSending = async () => {
+    try {
+      await sendEvaluationEmail(
+        'betsctech@gmail.com',
+        'Test User',
+        'Test Evaluation Email',
+        'This is a test email to verify the evaluation system.'
+      );
+    } catch (error) {
+      console.error('Test email failed:', error);
+    }
+  };
+
   return (
     <div className="p-6">
            { showProgress && (
-        <div className="fixed bottom-4 right-4 w-[200px]">
+        <div className="fixed bottom-4 right-4 w-64 bg-white p-4 rounded-lg shadow-lg">
+          <div className="text-sm mb-2">Sending email...</div>
           <Progress.Root
             className="relative h-[12px] w-full overflow-hidden rounded-full bg-gray-300 border"
             value={progress}
@@ -1877,6 +1896,11 @@ export default function Evaluations() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {import.meta.env.DEV && (
+        <Button onClick={testEmailSending} variant="outline" className="mt-4">
+          Test Email
+        </Button>
+      )}
     </div>
   );
 }
