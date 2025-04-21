@@ -1,6 +1,7 @@
 import React, { forwardRef, useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Loader2 } from 'lucide-react';
+import { supabase } from '../../supabase';
 
 const EvaluationCheckpoint = forwardRef(({ 
   evaluationId, 
@@ -15,15 +16,45 @@ const EvaluationCheckpoint = forwardRef(({
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+  // Expose hasUnsavedChanges to parent through ref
+  React.useImperativeHandle(ref, () => ({
+    hasUnsavedChanges
+  }));
+
   // Auto-save logic
   useEffect(() => {
     const saveResponses = async () => {
-      if (!hasUnsavedChanges) return;
+      if (!hasUnsavedChanges || !evaluationId) return;
       
       setIsSaving(true);
       try {
-        // Simulating API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Convert responses to array format for upsert
+        const responseData = Object.entries(responses).map(([statementId, selectedOptionId]) => ({
+          evaluation_id: evaluationId,
+          statement_id: statementId,
+          selected_option_id: selectedOptionId,
+          updated_at: new Date().toISOString()
+        }));
+
+        // First, delete existing responses for these statements
+        const statementIds = Object.keys(responses);
+        if (statementIds.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('evaluation_responses')
+            .delete()
+            .eq('evaluation_id', evaluationId)
+            .in('statement_id', statementIds);
+
+          if (deleteError) throw deleteError;
+        }
+
+        // Then insert new responses
+        const { error } = await supabase
+          .from('evaluation_responses')
+          .insert(responseData);
+
+        if (error) throw error;
+
         setLastSavedTime(new Date());
         setHasUnsavedChanges(false);
       } catch (error) {
@@ -35,7 +66,7 @@ const EvaluationCheckpoint = forwardRef(({
 
     const timer = setTimeout(saveResponses, 2000);
     return () => clearTimeout(timer);
-  }, [responses, hasUnsavedChanges]);
+  }, [responses, hasUnsavedChanges, evaluationId]);
 
   useEffect(() => {
     setHasUnsavedChanges(true);
@@ -46,7 +77,10 @@ const EvaluationCheckpoint = forwardRef(({
       <div className="flex items-center justify-between">
         <div>
           {isSaving ? (
-            <span className="text-yellow-600">Saving...</span>
+            <span className="text-yellow-600 flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Saving...
+            </span>
           ) : hasUnsavedChanges ? (
             <span className="text-yellow-600">Unsaved changes</span>
           ) : lastSavedTime ? (

@@ -36,6 +36,7 @@ const UserEvaluations = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [assignedBanks, setAssignedBanks] = useState([]);
   const [selectedBankId, setSelectedBankId] = useState("");
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -136,6 +137,12 @@ const UserEvaluations = () => {
       setAssignedBanks(uniqueBanks);
     }
   }, [evaluations]);
+
+  useEffect(() => {
+    if (responses && Object.keys(responses).length > 0) {
+      setHasUnsavedChanges(true);
+    }
+  }, [responses]);
 
   const fetchEvaluationDetails = async (evaluationId) => {
     try {
@@ -385,11 +392,17 @@ const UserEvaluations = () => {
     if (!open && evaluationCheckpointRef.current?.hasUnsavedChanges) {
       if (window.confirm('You have unsaved changes. Are you sure you want to close?')) {
         setSelectedEvaluation(null);
+        setHasUnsavedChanges(false);
+        setResponses({});
       }
       return;
     }
     // No unsaved changes, close normally
-    if (!open) setSelectedEvaluation(null);
+    if (!open) {
+      setSelectedEvaluation(null);
+      setHasUnsavedChanges(false);
+      setResponses({});
+    }
   };
 
   const handleEvaluationClick = (evaluation) => {
@@ -539,6 +552,9 @@ const UserEvaluations = () => {
                       </div>
                     )}
                 </DialogTitle>
+                <DialogDescription className="sr-only">
+                  Evaluation form for {selectedEvaluation?.evaluation_assignments?.users?.full_name}
+                </DialogDescription>
                 <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
                   <div className="flex items-center gap-3">
                     <span className="font-medium text-gray-700 min-w-[120px]">Bank Name:</span>
