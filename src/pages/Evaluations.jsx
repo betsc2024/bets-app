@@ -1308,8 +1308,6 @@ export default function Evaluations() {
                       </div>
                     </div>
                     <CardDescription>
-                      Created by: {group.creator?.full_name || 'Unknown'}
-                      <br />
                       Evaluations: {group.assignments.length}
                     </CardDescription>
                   </CardHeader>
