@@ -64,6 +64,16 @@ const UserEvaluations = () => {
     }
   };
 
+  const getEvaluationStatus = (evaluation) => {
+    if (evaluation.completed_at) {
+      return "completed";
+    }
+    if (evaluation.draft_responses && evaluation.draft_responses.length > 0) {
+      return "in_progress";
+    }
+    return "pending";
+  };
+
   const fetchEvaluations = async () => {
     try {
       setLoading(true);
@@ -81,8 +91,10 @@ const UserEvaluations = () => {
           ),
           is_self_evaluator,
           relationship_type,
-          started_at,
           completed_at,
+          draft_responses (
+            id
+          ),
           evaluation_assignments (
             id,
             evaluation_name,
@@ -434,7 +446,7 @@ const UserEvaluations = () => {
   const handleExit = async (action) => {
     switch (action) {
       case 'save':
-        // Check if there are unsaved changes
+        // Check if there are any existing responses
         if (evaluationCheckpointRef.current?.hasUnsavedChanges) {
           // Wait for auto-save to complete (2 seconds)
           await new Promise(resolve => setTimeout(resolve, 2500));
@@ -540,11 +552,13 @@ const UserEvaluations = () => {
                     <div className="flex items-center gap-2">
                       <span className="font-medium">Status:</span>
                       <span className={`px-3 py-1 rounded-full text-sm ${
-                        evaluation.status === 'completed' 
+                        getEvaluationStatus(evaluation) === 'completed' 
                           ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
+                          : getEvaluationStatus(evaluation) === 'in_progress'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {evaluation.status?.charAt(0).toUpperCase() + evaluation.status?.slice(1)}
+                        {getEvaluationStatus(evaluation)?.charAt(0).toUpperCase() + getEvaluationStatus(evaluation)?.slice(1)}
                       </span>
                     </div>
                   </div>
@@ -575,51 +589,60 @@ const UserEvaluations = () => {
                           <span className="text-purple-800">{selectedEvaluation?.evaluation_assignments?.users?.full_name}</span>
                           <span className="text-gray-600">as</span>
                           <span className="text-purple-700">{selectedEvaluation?.relationship_type?.replace(/_/g, ' ') || 'Peer'}</span>
+                          <span className="text-gray-600">by</span>
+                          <span className="text-purple-800">{selectedEvaluation?.evaluator?.full_name}</span>
                         </div>
                       )}
                   </DialogTitle>
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex items-center gap-2 text-sm mb-4">
                     <span className="font-medium text-gray-700">Bank:</span>
                     <span className="text-gray-600">
                       {selectedEvaluation?.evaluation_assignments?.attribute_banks?.name || 'N/A'}
                     </span>
                   </div>
+
+                  {/* Progress bar */}
+                  <div className="mb-4">
+                    <div className="text-sm mb-1">
+                      <span className="text-gray-600">Evaluation Progress</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-purple-600 h-full transition-all duration-300 ease-out"
+                        style={{ width: `${calculateProgress()}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                {/* Progress indicator - RESTORE PROGRESS SECTION, REMOVE EXTRA SPACE */}
+                {/* Attribute section */}
                 <div className="bg-purple-50 rounded-lg p-4 border-l-4 border-purple-600">
                   <div className="flex justify-between items-center">
                     <div>
-                      <h3 className="text-lg font-bold text-purple-800">
-                        {flattenedStatements[currentStatementIndex]?.attributeName}
+                      <h3 className="text-lg font-bold text-purple-800 flex items-center gap-2">
+                        {flattenedStatements[currentStatementIndex]?.attributeName} 
+                        <span className="text-gray-600 font-normal text-base">
+                          ({currentAttributeIndex + 1} / {attributeGroups.length})
+                        </span>
                       </h3>
-                      <div className="text-xs text-gray-600 mt-1">
-                        Attribute {currentAttributeIndex + 1} of {attributeGroups.length}
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      Statement {flattenedStatements[currentStatementIndex]?.statementNumberInSection} of {attributeGroups[currentAttributeIndex]?.statements.length}
                     </div>
                   </div>
                   {flattenedStatements[currentStatementIndex]?.attributeDescription && (
-                    <p className="text-gray-700 mt-2 text-sm">
+                    <p className="text-gray-700 mt-3 text-sm">
                       {flattenedStatements[currentStatementIndex].attributeDescription}
                     </p>
                   )}
                 </div>
-                {/* Subtle progress bar */}
-                <div className="mt-2 w-full bg-gray-100 h-1 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-purple-600/40 h-full transition-all duration-300 ease-out"
-                    style={{ width: `${calculateProgress()}%` }}
-                  />
-                </div>
-                {/* NO MARGIN OR PADDING BETWEEN PROGRESS AND STATEMENT SECTION */}
                 {flattenedStatements[currentStatementIndex] ? (
                   <div className="bg-gray-50 rounded-lg p-4 shadow-inner">
                     <div>
-                      <h4 className="text-base font-semibold text-purple-800">
-                        {flattenedStatements[currentStatementIndex].statementNumberInSection + ". " + flattenedStatements[currentStatementIndex].statement.statement}
+                      <h4 className="text-base font-semibold text-purple-800 flex items-baseline gap-2">
+                        <span>
+                          {flattenedStatements[currentStatementIndex].statementNumberInSection + ". " + flattenedStatements[currentStatementIndex].statement.statement}
+                        </span>
+                        <span className="text-sm text-gray-600 font-normal">
+                          ({flattenedStatements[currentStatementIndex]?.statementNumberInSection} / {attributeGroups[currentAttributeIndex]?.statements.length})
+                        </span>
                       </h4>
                     </div>
                     <RadioGroup

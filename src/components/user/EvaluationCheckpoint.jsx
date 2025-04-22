@@ -33,14 +33,14 @@ const EvaluationCheckpoint = forwardRef(({
           evaluation_id: evaluationId,
           statement_id: statementId,
           selected_option_id: selectedOptionId,
-          updated_at: new Date().toISOString()
+          last_updated: new Date().toISOString()
         }));
 
-        // First, delete existing responses for these statements
+        // Delete existing responses for these statements
         const statementIds = Object.keys(responses);
         if (statementIds.length > 0) {
           const { error: deleteError } = await supabase
-            .from('evaluation_responses')
+            .from('draft_responses')
             .delete()
             .eq('evaluation_id', evaluationId)
             .in('statement_id', statementIds);
@@ -50,7 +50,7 @@ const EvaluationCheckpoint = forwardRef(({
 
         // Then insert new responses
         const { error } = await supabase
-          .from('evaluation_responses')
+          .from('draft_responses')
           .insert(responseData);
 
         if (error) throw error;
