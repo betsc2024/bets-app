@@ -86,7 +86,8 @@ const Status = ({ userId, companyId, bankId }) => {
           completionPercentage: totalCount > 0 ? Math.round((completed / totalCount) * 100) : 0,
           isComplete: completed === totalCount && totalCount > 0
         };
-      });
+      }).filter(row => row.count > 0)
+        .map((row, idx) => ({ ...row, srNo: idx + 1 }));
 
       setStatusData(tableData);
       notifyParent(tableData); // Notify parent of status changes
