@@ -57,7 +57,14 @@ export default function AppSidebar({ isOpen, onToggle }) {
     { icon: Building, label: "Company Management", href: "/company-management" },
     { icon: Users2, label: "User Management", href: "/user-management" },
     { icon: ClipboardList, label: "Evaluations", href: "/evaluations" },
-    { icon: BarChart3, label: "Reports", href: "/reports" },
+    { 
+      icon: BarChart3, 
+      label: "Reports", 
+      href: "/reports", 
+      subItems: [
+        { icon: FileChartColumn, label: "Overall Status", href: "/reports/overall-status" },
+      ]
+    },
   ];
 
   const userSidebarItems = [
@@ -144,22 +151,48 @@ export default function AppSidebar({ isOpen, onToggle }) {
           {sidebarItems.map((item) => {
             const isActive = location.pathname === item.href;
             return (
-              <Button
-                key={item.label}
-                variant={isActive ? "default" : "ghost"}
-                className={`w-full ${isOpen ? 'justify-start px-4' : 'justify-center px-2'} gap-3 text-muted-foreground ${
-                  isActive 
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" 
-                    : "hover:bg-primary/10 hover:text-primary"
-                }`}
-                title={isOpen ? undefined : item.label}
-                asChild
-              >
-                <Link to={item.href}>
-                  <item.icon className="h-4 w-4" />
-                  {isOpen && <span className="font-medium">{item.label}</span>}
-                </Link>
-              </Button>
+              <div key={item.label}>
+                <Button
+                  variant={isActive ? "default" : "ghost"}
+                  className={`w-full ${isOpen ? 'justify-start px-4' : 'justify-center px-2'} gap-3 text-muted-foreground ${
+                    isActive 
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" 
+                      : "hover:bg-primary/10 hover:text-primary"
+                  }`}
+                  title={isOpen ? undefined : item.label}
+                  asChild
+                >
+                  <Link to={item.href}>
+                    <item.icon className="h-4 w-4" />
+                    {isOpen && <span className="font-medium">{item.label}</span>}
+                  </Link>
+                </Button>
+                {item.subItems && (
+                  <div className="ml-4">
+                    {item.subItems.map((subItem) => {
+                      const isSubActive = location.pathname === subItem.href;
+                      return (
+                        <Button
+                          key={subItem.label}
+                          variant={isSubActive ? "default" : "ghost"}
+                          className={`w-full ${isOpen ? 'justify-start px-4' : 'justify-center px-2'} gap-3 text-muted-foreground ${
+                            isSubActive 
+                              ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" 
+                              : "hover:bg-primary/10 hover:text-primary"
+                          }`}
+                          title={isOpen ? undefined : subItem.label}
+                          asChild
+                        >
+                          <Link to={subItem.href}>
+                            <subItem.icon className="h-4 w-4" />
+                            {isOpen && <span className="font-medium">{subItem.label}</span>}
+                          </Link>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

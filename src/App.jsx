@@ -24,6 +24,7 @@ import { useState } from 'react'
 import { Menu } from 'lucide-react'
 import UserReports from './components/user/UserReports'
 import AnalysisType from './pages/AnalysisType'
+import OverallStatus from '@/pages/OverallStatus'
 
 function Layout() {
   const { user } = useAuth()
@@ -62,6 +63,7 @@ function Layout() {
             <Route path="/analysis-type" element={<AdminRouteGuard><AnalysisType /></AdminRouteGuard>} />
             <Route path="/company-management" element={<AdminRouteGuard><CompanyManagement /></AdminRouteGuard>} />
             <Route path="/reports" element={<AdminRouteGuard><Reports /></AdminRouteGuard>} />
+            <Route path="/reports/overall-status" element={<AdminRouteGuard><OverallStatus /></AdminRouteGuard>} />
             <Route path="/evaluations" element={<AdminRouteGuard><Evaluations /></AdminRouteGuard>} />
             
             {/* User Routes */}
