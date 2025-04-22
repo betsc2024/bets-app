@@ -202,7 +202,7 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
             <div className="mb-4">
               <h5 className="text-sm text-gray-500 mb-2">Current Evaluators</h5>
               {evaluators.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-[300px] overflow-y-auto border rounded-md p-2">
                   {evaluators.map((evaluator) => (
                     <div key={evaluator.evaluator.id} className="flex items-center justify-between bg-gray-50 p-2 rounded">
                       <div>
