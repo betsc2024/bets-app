@@ -329,24 +329,34 @@ const UserEvaluations = () => {
 
       setIsSubmitting(true);
 
-      // Validate all responses
-      console.log(responses);
+      // First, check if there are any existing responses
+      const { data: existingResponses, error: fetchError } = await supabase
+        .from('evaluation_responses')
+        .select('id, statement_id')
+        .eq('evaluation_id', selectedEvaluation.id);
+
+      if (fetchError) throw fetchError;
 
       // Prepare response data
-      const responseData = statements.map(statement => ({
-        evaluation_id: selectedEvaluation.id,
-        statement_id: statement.id,
-        selected_option_id: responses[statement.id],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }));
+      const responseData = statements.map(statement => {
+        const existingResponse = existingResponses?.find(r => r.statement_id === statement.id);
+        return {
+          ...(existingResponse?.id ? { id: existingResponse.id } : {}), // Include id if it exists
+          evaluation_id: selectedEvaluation.id,
+          statement_id: statement.id,
+          selected_option_id: responses[statement.id],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+      });
 
-      console.log(responseData);
-
-      // Save responses
+      // Save responses using upsert
       const { error: responseError } = await supabase
         .from('evaluation_responses')
-        .upsert(responseData);
+        .upsert(responseData, {
+          onConflict: 'evaluation_id,statement_id',
+          ignoreDuplicates: false
+        });
 
       if (responseError) throw responseError;
 
