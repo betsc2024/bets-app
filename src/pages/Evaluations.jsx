@@ -1614,6 +1614,11 @@ export default function Evaluations() {
 
   return (
     <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Evaluations</h1>
+        </div>
+      </div>
            { showProgress && (
         <div className="fixed bottom-4 right-4 w-64 bg-white p-4 rounded-lg shadow-lg">
           <div className="text-sm mb-2">Sending email...</div>
