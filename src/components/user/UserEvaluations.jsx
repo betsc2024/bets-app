@@ -38,6 +38,7 @@ const UserEvaluations = () => {
   const [selectedBankId, setSelectedBankId] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState("all");
 
   useEffect(() => {
     if (user?.id) {
@@ -482,11 +483,11 @@ const UserEvaluations = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: 24, position: 'relative', maxWidth: 340 }}>
-        <label htmlFor="bank-select" className="text-sm font-medium mb-2 block text-foreground">
-          Select Bank:
-        </label>
-        <div className="relative">
+      <div style={{ marginBottom: 24 }} className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1" style={{ maxWidth: 340 }}>
+          <label htmlFor="bank-select" className="text-sm font-medium mb-2 block text-foreground">
+            Select Bank:
+          </label>
           <select
             id="bank-select"
             value={selectedBankId}
@@ -507,10 +508,36 @@ const UserEvaluations = () => {
           {selectedBankId && (
             <div className="text-sm text-muted-foreground mt-2 ml-1">
               Evaluations found: {
-                evaluations.filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId).length
+                evaluations
+                  .filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId)
+                  .filter(ev => selectedStatus === 'all' || getEvaluationStatus(ev) === selectedStatus)
+                  .length
               }
             </div>
           )}
+        </div>
+
+        <div className="relative" style={{ width: 200 }}>
+          <label htmlFor="status-select" className="text-sm font-medium mb-2 block text-foreground">
+            Status:
+          </label>
+          <select
+            id="status-select"
+            value={selectedStatus}
+            onChange={e => setSelectedStatus(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-4 py-2.5 text-sm
+              focus:border-primary hover:border-primary
+              file:border-0 file:bg-transparent file:text-sm file:font-medium 
+              placeholder:text-muted-foreground focus-visible:outline-none focus:ring-1
+              focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50
+              max-h-[200px] overflow-y-auto
+              scrollbar-thin scrollbar-thumb-primary scrollbar-track-primary/10"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
         </div>
       </div>
       {selectedBankId ? (
@@ -520,7 +547,10 @@ const UserEvaluations = () => {
           </h3>
 
           <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {evaluations.filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId).map((evaluation) => (
+            {evaluations
+              .filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId)
+              .filter(ev => selectedStatus === 'all' || getEvaluationStatus(ev) === selectedStatus)
+              .map((evaluation) => (
               <div
                 key={evaluation.id}
                 className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow cursor-pointer"
@@ -566,7 +596,10 @@ const UserEvaluations = () => {
               </div>
             ))}
 
-            {evaluations.filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId).length === 0 && (
+            {evaluations
+              .filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId)
+              .filter(ev => selectedStatus === 'all' || getEvaluationStatus(ev) === selectedStatus)
+              .length === 0 && (
               <div className="col-span-full text-center text-gray-500 py-8">
                 No pending evaluations found
               </div>
