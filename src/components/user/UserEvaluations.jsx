@@ -37,6 +37,7 @@ const UserEvaluations = () => {
   const [assignedBanks, setAssignedBanks] = useState([]);
   const [selectedBankId, setSelectedBankId] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -413,6 +414,34 @@ const UserEvaluations = () => {
     fetchEvaluationDetails(evaluation.id);
   };
 
+  // Calculate overall progress based on answered statements
+  const calculateProgress = () => {
+    if (!flattenedStatements.length) return 0;
+    const answeredStatements = Object.keys(responses).length;
+    return (answeredStatements / flattenedStatements.length) * 100;
+  };
+
+  const handleExit = async (action) => {
+    switch (action) {
+      case 'save':
+        // Check if there are unsaved changes
+        if (evaluationCheckpointRef.current?.hasUnsavedChanges) {
+          // Wait for auto-save to complete (2 seconds)
+          await new Promise(resolve => setTimeout(resolve, 2500));
+        }
+        setShowExitDialog(false);
+        handleDialogClose(false);
+        break;
+      case 'continue':
+        setShowExitDialog(false);
+        break;
+      case 'exit':
+        setShowExitDialog(false);
+        handleDialogClose(false);
+        break;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -423,7 +452,7 @@ const UserEvaluations = () => {
 
   if (error) {
     return (
-      <div className="text-center p-6 text-red-600">
+      <div className="text-center   -6 text-red-600">
         Error: {error}
       </div>
     );
@@ -445,7 +474,7 @@ const UserEvaluations = () => {
               file:border-0 file:bg-transparent file:text-sm file:font-medium 
               placeholder:text-muted-foreground focus-visible:outline-none focus:ring-1
               focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50
-              appearance-none pr-10 max-h-[200px] overflow-y-auto
+              max-h-[200px] overflow-y-auto
               scrollbar-thin scrollbar-thumb-primary scrollbar-track-primary/10"
           >
             <option value="">-- Choose a bank --</option>
@@ -453,26 +482,14 @@ const UserEvaluations = () => {
               <option key={bank.id} value={bank.id} className="py-1">{bank.name}</option>
             ))}
           </select>
-          <svg
-            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+          {selectedBankId && (
+            <div className="text-sm text-muted-foreground mt-2 ml-1">
+              Evaluations found: {
+                evaluations.filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId).length
+              }
+            </div>
+          )}
         </div>
-        {selectedBankId && (
-          <div className="text-sm text-muted-foreground mt-2 ml-1">
-            Evaluations found: {
-              evaluations.filter(ev => ev.evaluation_assignments?.attribute_banks?.id === selectedBankId).length
-            }
-          </div>
-        )}
       </div>
       {selectedBankId ? (
         <div className="container mx-auto py-6">
@@ -536,140 +553,130 @@ const UserEvaluations = () => {
             open={!!selectedEvaluation} 
             onOpenChange={handleDialogClose}
           >
-            <DialogContent className="max-w-4xl h-auto max-h-[90vh] flex flex-col">
-              <DialogHeader className="pb-6 border-b">
-                <DialogTitle className="text-2xl font-semibold">
-                  {selectedEvaluation?.is_self_evaluator 
-                    ? 'Self Evaluation' 
-                    : (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-gray-600">Evaluate:</span>
-                        <span className="text-purple-800">{selectedEvaluation?.evaluation_assignments?.users?.full_name}</span>
-                        <span className="text-gray-600">as</span>
-                        <span className="text-purple-700">{selectedEvaluation?.relationship_type?.replace(/_/g, ' ') || 'Peer'}</span>
-                        <span className="text-gray-600">by</span>
-                        <span className="text-purple-800">{selectedEvaluation?.evaluator?.full_name || 'Unknown User'}</span>
-                      </div>
-                    )}
-                </DialogTitle>
-                <DialogDescription className="sr-only">
-                  Evaluation form for {selectedEvaluation?.evaluation_assignments?.users?.full_name}
-                </DialogDescription>
-                <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium text-gray-700 min-w-[120px]">Bank Name:</span>
+            <DialogContent className="w-full max-w-full h-full p-2 sm:p-4 md:p-6 md:max-w-3xl lg:max-w-4xl xl:max-w-5xl max-h-[95vh] overflow-y-auto flex flex-col justify-between">
+              <DialogHeader className="pb-0 mb-0">
+                <div className="flex flex-col gap-1">
+                  <DialogTitle className="text-2xl font-semibold mb-0">
+                    {selectedEvaluation?.is_self_evaluator 
+                      ? 'Self Evaluation' 
+                      : (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-gray-600">Evaluate:</span>
+                          <span className="text-purple-800">{selectedEvaluation?.evaluation_assignments?.users?.full_name}</span>
+                          <span className="text-gray-600">as</span>
+                          <span className="text-purple-700">{selectedEvaluation?.relationship_type?.replace(/_/g, ' ') || 'Peer'}</span>
+                        </div>
+                      )}
+                  </DialogTitle>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="font-medium text-gray-700">Bank:</span>
                     <span className="text-gray-600">
                       {selectedEvaluation?.evaluation_assignments?.attribute_banks?.name || 'N/A'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium text-gray-700 min-w-[120px]">Evaluation Name:</span>
-                    <span className="text-gray-600">
-                      {selectedEvaluation?.evaluation_assignments?.evaluation_name || 'Unnamed Evaluation'}
-                    </span>
-                  </div>
-                  {selectedEvaluation?.status === 'completed' && (
-                    <div className="col-span-2">
-                      <div className="flex items-center gap-2 text-gray-500 bg-gray-50 px-4 py-2.5 rounded-md border border-gray-100">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
-                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                        </svg>
-                        This evaluation is in read-only mode
+                </div>
+
+                {/* Progress indicator - RESTORE PROGRESS SECTION, REMOVE EXTRA SPACE */}
+                <div className="bg-purple-50 rounded-lg p-4 border-l-4 border-purple-600">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-lg font-bold text-purple-800">
+                        {flattenedStatements[currentStatementIndex]?.attributeName}
+                      </h3>
+                      <div className="text-xs text-gray-600 mt-1">
+                        Attribute {currentAttributeIndex + 1} of {attributeGroups.length}
                       </div>
                     </div>
+                    <div className="text-sm text-gray-600">
+                      Statement {flattenedStatements[currentStatementIndex]?.statementNumberInSection} of {attributeGroups[currentAttributeIndex]?.statements.length}
+                    </div>
+                  </div>
+                  {flattenedStatements[currentStatementIndex]?.attributeDescription && (
+                    <p className="text-gray-700 mt-2 text-sm">
+                      {flattenedStatements[currentStatementIndex].attributeDescription}
+                    </p>
                   )}
                 </div>
-              </DialogHeader>
-
-              <div className="flex-grow px-6 py-4 overflow-auto">
-                {attributeGroups.length > 0 && flattenedStatements.length > 0 ? (
-                  <div className="space-y-6">
-                    {/* Progress indicator */}
-                    <div className="bg-purple-50 rounded-lg p-4 mb-6 border-l-4 border-purple-600 sticky top-0 z-10">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className="text-lg font-bold text-purple-800">
-                            {flattenedStatements[currentStatementIndex]?.attributeName}
-                          </h3>
-                          <div className="text-xs text-gray-600 mt-1">
-                            Attribute {currentAttributeIndex + 1} of {attributeGroups.length}
-                          </div>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          Statement {flattenedStatements[currentStatementIndex]?.statementNumberInSection} of {attributeGroups[currentAttributeIndex]?.statements.length}
-                        </div>
-                      </div>
-                      
-                      {/* Attribute description if available */}
-                      {flattenedStatements[currentStatementIndex]?.attributeDescription && (
-                        <p className="text-gray-700 mt-2 text-sm">
-                          {flattenedStatements[currentStatementIndex].attributeDescription}
-                        </p>
-                      )}
+                {/* Subtle progress bar */}
+                <div className="mt-2 w-full bg-gray-100 h-1 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-purple-600/40 h-full transition-all duration-300 ease-out"
+                    style={{ width: `${calculateProgress()}%` }}
+                  />
+                </div>
+                {/* NO MARGIN OR PADDING BETWEEN PROGRESS AND STATEMENT SECTION */}
+                {flattenedStatements[currentStatementIndex] ? (
+                  <div className="bg-gray-50 rounded-lg p-4 shadow-inner">
+                    <div>
+                      <h4 className="text-base font-semibold text-purple-800">
+                        {flattenedStatements[currentStatementIndex].statementNumberInSection + ". " + flattenedStatements[currentStatementIndex].statement.statement}
+                      </h4>
                     </div>
-
-                    {/* Current statement with its options */}
-                    {flattenedStatements[currentStatementIndex] && (
-                      <div className="bg-gray-50 rounded-lg p-4 shadow-inner mb-4">
-                        <div className="mb-3">
-                          <h4 className="text-base font-semibold text-purple-800">
-                            {flattenedStatements[currentStatementIndex].statementNumberInSection + ". " + flattenedStatements[currentStatementIndex].statement.statement}
-                          </h4>
-                        </div>
-
-                        <RadioGroup
-                          value={responses[flattenedStatements[currentStatementIndex].statement.id]}
-                          onValueChange={(value) => {
-                            if (selectedEvaluation?.status === 'completed') {
-                              toast.error('This evaluation has been completed and cannot be edited');
-                              return;
-                            }
-                            handleOptionSelect(flattenedStatements[currentStatementIndex].statement.id, value);
-                          }}
-                          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-                        >
-                          {flattenedStatements[currentStatementIndex].statement.attribute_statement_options
-                            ?.sort((a, b) => b.weight - a.weight)
-                            .map((option) => (
-                              <div 
-                                key={option.id}
-                                className="flex items-center space-x-2 bg-white p-3 rounded-md shadow-sm hover:bg-gray-50 h-full"
-                              >
-                                <RadioGroupItem 
-                                  value={option.id} 
-                                  id={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
-                                  className="h-4 w-4"
-                                />
-                                <Label 
-                                  htmlFor={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
-                                  className="flex-1 text-gray-700 cursor-pointer text-sm"
-                                >
-                                  {option.option_text}
-                                </Label>
-                              </div>
-                            ))}
-                        </RadioGroup>
-                      </div>
-                    )}
+                    <RadioGroup
+                      value={responses[flattenedStatements[currentStatementIndex].statement.id]}
+                      onValueChange={(value) => {
+                        if (selectedEvaluation?.status === 'completed') {
+                          toast.error('This evaluation has been completed and cannot be edited');
+                          return;
+                        }
+                        handleOptionSelect(flattenedStatements[currentStatementIndex].statement.id, value);
+                      }}
+                      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+                    >
+                      {flattenedStatements[currentStatementIndex].statement.attribute_statement_options
+                        ?.sort((a, b) => b.weight - a.weight)
+                        .map((option) => (
+                          <div 
+                            key={option.id}
+                            className="flex items-center space-x-2 bg-white p-3 rounded-md shadow-sm hover:bg-gray-50 h-full"
+                          >
+                            <RadioGroupItem 
+                              value={option.id} 
+                              id={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
+                              className="h-4 w-4"
+                            />
+                            <Label 
+                              htmlFor={`option-${flattenedStatements[currentStatementIndex].statement.id}-${option.id}`}
+                              className="flex-1 text-gray-700 cursor-pointer text-sm"
+                            >
+                              {option.option_text}
+                            </Label>
+                          </div>
+                        ))}
+                    </RadioGroup>
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="text-center text-gray-500">No statement found.</div>
+                )}
+              </DialogHeader>
+
+              <div className="flex-grow px-6 -mt-4 mb-0">
+                {attributeGroups.length > 0 && flattenedStatements.length > 0 ? (
+                  <div>
+                    {/* Current statement with its options */}
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-500">
                     Loading statements...
                   </div>
                 )}
               </div>
 
-              <div className="border-t">
+              <div className="border-t mt-0">
                 {selectedEvaluation?.status !== 'completed' && (
-                  <div className="p-4">
+                  <div className="px-4 py-2">
                     <EvaluationCheckpoint 
                       ref={evaluationCheckpointRef}
                       evaluationId={selectedEvaluation?.id}
                       responses={responses}
                       setResponses={setResponses}
                       isSubmitting={isSubmitting}
-                      onCancel={() => handleDialogClose(false)}
+                      onCancel={() => setShowExitDialog(true)}
                       onSubmit={handleSubmitEvaluation}
+                      buttonText={{
+                        cancel: 'Exit',
+                        submit: 'Submit'
+                      }}
                       rightContent={
                         <div className="flex items-center space-x-2">
                           <Button
@@ -709,6 +716,49 @@ const UserEvaluations = () => {
                     />
                   </div>
                 )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Exit confirmation dialog */}
+          <Dialog 
+            open={showExitDialog} 
+            onOpenChange={(open) => {
+              setShowExitDialog(open);
+              if (!open) {
+                // If dialog is being closed by clicking outside
+                setShowExitDialog(false);
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Exit Evaluation?</DialogTitle>
+                <DialogDescription>
+                  Choose how you would like to proceed:
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-2 mt-4">
+                <Button 
+                  variant="default" 
+                  className="bg-purple-600 hover:bg-purple-700"
+                  onClick={() => handleExit('save')}
+                >
+                  Save and Exit
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => handleExit('continue')}
+                >
+                  Continue Evaluating
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => handleExit('exit')}
+                >
+                  Exit Without Saving
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
