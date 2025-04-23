@@ -1,3 +1,4 @@
+localStorage.removeItem('supabase.auth.token');
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Button } from "@/components/ui/button"
 import Login from '@/components/auth/Login'
