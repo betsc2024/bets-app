@@ -87,6 +87,12 @@ export default function Reports() {
 
   const barChartRef = useRef(null);
 
+  // Progressive selection states for hiding/showing dropdowns
+  const [companyStepDone, setCompanyStepDone] = useState(false);
+  const [bankStepDone, setBankStepDone] = useState(false);
+  const [reportType, setReportType] = useState('individual'); // Only 'individual' for now
+  const [employeeStepDone, setEmployeeStepDone] = useState(false);
+
   const fetchData = async (selectedCompany, selectedUser , selectedAnalysis = "",selectedBank = "") => {
     try {
       setBarData(null);
@@ -595,106 +601,98 @@ export default function Reports() {
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
       <div className="flex flex-wrap gap-4 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+          {/* Company Selection */}
           <Select value={selectedCompany?.id} onValueChange={(value) => {
             const company = companies.find(c => c.id === value);
             setSelectedCompany(company);
+            setCompanyStepDone(true);
+            setSelectedUser(null); // Reset downstream selections
+            setBank("");
+            setBankStepDone(false);
+            setEmployeeStepDone(false);
           }}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a company" />
             </SelectTrigger>
             <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
               <SelectGroup>
-                <SelectLabel className="flex items-center justify-between">
-                  Companies
-                  
-                </SelectLabel>
+                <SelectLabel className="flex items-center justify-between">Companies</SelectLabel>
                 {[...companies].sort((a, b) => a.name.localeCompare(b.name)).map((company) => (
-                  <SelectItem key={company.id} value={company.id}>
-                    {company.name}
-                  </SelectItem>
+                  <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
                 ))}
               </SelectGroup>
             </SelectContent>
           </Select>
 
-          <Select value={selectedUser?.id} onValueChange={(value) => {
-            const user = users.find(c => c.id === value);
-            setSelectedUser(user);
-          }}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a Employee" />
-            </SelectTrigger>
-            <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
-              <SelectGroup>
-                <SelectLabel className="flex items-center justify-between">
-                  Users
-                  
-                </SelectLabel>
-                {[...users].sort((a, b) => a.full_name.localeCompare(b.full_name)).map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.full_name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Select value={analysis} onValueChange={handleAnalysisChange}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select an Analysis Type" />
-            </SelectTrigger>
-            <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
-              <SelectGroup>
-                <SelectLabel className="flex items-center justify-between">
-                  Analysis Types
-                  
-                </SelectLabel>
-                {[...analysisTypeList].sort((a, b) => a.name.localeCompare(b.name)).map((item) => (
-                  item?.id && item?.name ? (
-                    <SelectItem 
-                      key={item.id} 
-                      value={item.name}
-                    >
-                      {item.name}
-                    </SelectItem>
-                  ) : null
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          {/* Bank Selection: only show if company selected */}
+          {selectedCompany && (
+            <Select value={bank} onValueChange={(value) => {
+              setBank(value);
+              setBankStepDone(true);
+              setSelectedUser(null); // Reset employee selection
+              setEmployeeStepDone(false);
+            }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a Bank" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
+                <SelectGroup>
+                  <SelectLabel className="flex items-center justify-between">Banks</SelectLabel>
+                  {[...bankList].sort((a, b) => a.name.localeCompare(b.name)).map((item) => (
+                    item?.id && item?.name ? (
+                      <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                    ) : null
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
 
-          <Select value={bank} onValueChange={(value) => {
-            setBank(value);
-          }}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a Bank" />
-            </SelectTrigger>
-            <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
-              <SelectGroup>
-                <SelectLabel className="flex items-center justify-between">
-                  Banks
-                  
-                </SelectLabel>
-                {[...bankList].sort((a, b) => a.name.localeCompare(b.name)).map((item) => (
-                  item?.id && item?.name ? (
-                    <SelectItem 
-                      key={item.id} 
-                      value={item.id}
-                    >
-                      {item.name}
-                    </SelectItem>
-                  ) : null
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          {/* Report Type Selection: only show if company and bank selected */}
+          {selectedCompany && bank && (
+            <Select value={reportType} onValueChange={(value) => {
+              setReportType(value);
+              setEmployeeStepDone(false);
+              setSelectedUser(null);
+            }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select Report Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Report Type</SelectLabel>
+                  <SelectItem value="individual">Individual Report</SelectItem>
+                  {/* Future: <SelectItem value="status">Status Report</SelectItem> */}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Employee Selection: only show if company, bank, and report type selected */}
+          {selectedCompany && bank && reportType === 'individual' && (
+            <Select value={selectedUser?.id} onValueChange={(value) => {
+              const user = users.find(c => c.id === value);
+              setSelectedUser(user);
+              setEmployeeStepDone(true);
+            }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select an Employee" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
+                <SelectGroup>
+                  <SelectLabel className="flex items-center justify-between">Users</SelectLabel>
+                  {[...users].sort((a, b) => a.full_name.localeCompare(b.full_name)).map((user) => (
+                    <SelectItem key={user.id} value={user.id}>{user.full_name}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
-      {!isSelectionsValid() ? (
-        <div className="text-center text-gray-500 mt-8">
-          Please select Company, User, Analysis Type and Bank to view the data.
-        </div>
-      ) : (
+      {/* Only show the rest of the UI if all selections are made */}
+      {selectedCompany && bank && reportType === 'individual' && selectedUser && (
         <div className="space-y-6" ref={barChartRef}>
           {/* Always show Status component if selections are valid */}
           <Status 
