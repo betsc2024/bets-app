@@ -22,6 +22,7 @@ import DemographyEvaluation from '@/components/evaluations/DemographyEvaluation'
 import Status from '@/components/evaluations/Status';
 import CopyToClipboard from '@/components/CopyToClipboard';
 import html2canvas from "html2canvas";
+import OverallStatus from './OverallStatus';
 
 import {
   Select,
@@ -90,8 +91,77 @@ export default function Reports() {
   // Progressive selection states for hiding/showing dropdowns
   const [companyStepDone, setCompanyStepDone] = useState(false);
   const [bankStepDone, setBankStepDone] = useState(false);
-  const [reportType, setReportType] = useState('individual'); // Only 'individual' for now
+  const [reportType, setReportType] = useState(''); // Only 'individual' for now
   const [employeeStepDone, setEmployeeStepDone] = useState(false);
+  const [selectedEvaluationGroup, setSelectedEvaluationGroup] = useState(null); // For status report
+  const [evaluationGroups, setEvaluationGroups] = useState([]); // For status report
+
+  // Fetch evaluation groups for status report (matching OverallStatus logic)
+  const fetchEvaluationGroups = async () => {
+    if (!selectedCompany || !bank) return;
+    try {
+      const { data: assignments, error } = await supabase
+        .from('evaluation_assignments')
+        .select(`
+          id,
+          evaluation_name,
+          created_at,
+          user_to_evaluate:users!evaluation_assignments_user_to_evaluate_id_fkey (
+            id,
+            email,
+            full_name
+          ),
+          evaluations:evaluations_evaluation_assignment_id_fkey (
+            id,
+            status,
+            is_self_evaluator,
+            relationship_type,
+            evaluator:users!evaluations_evaluator_id_fkey (
+              id,
+              email,
+              full_name
+            )
+          )
+        `)
+        .eq('company_id', selectedCompany.id)
+        .eq('attribute_bank_id', bank)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Group assignments by evaluation name
+      const groups = assignments.reduce((acc, curr) => {
+        if (!acc[curr.evaluation_name]) {
+          acc[curr.evaluation_name] = {
+            name: curr.evaluation_name,
+            assignments: []
+          };
+        }
+        acc[curr.evaluation_name].assignments.push(curr);
+        return acc;
+      }, {});
+
+      // Convert to array and sort by latest assignment
+      const groupArray = Object.values(groups).sort((a, b) => {
+        const aDate = new Date(a.assignments[0].created_at);
+        const bDate = new Date(b.assignments[0].created_at);
+        return bDate - aDate;
+      });
+
+      setEvaluationGroups(groupArray);
+    } catch (error) {
+      console.error('Error fetching evaluations:', error);
+      toast.error('Failed to load evaluations');
+      setEvaluationGroups([]);
+    }
+  };
+
+  // Fetch evaluation groups when bank changes and reportType is 'status'
+  useEffect(() => {
+    if (reportType === 'status' && selectedCompany && bank) {
+      fetchEvaluationGroups();
+    }
+  }, [reportType, selectedCompany, bank]);
 
   const fetchData = async (selectedCompany, selectedUser , selectedAnalysis = "",selectedBank = "") => {
     try {
@@ -610,6 +680,7 @@ export default function Reports() {
             setBank("");
             setBankStepDone(false);
             setEmployeeStepDone(false);
+            setSelectedEvaluationGroup(null);
           }}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a company" />
@@ -631,6 +702,7 @@ export default function Reports() {
               setBankStepDone(true);
               setSelectedUser(null); // Reset employee selection
               setEmployeeStepDone(false);
+              setSelectedEvaluationGroup(null);
             }}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a Bank" />
@@ -654,6 +726,7 @@ export default function Reports() {
               setReportType(value);
               setEmployeeStepDone(false);
               setSelectedUser(null);
+              setSelectedEvaluationGroup(null);
             }}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select Report Type" />
@@ -662,13 +735,13 @@ export default function Reports() {
                 <SelectGroup>
                   <SelectLabel>Report Type</SelectLabel>
                   <SelectItem value="individual">Individual Report</SelectItem>
-                  {/* Future: <SelectItem value="status">Status Report</SelectItem> */}
+                  <SelectItem value="status">Status Report</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
           )}
 
-          {/* Employee Selection: only show if company, bank, and report type selected */}
+          {/* Employee Selection: only show if company, bank, and report type is 'individual' */}
           {selectedCompany && bank && reportType === 'individual' && (
             <Select value={selectedUser?.id} onValueChange={(value) => {
               const user = users.find(c => c.id === value);
@@ -688,10 +761,30 @@ export default function Reports() {
               </SelectContent>
             </Select>
           )}
+
+          {/* Evaluation Selection: only show if reportType is 'status' */}
+          {selectedCompany && bank && reportType === 'status' && (
+            <Select value={selectedEvaluationGroup?.name || ''} onValueChange={(value) => {
+              const group = evaluationGroups.find(g => g.name === value);
+              setSelectedEvaluationGroup(group);
+            }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select Evaluation" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[200px] overflow-y-auto">
+                <SelectGroup>
+                  <SelectLabel>Evaluations</SelectLabel>
+                  {evaluationGroups.map((group) => (
+                    <SelectItem key={group.name} value={group.name}>{group.name}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
-      {/* Only show the rest of the UI if all selections are made */}
+      {/* Individual Report UI */}
       {selectedCompany && bank && reportType === 'individual' && selectedUser && (
         <div className="space-y-6" ref={barChartRef}>
           {/* Always show Status component if selections are valid */}
@@ -762,6 +855,18 @@ export default function Reports() {
               No evaluation data available yet
             </div>
           )}
+        </div>
+      )}
+
+      {/* Status Report UI */}
+      {selectedCompany && bank && reportType === 'status' && selectedEvaluationGroup && (
+        <div className="space-y-6" ref={barChartRef}>
+          {/* Render OverallStatus with proper props */}
+          <OverallStatus
+            companyId={selectedCompany?.id}
+            bankId={bank}
+            evaluationGroup={selectedEvaluationGroup}
+          />
         </div>
       )}
     </div>

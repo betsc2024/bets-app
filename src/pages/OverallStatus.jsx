@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 
-export default function OverallStatus() {
+export default function OverallStatus({ companyId, bankId, evaluationGroup }) {
   // States for dropdowns
   const [companies, setCompanies] = useState([]);
   const [selectedCompany, setSelectedCompany] = useState(null);
@@ -31,27 +31,51 @@ export default function OverallStatus() {
   const [evaluationGroups, setEvaluationGroups] = useState([]);
   const [selectedEvaluationGroup, setSelectedEvaluationGroup] = useState(null);
 
-  // Fetch companies on component mount
+  // If props are provided, use them and skip dropdowns
   useEffect(() => {
-    fetchCompanies();
+    if (companyId) {
+      setSelectedCompany({ id: companyId });
+    }
+  }, [companyId]);
+  useEffect(() => {
+    if (bankId) {
+      setSelectedBank({ id: bankId });
+    }
+  }, [bankId]);
+  useEffect(() => {
+    if (evaluationGroup) {
+      setSelectedEvaluationGroup(evaluationGroup);
+    }
+  }, [evaluationGroup]);
+
+  // Fetch companies on component mount (only if not provided)
+  useEffect(() => {
+    if (!companyId) fetchCompanies();
   }, []);
 
-  // Fetch banks when company is selected
+  // Fetch banks when company is selected (only if not provided)
   useEffect(() => {
-    if (selectedCompany) {
+    if (!companyId && selectedCompany) {
       fetchBanks();
       setSelectedBank(null);
       setSelectedEvaluationGroup(null);
     }
   }, [selectedCompany]);
 
-  // Fetch evaluations when bank is selected
+  // Fetch evaluations when bank is selected (only if not provided)
   useEffect(() => {
-    if (selectedBank) {
+    if (!bankId && selectedBank) {
       fetchEvaluations();
       setSelectedEvaluationGroup(null);
     }
   }, [selectedBank]);
+
+  // Fetch evaluations if all props are provided
+  useEffect(() => {
+    if (companyId && bankId && !evaluationGroup) {
+      fetchEvaluations();
+    }
+  }, [companyId, bankId]);
 
   // Fetch companies from Supabase
   const fetchCompanies = async () => {
@@ -328,81 +352,87 @@ export default function OverallStatus() {
     <div className="p-6 max-w-full">
       <h1 className="text-3xl font-bold text-primary mb-4">Overall Status</h1>
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full mb-6">
-        {/* Company Selection */}
-        <Select 
-          value={selectedCompany?.id} 
-          onValueChange={(value) => {
-            const company = companies.find(c => c.id === value);
-            setSelectedCompany(company);
-          }}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select a Company" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Companies</SelectLabel>
-              {companies.map((company) => (
-                <SelectItem key={company.id} value={company.id}>
-                  {company.name}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+      {!(companyId && bankId && evaluationGroup) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full mb-6">
+          {/* Company Selection */}
+          <Select 
+            value={selectedCompany?.id} 
+            onValueChange={(value) => {
+              const company = companies.find(c => c.id === value);
+              setSelectedCompany(company);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select a Company" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Companies</SelectLabel>
+                {companies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
 
-        {/* Bank Selection */}
-        <Select 
-          value={selectedBank?.id} 
-          onValueChange={(value) => {
-            const bank = banks.find(b => b.id === value);
-            setSelectedBank(bank);
-          }}
-          disabled={!selectedCompany}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select Bank" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Banks</SelectLabel>
-              {banks.map((bank) => (
-                <SelectItem key={bank.id} value={bank.id}>
-                  {bank.name}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+          {/* Bank Selection */}
+          <Select 
+            value={selectedBank?.id} 
+            onValueChange={(value) => {
+              const bank = banks.find(b => b.id === value);
+              setSelectedBank(bank);
+            }}
+            disabled={!selectedCompany}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select Bank" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Banks</SelectLabel>
+                {banks.map((bank) => (
+                  <SelectItem key={bank.id} value={bank.id}>
+                    {bank.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
 
-        {/* Evaluation Selection */}
-        <Select 
-          value={selectedEvaluationGroup?.name} 
-          onValueChange={(value) => {
-            const group = evaluationGroups.find(g => g.name === value);
-            setSelectedEvaluationGroup(group);
-          }}
-          disabled={!selectedBank}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select Evaluation" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Evaluations</SelectLabel>
-              {evaluationGroups.map((group) => (
-                <SelectItem key={group.name} value={group.name}>
-                  {group.name}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
+          {/* Evaluation Selection */}
+          <Select 
+            value={selectedEvaluationGroup?.name} 
+            onValueChange={(value) => {
+              const group = evaluationGroups.find(g => g.name === value);
+              setSelectedEvaluationGroup(group);
+            }}
+            disabled={!selectedBank}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select Evaluation" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Evaluations</SelectLabel>
+                {evaluationGroups.map((group) => (
+                  <SelectItem key={group.name} value={group.name}>
+                    {group.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
-      {/* Evaluation Table */}
-      {renderEvaluationTable()}
+      {/* Evaluation Table: Show if all selections are made (from props or state) */}
+      {(companyId && bankId && evaluationGroup) || (selectedCompany && selectedBank && selectedEvaluationGroup) ? (
+        <div>
+          {renderEvaluationTable()}
+        </div>
+      ) : null}
     </div>
   );
 }
