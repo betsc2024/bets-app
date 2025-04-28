@@ -62,7 +62,7 @@ export default function AppSidebar({ isOpen, onToggle }) {
       label: "Reports", 
       href: "/reports", 
       subItems: [
-        { icon: FileChartColumn, label: "Overall Status", href: "/reports/overall-status" },
+        // { icon: FileChartColumn, label: "Overall Status", href: "/reports/overall-status" },
       ]
     },
   ];

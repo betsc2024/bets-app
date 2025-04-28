@@ -189,7 +189,8 @@ export default function OverallStatus({ companyId, bankId, evaluationGroup }) {
               <TableRow className="border-b">
                 <TableHead className="border-r">Employee</TableHead>
                 <TableHead className="border-r text-center">Self Evaluation</TableHead>
-                <TableHead>Evaluators</TableHead>
+                <TableHead className="border-l">Evaluation Counts</TableHead>
+                <TableHead className="border-l">Evaluators</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -228,8 +229,33 @@ export default function OverallStatus({ companyId, bankId, evaluationGroup }) {
                     </div>
                   </TableCell>
 
+                  {/* Evaluation Counts */}
+                  <TableCell className="border-l">
+                    {/* Mini-table for relationship type counts */}
+                    <div className="flex flex-col gap-1">
+                      {(() => {
+                        // Group evaluations by relationship_type
+                        const relMap = {};
+                        assignment.evaluations?.forEach(e => {
+                          if (e.is_self_evaluator) return;
+                          const type = e.relationship_type || 'Peer';
+                          if (!relMap[type]) relMap[type] = { pending: 0, completed: 0 };
+                          if ((e.status || '').toLowerCase() === 'completed') relMap[type].completed += 1;
+                          else relMap[type].pending += 1;
+                        });
+                        // Render mini-table
+                        return Object.entries(relMap).map(([type, counts]) => (
+                          <div key={type} className="flex flex-row gap-2 text-xs">
+                            <span className="font-semibold">{type}:</span>
+                            <span>Pending: {counts.pending}, Completed: {counts.completed}</span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </TableCell>
+
                   {/* Evaluators */}
-                  <TableCell>
+                  <TableCell className="border-l">
                     <div className="flex flex-wrap gap-2">
                       {assignment.evaluations
                         ?.filter(e => !e.is_self_evaluator)
