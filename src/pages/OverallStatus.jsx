@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "../components/ui/scroll-area";
 
 export default function OverallStatus({ companyId, bankId, evaluationGroup }) {
   // States for dropdowns
@@ -30,6 +31,9 @@ export default function OverallStatus({ companyId, bankId, evaluationGroup }) {
   const [selectedBank, setSelectedBank] = useState(null);
   const [evaluationGroups, setEvaluationGroups] = useState([]);
   const [selectedEvaluationGroup, setSelectedEvaluationGroup] = useState(null);
+
+  // Add state for employee filter
+  const [employeeFilter, setEmployeeFilter] = useState('all-employees');
 
   // If props are provided, use them and skip dropdowns
   useEffect(() => {
@@ -171,18 +175,58 @@ export default function OverallStatus({ companyId, bankId, evaluationGroup }) {
   const renderEvaluationTable = () => {
     if (!selectedEvaluationGroup) return null;
 
+    // Get all employees from assignments in selectedEvaluationGroup
+    const employeeList = selectedEvaluationGroup && selectedEvaluationGroup.assignments
+      ? selectedEvaluationGroup.assignments.map(a => a.user_to_evaluate)
+      : [];
+
+    // Remove duplicates by id and sort alphabetically by full_name
+    const uniqueEmployees = employeeList
+      .filter((emp, idx, arr) => emp && arr.findIndex(e => e.id === emp.id) === idx)
+      .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+
+    // Filter assignments for table rendering
+    const filteredAssignments = employeeFilter === 'all-employees'
+      ? (selectedEvaluationGroup?.assignments || [])
+      : (selectedEvaluationGroup?.assignments || []).filter(a => a.user_to_evaluate?.id === employeeFilter);
+
     // Get all assignments for this evaluation group
-    const assignments = selectedEvaluationGroup.assignments;
+    // const assignments = selectedEvaluationGroup.assignments;
 
     // Sort assignments by employee name
-    const sortedAssignments = [...assignments].sort((a, b) => {
-      const nameA = a.user_to_evaluate?.full_name || '';
-      const nameB = b.user_to_evaluate?.full_name || '';
-      return nameA.localeCompare(nameB);
-    });
+    // const sortedAssignments = [...assignments].sort((a, b) => {
+    //   const nameA = a.user_to_evaluate?.full_name || '';
+    //   const nameB = b.user_to_evaluate?.full_name || '';
+    //   return nameA.localeCompare(nameB);
+    // });
 
     return (
       <div className="mt-6">
+        {/* Employee filter dropdown */}
+        {uniqueEmployees.length > 0 && (
+          <div className="mb-4">
+            <Select
+              value={employeeFilter}
+              onValueChange={setEmployeeFilter}
+              className="min-w-[220px]"
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by Employee" />
+              </SelectTrigger>
+              <SelectContent>
+                <ScrollArea className="h-[300px]">
+                  <SelectGroup>
+                    <SelectLabel>Employees</SelectLabel>
+                    <SelectItem value="all-employees">All Employees</SelectItem>
+                    {uniqueEmployees.map(user => (
+                      <SelectItem key={user.id} value={user.id}>{user.full_name}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </ScrollArea>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -194,7 +238,7 @@ export default function OverallStatus({ companyId, bankId, evaluationGroup }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedAssignments.map((assignment) => (
+              {filteredAssignments.map((assignment) => (
                 <TableRow key={assignment.id} className="border-b">
                   {/* Employee Name */}
                   <TableCell className="border-r">
