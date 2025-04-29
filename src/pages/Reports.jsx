@@ -666,22 +666,44 @@ export default function Reports() {
     };
   }, []);
 
+  const handleResetFilters = () => {
+    setSelectedCompany(null);
+    setSelectedUser(null);
+    setAnalysis("");
+    setBank("");
+    setSelectedAttribute(null);
+    setScoreType(null);
+    setBarData(null);
+    setLabels(null);
+    setRelationResults(null);
+    setTableData([]);
+    setTotal([]);
+    setDemographicAttributes([]);
+    setDemographicData([]);
+    setDemographicTypes([]);
+    setDemographicBarData([]);
+    setEvaluationCounts({});
+    setSelectedEvaluationGroup(null);
+    setEvaluationGroups([]);
+  };
+
   return (
     <div className="p-6 max-w-full">
       <h1 className="text-3xl font-bold text-primary mb-4">Reports</h1>
-      <div className="flex flex-wrap gap-4 mb-6">
+      <div className="flex items-center gap-2 mb-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
           {/* Company Selection */}
-          <Select value={selectedCompany?.id} onValueChange={(value) => {
-            const company = companies.find(c => c.id === value);
-            setSelectedCompany(company);
-            setCompanyStepDone(true);
-            setSelectedUser(null); // Reset downstream selections
-            setBank("");
-            setBankStepDone(false);
-            setEmployeeStepDone(false);
-            setSelectedEvaluationGroup(null);
-          }}>
+          <Select
+            value={selectedCompany?.id || ''}
+            onValueChange={(value) => {
+              const company = companies.find(c => c.id === value);
+              setSelectedCompany(company || null);
+              setBank("");
+              setBankStepDone(false);
+              setEmployeeStepDone(false);
+              setSelectedEvaluationGroup(null);
+            }}
+          >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a company" />
             </SelectTrigger>
@@ -782,6 +804,11 @@ export default function Reports() {
             </Select>
           )}
         </div>
+        {(selectedCompany || selectedUser || analysis || bank || selectedAttribute || scoreType) && (
+          <Button variant="outline" onClick={handleResetFilters} className="ml-2">
+            Clear
+          </Button>
+        )}
       </div>
 
       {/* Individual Report UI */}
