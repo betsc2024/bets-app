@@ -61,7 +61,8 @@ export default function AttributeBank() {
     description: '',
     analysis_type_id: '',
     status: 'active',
-    company_id: null
+    company_id: null,
+    ideal_score: ''
   });
   const [selectedStatements, setSelectedStatements] = useState(new Set()); // Initialize as empty Set
   const [availableStatements, setAvailableStatements] = useState([]);
@@ -135,6 +136,7 @@ export default function AttributeBank() {
           status,
           company_id,
           analysis_type_id,
+          ideal_score,
           created_at,
           analysis_types (
             name
@@ -477,7 +479,8 @@ export default function AttributeBank() {
           description: newBank.description || '',
           analysis_type_id: newBank.analysis_type_id,
           status: 'active',
-          company_id: selectedCompany === 'all' ? null : selectedCompany
+          company_id: selectedCompany === 'all' ? null : selectedCompany,
+          ideal_score: newBank.ideal_score !== '' ? Number(newBank.ideal_score) : null
         })
         .select()
         .single();
@@ -662,8 +665,7 @@ export default function AttributeBank() {
       const updateFields = {
         name: updatedData.name,
         description: updatedData.description,
-        company_id: updatedData.company_id === 'null' ? null : updatedData.company_id, // Don't convert to number, keep as UUID string
-        status: updatedData.status
+        company_id: updatedData.company_id === 'null' ? null : updatedData.company_id // Don't convert to number, keep as UUID string
       };
       console.log('Update fields:', updateFields); // Debug log
 
@@ -1030,7 +1032,8 @@ export default function AttributeBank() {
                   description: '',
                   analysis_type_id: '',
                   status: 'active',
-                  company_id: null
+                  company_id: null,
+                  ideal_score: ''
                 });
                 setAnalysisType('');
                 setSelectedCompany('all');
@@ -1201,6 +1204,16 @@ export default function AttributeBank() {
                           onChange={(e) => setNewBank(prev => ({ ...prev, description: e.target.value }))}
                         />
                       </div>
+                      <div>
+                        <Label>Ideal Score</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={newBank.ideal_score}
+                          onChange={e => setNewBank(prev => ({ ...prev, ideal_score: e.target.value }))}
+                          placeholder="Enter ideal score"
+                        />
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
@@ -1237,7 +1250,8 @@ export default function AttributeBank() {
                       description: '',
                       analysis_type_id: '',
                       status: 'active',
-                      company_id: null
+                      company_id: null,
+                      ideal_score: ''
                     });
                     setAnalysisType('');
                     setSelectedCompany('all');
@@ -1487,6 +1501,9 @@ function BankList({ banks, onBankSelect, onRefresh, setSelectedBank, setIsEditDi
                   <span className="text-xs text-muted-foreground truncate">
                     {bank.companies?.name || 'No Company'}
                   </span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    Ideal Score: {bank.ideal_score == null ? 0 : bank.ideal_score}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1544,7 +1561,8 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
   const [editedBank, setEditedBank] = useState({
     name: '',
     status: '',
-    company_id: 'none'
+    company_id: 'none',
+    ideal_score: ''
   });
 
   useEffect(() => {
@@ -1553,7 +1571,8 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
       setEditedBank({
         name: bank.name || '',
         status: bank.status || 'draft',
-        company_id: bank.company_id || 'none' // Keep UUID string as is
+        company_id: bank.company_id || 'none', // Keep UUID string as is
+        ideal_score: bank.ideal_score == null ? '' : bank.ideal_score
       });
     }
   }, [bank?.id]);
@@ -1742,7 +1761,8 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
         .update({
           name: editedBank.name,
           status: editedBank.status,
-          company_id: editedBank.company_id === 'none' ? null : editedBank.company_id // Don't convert to number, keep as UUID string
+          company_id: editedBank.company_id === 'none' ? null : editedBank.company_id, // Don't convert to number, keep as UUID string
+          ideal_score: editedBank.ideal_score !== '' ? Number(editedBank.ideal_score) : null
         })
         .eq('id', bank.id)
         .select(`
@@ -1873,55 +1893,19 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
       <div className="flex items-center justify-between">
         <div className="space-y-4 flex-1 mr-4">
           {isEditMode ? (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
-                <Label>Analysis Type</Label>
-                <Input
-                  value={bank.analysis_types?.name || 'Not Set'}
-                  disabled
-                />
-              </div>
-              <div>
-                <Label>Bank Name</Label>
+                <Label>Name</Label>
                 <Input
                   value={editedBank.name}
-                  onChange={(e) => setEditedBank(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Enter bank name"
+                  onChange={e => setEditedBank(prev => ({ ...prev, name: e.target.value }))}
                 />
-              </div>
-              <div>
-                <Label>Company</Label>
-                <Select
-                  value={editedBank.company_id}
-                  onValueChange={(value) => {
-                    console.log('Company selected:', value);
-                    setEditedBank(prev => {
-                      const updated = { ...prev, company_id: value };
-                      console.log('Updated editedBank:', updated);
-                      return updated;
-                    });
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a Company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="none">No Company</SelectItem>
-                      {companies?.map(company => (
-                        <SelectItem key={company.id} value={String(company.id)}>
-                          {company.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
               </div>
               <div>
                 <Label>Status</Label>
                 <Select
                   value={editedBank.status}
-                  onValueChange={(value) => setEditedBank(prev => ({ ...prev, status: value }))}
+                  onValueChange={value => setEditedBank(prev => ({ ...prev, status: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
@@ -1934,6 +1918,34 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label>Company</Label>
+                <Select
+                  value={editedBank.company_id}
+                  onValueChange={value => setEditedBank(prev => ({ ...prev, company_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="none">None</SelectItem>
+                      {companies.map(company => (
+                        <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Ideal Score</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={editedBank.ideal_score}
+                  onChange={e => setEditedBank(prev => ({ ...prev, ideal_score: e.target.value }))}
+                />
+              </div>
             </div>
           ) : (
             <>
@@ -1944,6 +1956,8 @@ function BankDetails({ bank, onRefresh, setSelectedBank, industries }) {
                 <span>Company: {bank.companies?.name || 'No Company'}</span>
                 <span>•</span>
                 <span>Status: {bank.status}</span>
+                <span>•</span>
+                <span>Ideal Score: {bank.ideal_score == null ? 0 : bank.ideal_score}</span>
                 <span>•</span>
                 <span>Created: {bank.created_at ? new Date(bank.created_at).toLocaleDateString('en-US', { 
                   year: 'numeric',
