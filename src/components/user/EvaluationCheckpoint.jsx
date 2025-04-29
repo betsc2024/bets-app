@@ -94,7 +94,7 @@ const EvaluationCheckpoint = forwardRef(({
             onClick={onCancel}
             disabled={isSaving || isSubmitting}
           >
-            Cancel
+            Exit
           </Button>
           {rightContent}
         </div>
