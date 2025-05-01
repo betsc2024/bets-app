@@ -304,7 +304,7 @@ export default function UserManagement() {
 
   // Calculate user statistics
   const userStats = {
-    total: filteredUsers.length,
+    total: filteredUsers.filter(user => user.role !== 'super_admin').length,
     superAdmins: filteredUsers.filter(user => user.role === 'super_admin').length,
     companyAdmins: filteredUsers.filter(user => user.role === 'company_admin').length,
     users: filteredUsers.filter(user => user.role === 'user').length
@@ -693,13 +693,21 @@ export default function UserManagement() {
         <CardHeader>
           <CardTitle>Users</CardTitle>
           <CardDescription className="flex gap-4 text-sm text-muted-foreground mt-1">
-            <span>Total: {userStats.total}</span>
-            <span>•</span>
-            <span>Super Admins: {userStats.superAdmins}</span>
-            <span>•</span>
-            <span>Company Admins: {userStats.companyAdmins}</span>
-            <span>•</span>
-            <span>Users: {userStats.users}</span>
+            {userStats.total > 0 && (
+              <span>Total: {userStats.total}</span>
+            )}
+            {userStats.companyAdmins > 0 && (
+              <>
+                <span>•</span>
+                <span>Company Admins: {userStats.companyAdmins}</span>
+              </>
+            )}
+            {userStats.users > 0 && (
+              <>
+                <span>•</span>
+                <span>Users: {userStats.users}</span>
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -730,52 +738,54 @@ export default function UserManagement() {
                   </TableCell>
                 </TableRow>
               ) : (
-                currentPageUsers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>{user.companies?.name || 'No Company'}</TableCell>
-                    <TableCell>{user.full_name}</TableCell>
-                    <TableCell>{user.department || 'No Department'}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        user.role === 'super_admin' 
-                          ? 'bg-red-100 text-red-800'
-                          : user.role === 'company_admin'
-                            ? 'bg-purple-100 text-purple-800' 
-                            : 'bg-green-100 text-green-800'
-                      }`}>
-                        {user.role === 'super_admin' 
-                          ? 'Super Admin' 
-                          : user.role === 'company_admin' 
-                            ? 'Company Admin' 
-                            : 'User'}
-                      </span>
-                    </TableCell>
-                    <TableCell>{formatDate(user.created_at)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {canEditUser(user) && (
+                currentPageUsers
+                  .filter(user => user.role !== 'super_admin')
+                  .map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell>{user.companies?.name || 'No Company'}</TableCell>
+                      <TableCell>{user.full_name}</TableCell>
+                      <TableCell>{user.department || 'No Department'}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          user.role === 'super_admin' 
+                            ? 'bg-red-100 text-red-800'
+                            : user.role === 'company_admin'
+                              ? 'bg-purple-100 text-purple-800' 
+                              : 'bg-green-100 text-green-800'
+                        }`}>
+                          {user.role === 'super_admin' 
+                            ? 'Super Admin' 
+                            : user.role === 'company_admin' 
+                              ? 'Company Admin' 
+                              : 'User'}
+                        </span>
+                      </TableCell>
+                      <TableCell>{formatDate(user.created_at)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          {canEditUser(user) && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              title="Edit user"
+                              onClick={() => openEditDialog(user)}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            title="Edit user"
-                            onClick={() => openEditDialog(user)}
+                            title="Delete user"
+                            onClick={() => setUserToDelete(user)}
                           >
-                            <Edit2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
-                        )}
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          title="Delete user"
-                          onClick={() => setUserToDelete(user)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
               )}
             </TableBody>
           </Table>
