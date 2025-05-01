@@ -135,10 +135,10 @@ export default function UserManagement() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => {
+      const updated = { ...prev, [name]: value };
+      return updated;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -256,6 +256,7 @@ export default function UserManagement() {
           full_name: formData.full_name,
           role: formData.role,
           company_id: formData.companyId,
+          department: formData.department, // Added to update department
           updated_at: new Date().toISOString()
         })
         .eq('id', editingUser.id);
@@ -666,8 +667,9 @@ export default function UserManagement() {
                 </label>
                 <Input
                   id="department"
+                  name="department"
                   value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  onChange={handleInputChange}
                   className="col-span-3"
                 />
               </div>
