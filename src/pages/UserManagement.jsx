@@ -339,67 +339,7 @@ export default function UserManagement() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Email</label>
-                  <Input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Password</label>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? "text" : "password"}
-                      name="password"
-                      value={formData.password}
-                      onChange={handleInputChange}
-                      required
-                      autoComplete="new-password"
-                    />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      className="absolute inset-y-0 right-2 flex items-center px-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors hover:bg-primary/5 active:bg-primary/10 group"
-                      style={{ background: 'none', border: 'none' }}
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                      ) : (
-                        <Eye className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Full Name</label>
-                  <Input
-                    type="text"
-                    name="full_name"
-                    value={formData.full_name}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Department</label>
-                  <Input
-                    type="text"
-                    name="department"
-                    value={formData.department}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-
+                {/* Reordered fields as per user instructions */}
                 <div className="space-y-2">
                   <label className="text-right">Company</label>
                   <div className="col-span-3">
@@ -469,13 +409,73 @@ export default function UserManagement() {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-sm font-medium">User Name</label>
+                  <Input
+                    type="text"
+                    name="full_name"
+                    value={formData.full_name}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Department</label>
+                  <Input
+                    type="text"
+                    name="department"
+                    value={formData.department}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Email</label>
+                  <Input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Password</label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      name="password"
+                      value={formData.password}
+                      onChange={handleInputChange}
+                      required
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      className="absolute inset-y-0 right-2 flex items-center px-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors hover:bg-primary/5 active:bg-primary/10 group"
+                      style={{ background: 'none', border: 'none' }}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      ) : (
+                        <Eye className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-sm font-medium">Role</label>
                   <Select
                     value={formData.role}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, role: value }))}
-                    disabled
+                    onValueChange={value => setFormData(prev => ({ ...prev, role: value }))}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
@@ -706,11 +706,12 @@ export default function UserManagement() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>Full Name</TableHead>
-                <TableHead>Role</TableHead>
+                {/* Table columns reordered to match onboarding form */}
                 <TableHead>Company</TableHead>
+                <TableHead>Full Name</TableHead>
                 <TableHead>Department</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
                 <TableHead>Created At</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -731,8 +732,10 @@ export default function UserManagement() {
               ) : (
                 currentPageUsers.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell>{user.email}</TableCell>
+                    <TableCell>{user.companies?.name || 'No Company'}</TableCell>
                     <TableCell>{user.full_name}</TableCell>
+                    <TableCell>{user.department || 'No Department'}</TableCell>
+                    <TableCell>{user.email}</TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         user.role === 'super_admin' 
@@ -748,8 +751,6 @@ export default function UserManagement() {
                             : 'User'}
                       </span>
                     </TableCell>
-                    <TableCell>{user.companies?.name || 'No Company'}</TableCell>
-                    <TableCell>{user.department || 'No Department'}</TableCell>
                     <TableCell>{formatDate(user.created_at)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
