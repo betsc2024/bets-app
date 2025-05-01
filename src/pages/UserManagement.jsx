@@ -361,15 +361,20 @@ export default function UserManagement() {
                       required
                       autoComplete="new-password"
                     />
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3"
-                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                      className="absolute inset-y-0 right-2 flex items-center px-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors hover:bg-primary/5 active:bg-primary/10 group"
+                      style={{ background: 'none', border: 'none' }}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
+                      {showPassword ? (
+                        <EyeOff className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      ) : (
+                        <Eye className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      )}
+                    </button>
                   </div>
                 </div>
 

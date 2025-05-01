@@ -7,12 +7,14 @@ import { Label } from "@/components/ui/label"
 import { supabase } from '../../supabase'
 import { themeConfig } from '../../config/theme'
 import BEtsLogo from '../../assets/BEtS-Logo.svg'
+import { Eye, EyeOff } from "lucide-react"
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -128,16 +130,32 @@ export default function Login() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className={`${error ? 'border-destructive focus-visible:ring-destructive' : 'focus-visible:ring-primary/30'}`}
-                  disabled={loading}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className={`${error ? 'border-destructive focus-visible:ring-destructive' : 'focus-visible:ring-primary/30'}`}
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="absolute inset-y-0 right-2 flex items-center px-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors hover:bg-primary/5 active:bg-primary/10 group"
+                    style={{ background: 'none', border: 'none' }}
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    ) : (
+                      <Eye className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    )}
+                  </button>
+                </div>
               </div>
               {error && (
                 <div className="text-sm text-destructive font-medium">
@@ -160,4 +178,3 @@ export default function Login() {
     </div>
   )
 }
-10
