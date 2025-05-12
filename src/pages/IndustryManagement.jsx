@@ -78,17 +78,17 @@ export default function IndustryManagement() {
         if (error.code === '23505') { // Unique constraint violation
           toast.error(`An industry named "${newIndustry.name}" already exists. Please use a different name.`);
         } else {
-          toast.error('Failed to add industry. Please try again.');
+          toast.error('Failed to add industry type. Please try again.');
           console.error('Error:', error);
         }
         return;
       }
       
-      toast.success('Industry added successfully');
+      toast.success('Industry type added successfully');
       setNewIndustry({ name: '', description: '' });
       fetchIndustries();
     } catch (error) {
-      toast.error('Failed to add industry. Please try again.');
+      toast.error('Failed to add industry type. Please try again.');
       console.error('Error:', error);
     } finally {
       setLoading(false);
@@ -137,10 +137,10 @@ export default function IndustryManagement() {
 
       if (error) throw error;
       
-      toast.success('Industry deleted successfully');
+      toast.success('Industry type deleted successfully');
       fetchIndustries();
     } catch (error) {
-      toast.error('Error deleting industry');
+      toast.error('Error deleting industry type');
       console.error('Error:', error);
     } finally {
       setIndustryToDelete(null);
@@ -161,22 +161,22 @@ export default function IndustryManagement() {
   return (
     <div className="flex-1 w-full">
       <div className="space-y-8">
-        <h1 className="text-3xl font-bold text-primary">Industry Management</h1>
+        <h1 className="text-3xl font-bold text-primary">Industry Type Management</h1>
         
         {/* Top section with Add and Search */}
         <div className="w-full">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
             {/* Add Industry Form */}
             <Card className="p-4 lg:p-6">
-              <h2 className="text-lg sm:text-xl font-semibold mb-4">Add New Industry</h2>
+              <h2 className="text-lg sm:text-xl font-semibold mb-4">Add New Industry Type</h2>
               <form onSubmit={addIndustry} className="space-y-4">
                 <div>
-                  <Label htmlFor="name">Industry Name</Label>
+                  <Label htmlFor="name">Industry Type Name</Label>
                   <Input
                     id="name"
                     value={newIndustry.name}
                     onChange={(e) => setNewIndustry({ ...newIndustry, name: e.target.value })}
-                    placeholder="Enter industry name"
+                    placeholder="Enter industry type name"
                     required
                     className="mt-1"
                   />
@@ -187,12 +187,12 @@ export default function IndustryManagement() {
                     id="description"
                     value={newIndustry.description}
                     onChange={(e) => setNewIndustry({ ...newIndustry, description: e.target.value })}
-                    placeholder="Enter industry description"
+                    placeholder="Enter industry type description"
                     className="mt-1"
                   />
                 </div>
                 <Button type="submit" disabled={loading} className="w-full">
-                  {loading ? 'Adding...' : 'Add Industry'}
+                  {loading ? 'Adding...' : 'Add Industry Type'}
                 </Button>
               </form>
             </Card>
@@ -224,7 +224,7 @@ export default function IndustryManagement() {
 
         {/* Industries List Section */}
         <div>
-          <h2 className="text-xl font-semibold mb-4">Available Industries</h2>
+          <h2 className="text-xl font-semibold mb-4">Available Industry Types</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4">
             {currentItems.map((industry) => (
               <Card key={industry.id} className="p-4">
