@@ -44,7 +44,8 @@ export default function UserManagement() {
     full_name: '',
     role: 'user',
     companyId: null,
-    department: ''
+    department: '',
+    designation: ''
   });
   const [message, setMessage] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
@@ -164,7 +165,8 @@ export default function UserManagement() {
         p_full_name: formData.full_name.trim(),
         p_role: formData.role,
         p_company_id: formData.companyId,
-        p_department: formData.department.trim()
+        p_department: (formData.department || '').trim(),
+        p_designation: (formData.designation || '').trim()
       });
 
       if (error) {
@@ -187,7 +189,8 @@ export default function UserManagement() {
         full_name: '',
         role: 'user',
         companyId: null,
-        department: ''
+        department: '',
+        designation: ''
       });
       
       // Refresh user list
@@ -257,6 +260,7 @@ export default function UserManagement() {
           role: formData.role,
           company_id: formData.companyId,
           department: formData.department, // Added to update department
+          designation: formData.designation,
           updated_at: new Date().toISOString()
         })
         .eq('id', editingUser.id);
@@ -289,6 +293,7 @@ export default function UserManagement() {
       role: user.role,
       companyId: user.company_id,
       department: user.department,
+      designation: user.designation || '',
       password: ''
     });
     setIsEditDialogOpen(true);
@@ -426,6 +431,17 @@ export default function UserManagement() {
                     type="text"
                     name="department"
                     value={formData.department}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Designation</label>
+                  <Input
+                    type="text"
+                    name="designation"
+                    value={formData.designation}
                     onChange={handleInputChange}
                     required
                   />
@@ -673,6 +689,18 @@ export default function UserManagement() {
                   className="col-span-3"
                 />
               </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <label htmlFor="designation" className="text-right">
+                  Designation
+                </label>
+                <Input
+                  id="designation"
+                  name="designation"
+                  value={formData.designation}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                />
+              </div>
             </div>
             <div className="flex justify-end space-x-2 mt-4">
               <Button
@@ -720,6 +748,7 @@ export default function UserManagement() {
                 <TableHead>Company</TableHead>
                 <TableHead>Full Name</TableHead>
                 <TableHead>Department</TableHead>
+                <TableHead>Designation</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Created At</TableHead>
@@ -747,6 +776,7 @@ export default function UserManagement() {
                       <TableCell>{user.companies?.name || 'No Company'}</TableCell>
                       <TableCell>{user.full_name}</TableCell>
                       <TableCell>{user.department || 'No Department'}</TableCell>
+                      <TableCell>{user.designation || 'No Designation'}</TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
