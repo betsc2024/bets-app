@@ -1895,9 +1895,16 @@ export default function Evaluations() {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Edit Evaluation</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="flex items-center">
+                <User2 className="h-5 w-5 mr-2" />
+                <span className="font-medium text-purple-600">{editingEvaluation?.user_to_evaluate?.full_name || 'Employee'}</span>
+              </div>
+              <span className="mx-2">-</span>
+              <span>Edit Evaluation</span>
+            </DialogTitle>
             <DialogDescription>
-              Manage evaluators and update evaluation details.
+              Manage evaluators and update evaluation details for this employee.
             </DialogDescription>
           </DialogHeader>
           <EditEvaluationForm
