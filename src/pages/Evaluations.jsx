@@ -9,7 +9,26 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "../components/ui/pagination";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "../components/ui/drawer";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "../components/ui/dialog";
 import { Button } from '../components/ui/button';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -28,18 +47,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "../components/ui/dialog";
+
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from '../components/ui/select';
 import { MultiSelect } from '../components/ui/multi-select';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
 import * as Progress from "@radix-ui/react-progress";
 import emailjs from '@emailjs/browser';
@@ -124,6 +136,7 @@ export default function Evaluations() {
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogSearchQuery, setDialogSearchQuery] = useState("");
+  const [expandedUserId, setExpandedUserId] = useState(null);
   const [selectedUsersToEvaluate, setSelectedUsersToEvaluate] = useState([]);
   const [selectedEvaluators, setSelectedEvaluators] = useState(new Map());
   const [evaluatorRelationships, setEvaluatorRelationships] = useState(new Map());
@@ -1450,118 +1463,7 @@ export default function Evaluations() {
     });
   };
 
-  const EvaluatorDialog = () => {
-    if (!showAssignDialog) return null;
 
-    const filteredUsers = users
-      .filter(u => u.id !== currentUserId)
-      .filter(u => 
-        u.full_name.toLowerCase().includes(dialogSearchQuery.toLowerCase()) ||
-        u.email.toLowerCase().includes(dialogSearchQuery.toLowerCase())
-      );
-
-    const isUserAdded = (userId) => {
-      const currentEvaluators = selectedEvaluators.get(currentUserId) || [];
-      return currentEvaluators.includes(userId);
-    };
-
-    const getRelationshipLabel = (type) => {
-      const relationship = relationshipTypes.find(t => t.value === type);
-      return relationship ? relationship.label : '';
-    };
-
-    return (
-      <Dialog 
-        open={showAssignDialog} 
-        onOpenChange={(open) => {
-          setShowAssignDialog(open);
-          if (!open) {
-            setRelationshipTypeMap(new Map());
-            setDialogSearchQuery("");
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader>
-            <DialogTitle>Add Evaluators</DialogTitle>
-            <DialogDescription>
-              Select evaluators and their relationship types
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <Input
-                placeholder="Search evaluators..."
-                value={dialogSearchQuery}
-                onChange={(e) => setDialogSearchQuery(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-            <ScrollArea className="h-[400px]">
-              <div className="space-y-2 p-2">
-                {filteredUsers.map((u) => {
-                  const added = isUserAdded(u.id);
-                  const relationshipType = added ? getRelationshipLabel(relationshipTypeMap.get(u.id)) : null;
-                  
-                  return (
-                    <div key={u.id} className="flex items-center space-x-2 rounded-lg hover:bg-accent p-2">
-                      <div className="flex-grow">
-                        <div className="font-medium">{u.full_name}</div>
-                        <div className="text-sm text-muted-foreground">{u.email}</div>
-                      </div>
-                      {added ? (
-                        <>
-                          <div className="text-sm text-purple-600 font-medium">{relationshipType}</div>
-                          <div className="text-sm text-green-600 font-medium">Added</div>
-                        </>
-                      ) : (
-                        <>
-                          <Select
-                            value={relationshipTypeMap.get(u.id) || 'default'}
-                            onValueChange={(value) => handleRelationshipChange(u.id, value)}
-                          >
-                            <SelectTrigger className="w-[200px] h-8 text-sm">
-                              <SelectValue placeholder="Relationship" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="default">Select Relationship</SelectItem>
-                              {relationshipTypes.map(type => (
-                                <SelectItem key={type.value} value={type.value}>
-                                  {type.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => {
-                              const relationType = relationshipTypeMap.get(u.id);
-                              if (relationType && relationType !== 'default') {
-                                addEvaluator(currentUserId, u.id, relationType);
-                                setDialogSearchQuery("");
-                              } else {
-                                toast.error("Please select a relationship type");
-                              }
-                            }}
-                          >
-                            Add
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  };
 
   const openEditDialog = (evaluation) => {
     console.log('Opening edit dialog for evaluation:', evaluation);
@@ -1730,83 +1632,214 @@ export default function Evaluations() {
                         className="pl-9 h-9"
                       />
                     </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Employees</TableHead>
-                          <TableHead>Self Evaluation</TableHead>
-                          <TableHead>Assigned to Evaluate</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredUsers.map((user) => (
-                          <TableRow key={user.id}>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{user.full_name}</span>
-                                <span className="text-sm text-muted-foreground">{user.email}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center">
-                                <Checkbox
-                                  checked={selfEvaluations[user.id] || false}
-                                  onCheckedChange={(checked) => {
-                                    setSelfEvaluations(prev => ({
-                                      ...prev,
-                                      [user.id]: checked
-                                    }));
-                                  }}
-                                  disabled={selectedAssignmentForView !== null}
-                                />
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-wrap gap-2">
-                                {(selectedEvaluators.get(user.id) || []).map((evaluatorId) => {
-                                  const evaluator = users.find((u) => u.id === evaluatorId);
-                                  const relationshipType = evaluatorRelationships.get(`${user.id}-${evaluatorId}`) || 'peer';
-                                  return evaluator ? (
-                                    <Badge
-                                      key={evaluatorId}
-                                      variant="outline"
-                                      className="inline-flex items-center gap-2 bg-secondary/20 px-2 py-1 text-sm"
-                                    >
-                                      <span className="max-w-[150px] truncate">
-                                        {evaluator.full_name}
-                                      </span>
-                                      <span className={getRelationshipBadgeStyle(relationshipType)}>
-                                        {relationshipType}
-                                      </span>
-                                      <button
-                                        onClick={() => removeEvaluator(user.id, evaluatorId)}
-                                        className="ml-1 text-red-500 hover:text-red-700"
+                    <div className="flex">
+                      <div className={`flex-1 transition-all duration-300 ${expandedUserId ? 'w-[60%]' : 'w-full'}`}>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Employees</TableHead>
+                              <TableHead>Self Evaluation</TableHead>
+                              <TableHead>Assigned to Evaluate</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredUsers.map((user) => (
+                              <TableRow 
+                                key={user.id} 
+                                className={expandedUserId === user.id ? 'bg-accent/20' : undefined}
+                              >
+                                <TableCell>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{user.full_name}</span>
+                                    <span className="text-sm text-muted-foreground">{user.email}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center">
+                                    <Checkbox
+                                      checked={selfEvaluations[user.id] || false}
+                                      onCheckedChange={(checked) => {
+                                        setSelfEvaluations(prev => ({
+                                          ...prev,
+                                          [user.id]: checked
+                                        }));
+                                      }}
+                                      disabled={selectedAssignmentForView !== null}
+                                    />
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(selectedEvaluators.get(user.id) || []).map((evaluatorId) => {
+                                      const evaluator = users.find((u) => u.id === evaluatorId);
+                                      const relationshipType = evaluatorRelationships.get(`${user.id}-${evaluatorId}`) || 'peer';
+                                      return evaluator ? (
+                                        <Badge
+                                          key={evaluatorId}
+                                          variant="outline"
+                                          className="inline-flex items-center gap-2 bg-secondary/20 px-2 py-1 text-sm"
+                                        >
+                                          <span className="max-w-[150px] truncate">
+                                            {evaluator.full_name}
+                                          </span>
+                                          <span className={getRelationshipBadgeStyle(relationshipType)}>
+                                            {relationshipType}
+                                          </span>
+                                          <button
+                                            onClick={() => removeEvaluator(user.id, evaluatorId)}
+                                            className="ml-1 text-red-500 hover:text-red-700"
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </button>
+                                        </Badge>
+                                      ) : null;
+                                    })}
+                                    {!selectedAssignmentForView && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="ml-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200 hover:border-purple-300"
+                                        onClick={() => {
+                                          setCurrentUserId(user.id);
+                                          setExpandedUserId(expandedUserId === user.id ? null : user.id);
+                                          setDialogSearchQuery("");
+                                        }}
                                       >
-                                        <X className="h-3 w-3" />
-                                      </button>
-                                    </Badge>
-                                  ) : null;
-                                })}
-                                {!selectedAssignmentForView && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="ml-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200 hover:border-purple-300"
-                                    onClick={() => {
-                                      setCurrentUserId(user.id);
-                                      setShowAssignDialog(true);
-                                    }}
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                    Add
-                                  </Button>
-                                )}
+                                        {expandedUserId === user.id ? (
+                                          <>
+                                            <X className="w-4 h-4 mr-1" />
+                                            Close
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Plus className="w-4 h-4 mr-1" />
+                                            Add
+                                          </>
+                                        )}
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      
+                      {expandedUserId && (
+                        <Dialog open={!!expandedUserId} onOpenChange={(open) => !open && setExpandedUserId(null)}>
+                          <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                              <DialogTitle className="text-lg font-medium text-purple-800">
+                                Add Evaluators for {users.find(u => u.id === expandedUserId)?.full_name}
+                              </DialogTitle>
+                              <DialogDescription>
+                                Select evaluators and their relationship to assign for evaluation.
+                              </DialogDescription>
+                            </DialogHeader>
+                            
+                            <div className="relative my-2">
+                              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                                <Search className="h-4 w-4 text-muted-foreground" />
                               </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                              <Input
+                                placeholder="Search evaluators..."
+                                value={dialogSearchQuery}
+                                onChange={(e) => setDialogSearchQuery(e.target.value)}
+                                className="pl-9 h-9"
+                              />
+                            </div>
+                            
+                            <div className="max-h-[60vh] overflow-y-auto pr-2 border rounded-md">
+                              {users
+                                .filter(u => u.id !== expandedUserId)
+                                .filter(u => 
+                                  u.full_name.toLowerCase().includes(dialogSearchQuery.toLowerCase()) ||
+                                  u.email.toLowerCase().includes(dialogSearchQuery.toLowerCase())
+                                )
+                                .map((u) => {
+                                  const isAdded = (selectedEvaluators.get(expandedUserId) || []).includes(u.id);
+                                  return (
+                                  <div 
+                                    key={u.id} 
+                                    className="flex items-center justify-between p-3 border-b last:border-0 hover:bg-accent/30 rounded-md mb-1"
+                                  >
+                                    <div className="flex-grow">
+                                      <div className="font-medium">{u.full_name}</div>
+                                      <div className="text-sm text-muted-foreground">{u.email}</div>
+                                    </div>
+                                    
+                                    {isAdded ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className={getRelationshipBadgeStyle(evaluatorRelationships.get(`${expandedUserId}-${u.id}`) || 'peer')}>
+                                          {evaluatorRelationships.get(`${expandedUserId}-${u.id}`) || 'peer'}
+                                        </span>
+                                        <Button 
+                                          size="sm" 
+                                          variant="destructive"
+                                          onClick={() => removeEvaluator(expandedUserId, u.id)}
+                                        >
+                                          Remove
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-2">
+                                        <Select
+                                          value={relationshipTypeMap.get(u.id) || 'default'}
+                                          onValueChange={(value) => handleRelationshipChange(u.id, value)}
+                                        >
+                                          <SelectTrigger className="w-[150px] h-8 text-sm border-purple-200 text-purple-800 font-medium">
+                                            <SelectValue placeholder="Relationship" />
+                                          </SelectTrigger>
+                                          <SelectContent className="bg-white">
+                                            <SelectItem value="default" className="text-gray-500 font-medium">Select Relationship</SelectItem>
+                                            {relationshipTypes.map(type => (
+                                              <SelectItem key={type.value} value={type.value} className="text-purple-800 font-medium">
+                                                {type.label}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <Button
+                                          size="sm"
+                                          className="bg-purple-600 text-white hover:bg-purple-700 border-purple-400"
+                                          onClick={() => {
+                                            const relationType = relationshipTypeMap.get(u.id);
+                                            if (relationType && relationType !== 'default') {
+                                              addEvaluator(expandedUserId, u.id, relationType);
+                                              // Don't reset search query to maintain context
+                                            } else {
+                                              toast.error("Please select a relationship type");
+                                            }
+                                          }}
+                                        >
+                                          Add
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <DialogFooter>
+                              <Button 
+                                variant="outline" 
+                                onClick={() => setExpandedUserId(null)}
+                                className="mr-2"
+                              >
+                                Cancel
+                              </Button>
+                              <Button 
+                                className="bg-purple-600 text-white hover:bg-purple-700"
+                                onClick={() => setExpandedUserId(null)}
+                              >
+                                Done
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -1859,7 +1892,6 @@ export default function Evaluations() {
           </div>
         </TabsContent>
       </Tabs>
-      <EvaluatorDialog />
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
