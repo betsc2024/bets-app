@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Eye, EyeOff, Edit2, Trash2, Search, Plus } from 'lucide-react';
+import { Eye, EyeOff, Edit2, Trash2, Search, Plus, Filter } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import {
   AlertDialog,
@@ -36,6 +36,7 @@ import {
 import { ChevronDown } from 'lucide-react';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { cn } from '../lib/utils';
+import { Label } from '../components/ui/label';
 
 export default function UserManagement() {
   const [formData, setFormData] = useState({
@@ -63,6 +64,22 @@ export default function UserManagement() {
   const [companyDialogOpen, setCompanyDialogOpen] = useState(false);
   const [companySearchQuery, setCompanySearchQuery] = useState('');
   const itemsPerPage = 6; // 6 users per page as requested
+  
+  // Filter states
+  const [nameFilterDialogOpen, setNameFilterDialogOpen] = useState(false);
+  const [companyFilterDialogOpen, setCompanyFilterDialogOpen] = useState(false);
+  const [emailFilterDialogOpen, setEmailFilterDialogOpen] = useState(false);
+  const [designationFilterDialogOpen, setDesignationFilterDialogOpen] = useState(false);
+  
+  const [nameFilterQuery, setNameFilterQuery] = useState('');
+  const [companyFilterQuery, setCompanyFilterQuery] = useState('');
+  const [emailFilterQuery, setEmailFilterQuery] = useState('');
+  const [designationFilterQuery, setDesignationFilterQuery] = useState('');
+  
+  const [selectedNameFilter, setSelectedNameFilter] = useState('all');
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState('all');
+  const [selectedEmailFilter, setSelectedEmailFilter] = useState('all');
+  const [selectedDesignationFilter, setSelectedDesignationFilter] = useState('all');
 
   useEffect(() => {
     fetchCurrentUser();
@@ -299,14 +316,44 @@ export default function UserManagement() {
     setIsEditDialogOpen(true);
   };
 
-  const filteredUsers = users.filter(user => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      user.full_name.toLowerCase().includes(searchLower) ||
-      user.email.toLowerCase().includes(searchLower) ||
-      user.role.toLowerCase().includes(searchLower)
-    );
-  });
+  // Filter users based on all filter criteria
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => {
+      // Apply search query filter (general search)
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = 
+        user.full_name.toLowerCase().includes(searchLower) ||
+        user.email.toLowerCase().includes(searchLower) ||
+        user.role.toLowerCase().includes(searchLower) ||
+        (user.department && user.department.toLowerCase().includes(searchLower)) ||
+        (user.designation && user.designation.toLowerCase().includes(searchLower)) ||
+        (user.companies?.name && user.companies.name.toLowerCase().includes(searchLower));
+      
+      if (!matchesSearch) return false;
+      
+      // Apply name filter
+      if (selectedNameFilter !== 'all' && user.full_name !== selectedNameFilter) {
+        return false;
+      }
+      
+      // Apply company filter
+      if (selectedCompanyFilter !== 'all' && user.company_id !== selectedCompanyFilter) {
+        return false;
+      }
+      
+      // Apply email filter
+      if (selectedEmailFilter !== 'all' && user.email !== selectedEmailFilter) {
+        return false;
+      }
+      
+      // Apply designation filter
+      if (selectedDesignationFilter !== 'all' && user.designation !== selectedDesignationFilter) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [users, searchQuery, selectedNameFilter, selectedCompanyFilter, selectedEmailFilter, selectedDesignationFilter]);
 
   // Calculate user statistics
   const userStats = {
@@ -333,6 +380,8 @@ export default function UserManagement() {
         <h1 className="text-3xl font-bold">User Management</h1>
       </div>
       
+
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Create User Form */}
         <Card>
@@ -717,6 +766,316 @@ export default function UserManagement() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Filters Card */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Filters
+          </CardTitle>
+          <CardDescription>Filter users by name, company, email, or designation</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Name Filter */}
+            <div>
+              <Label>Filter by Name</Label>
+              <Dialog open={nameFilterDialogOpen} onOpenChange={setNameFilterDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between mt-1">
+                    {selectedNameFilter === 'all'
+                      ? "All Names"
+                      : <div className="truncate" title={selectedNameFilter}>{selectedNameFilter}</div>}
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Select Name</DialogTitle>
+                    <DialogDescription>
+                      Search and select a name to filter by
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="p-2">
+                    <Input
+                      type="text"
+                      placeholder="Search names..."
+                      value={nameFilterQuery}
+                      onChange={(e) => setNameFilterQuery(e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <ScrollArea className="h-[300px] p-4">
+                    <div className="space-y-2">
+                      <div
+                        className={cn(
+                          "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                          selectedNameFilter === 'all' && "bg-accent"
+                        )}
+                        onClick={() => {
+                          setSelectedNameFilter('all');
+                          setNameFilterDialogOpen(false);
+                        }}
+                      >
+                        All Names
+                      </div>
+                      {users
+                        .filter(user => 
+                          user.full_name.toLowerCase().includes(nameFilterQuery.toLowerCase())
+                        )
+                        .sort((a, b) => a.full_name.localeCompare(b.full_name))
+                        .map((user) => (
+                          <div
+                            key={user.id}
+                            className={cn(
+                              "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                              selectedNameFilter === user.full_name && "bg-accent"
+                            )}
+                            onClick={() => {
+                              setSelectedNameFilter(user.full_name);
+                              setNameFilterDialogOpen(false);
+                            }}
+                          >
+                            <div className="truncate" title={user.full_name}>{user.full_name}</div>
+                          </div>
+                        ))}
+                    </div>
+                  </ScrollArea>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Company Filter */}
+            <div>
+              <Label>Filter by Company</Label>
+              <Dialog open={companyFilterDialogOpen} onOpenChange={setCompanyFilterDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between mt-1">
+                    {selectedCompanyFilter === 'all'
+                      ? "All Companies"
+                      : <div className="truncate" title={companies.find(c => c.id === selectedCompanyFilter)?.name || "Select Company"}>{companies.find(c => c.id === selectedCompanyFilter)?.name || "Select Company"}</div>}
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Select Company</DialogTitle>
+                    <DialogDescription>
+                      Search and select a company to filter by
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="p-2">
+                    <Input
+                      type="text"
+                      placeholder="Search companies..."
+                      value={companyFilterQuery}
+                      onChange={(e) => setCompanyFilterQuery(e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <ScrollArea className="h-[300px] p-4">
+                    <div className="space-y-2">
+                      <div
+                        className={cn(
+                          "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                          selectedCompanyFilter === 'all' && "bg-accent"
+                        )}
+                        onClick={() => {
+                          setSelectedCompanyFilter('all');
+                          setCompanyFilterDialogOpen(false);
+                        }}
+                      >
+                        All Companies
+                      </div>
+                      {companies
+                        .filter(company => 
+                          company.name.toLowerCase().includes(companyFilterQuery.toLowerCase())
+                        )
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((company) => (
+                          <div
+                            key={company.id}
+                            className={cn(
+                              "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                              selectedCompanyFilter === company.id && "bg-accent"
+                            )}
+                            onClick={() => {
+                              setSelectedCompanyFilter(company.id);
+                              setCompanyFilterDialogOpen(false);
+                            }}
+                          >
+                            <div className="truncate" title={company.name}>{company.name}</div>
+                          </div>
+                        ))}
+                    </div>
+                  </ScrollArea>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Email Filter */}
+            <div>
+              <Label>Filter by Email</Label>
+              <Dialog open={emailFilterDialogOpen} onOpenChange={setEmailFilterDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between mt-1">
+                    {selectedEmailFilter === 'all'
+                      ? "All Emails"
+                      : <div className="truncate" title={selectedEmailFilter}>{selectedEmailFilter}</div>}
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Select Email</DialogTitle>
+                    <DialogDescription>
+                      Search and select an email to filter by
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="p-2">
+                    <Input
+                      type="text"
+                      placeholder="Search emails..."
+                      value={emailFilterQuery}
+                      onChange={(e) => setEmailFilterQuery(e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <ScrollArea className="h-[300px] p-4">
+                    <div className="space-y-2">
+                      <div
+                        className={cn(
+                          "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                          selectedEmailFilter === 'all' && "bg-accent"
+                        )}
+                        onClick={() => {
+                          setSelectedEmailFilter('all');
+                          setEmailFilterDialogOpen(false);
+                        }}
+                      >
+                        All Emails
+                      </div>
+                      {users
+                        .filter(user => 
+                          user.email.toLowerCase().includes(emailFilterQuery.toLowerCase())
+                        )
+                        .sort((a, b) => a.email.localeCompare(b.email))
+                        .map((user) => (
+                          <div
+                            key={user.id}
+                            className={cn(
+                              "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                              selectedEmailFilter === user.email && "bg-accent"
+                            )}
+                            onClick={() => {
+                              setSelectedEmailFilter(user.email);
+                              setEmailFilterDialogOpen(false);
+                            }}
+                          >
+                            <div className="truncate" title={user.email}>{user.email}</div>
+                          </div>
+                        ))}
+                    </div>
+                  </ScrollArea>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Designation Filter */}
+            <div>
+              <Label>Filter by Designation</Label>
+              <Dialog open={designationFilterDialogOpen} onOpenChange={setDesignationFilterDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between mt-1">
+                    {selectedDesignationFilter === 'all'
+                      ? "All Designations"
+                      : <div className="truncate" title={selectedDesignationFilter}>{selectedDesignationFilter}</div>}
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Select Designation</DialogTitle>
+                    <DialogDescription>
+                      Search and select a designation to filter by
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="p-2">
+                    <Input
+                      type="text"
+                      placeholder="Search designations..."
+                      value={designationFilterQuery}
+                      onChange={(e) => setDesignationFilterQuery(e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <ScrollArea className="h-[300px] p-4">
+                    <div className="space-y-2">
+                      <div
+                        className={cn(
+                          "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                          selectedDesignationFilter === 'all' && "bg-accent"
+                        )}
+                        onClick={() => {
+                          setSelectedDesignationFilter('all');
+                          setDesignationFilterDialogOpen(false);
+                        }}
+                      >
+                        All Designations
+                      </div>
+                      {users
+                        .filter(user => 
+                          user.designation && user.designation.toLowerCase().includes(designationFilterQuery.toLowerCase())
+                        )
+                        .sort((a, b) => (a.designation || '').localeCompare(b.designation || ''))
+                        .map((user) => (
+                          user.designation && (
+                            <div
+                              key={user.id}
+                              className={cn(
+                                "flex cursor-pointer items-center rounded-sm px-2 py-2 hover:bg-accent",
+                                selectedDesignationFilter === user.designation && "bg-accent"
+                              )}
+                              onClick={() => {
+                                setSelectedDesignationFilter(user.designation);
+                                setDesignationFilterDialogOpen(false);
+                              }}
+                            >
+                              <div className="truncate" title={user.designation}>{user.designation}</div>
+                            </div>
+                          )
+                        ))}
+                    </div>
+                  </ScrollArea>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
+          
+          {/* Clear Filters Button */}
+          {(selectedNameFilter !== 'all' || selectedCompanyFilter !== 'all' || 
+            selectedEmailFilter !== 'all' || selectedDesignationFilter !== 'all') && (
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedNameFilter('all');
+                  setSelectedCompanyFilter('all');
+                  setSelectedEmailFilter('all');
+                  setSelectedDesignationFilter('all');
+                }}
+              >
+                Clear Filters
+              </Button>
+              <div className="text-sm text-muted-foreground pt-1.5">
+                {filteredUsers.length} results found
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Users Table */}
       <Card>
