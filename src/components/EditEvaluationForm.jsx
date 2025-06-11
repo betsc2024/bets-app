@@ -236,10 +236,10 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
                     <SelectValue placeholder="Select evaluator" />
                   </SelectTrigger>
                   <SelectContent className="w-[min(calc(100vw-2rem),400px)] p-0 relative">
-                    <div className="absolute right-2 top-2 flex flex-col z-10">
+                    <div className="absolute right-2 top-2 flex flex-col z-10 shadow-sm">
                       <button 
                         type="button"
-                        className="p-1 rounded-t bg-purple-100 hover:bg-purple-200 border border-purple-300"
+                        className="p-1.5 rounded-t-md bg-gradient-to-b from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 border border-purple-300 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-opacity-50"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -249,11 +249,11 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
                           }
                         }}
                       >
-                        <ChevronUp className="h-4 w-4 text-purple-600" />
+                        <ChevronUp className="h-3.5 w-3.5 text-purple-700" />
                       </button>
                       <button 
                         type="button"
-                        className="p-1 rounded-b bg-purple-100 hover:bg-purple-200 border border-purple-300 border-t-0"
+                        className="p-1.5 rounded-b-md bg-gradient-to-b from-purple-100 to-purple-200 hover:from-purple-200 hover:to-purple-300 border border-purple-300 border-t-0 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-opacity-50"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -263,7 +263,7 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
                           }
                         }}
                       >
-                        <ChevronDown className="h-4 w-4 text-purple-600" />
+                        <ChevronDown className="h-3.5 w-3.5 text-purple-700" />
                       </button>
                     </div>
                     <ScrollArea ref={scrollAreaRef} className="h-[300px]">
