@@ -4,10 +4,11 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
-import { X, Users, UserPlus } from "lucide-react";
+import { X, Users, UserPlus, ChevronUp, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../supabase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { ScrollArea } from "./ui/scroll-area";
 
 export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
   const [evalName, setEvalName] = useState('');
@@ -19,6 +20,7 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
   const [availableEmployees, setAvailableEmployees] = useState([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [currentEmployees, setCurrentEmployees] = useState([]);
+  const scrollAreaRef = React.useRef(null);
 
   const relationshipTypes = [
     { value: 'top_boss', label: 'Top Boss' },
@@ -233,24 +235,60 @@ export function EditEvaluationForm({ evaluation, onSave, onCancel }) {
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Select evaluator" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[300px] overflow-y-auto w-[min(calc(100vw-2rem),400px)]">
-                    <div className="max-h-[300px] overflow-y-auto">
-                      {availableEvaluators.map((user) => (
-                        <SelectItem key={user.id} value={user.id} className="py-2">
-                          <div>
-                            <div className="font-medium">{user.full_name}</div>
-                            {user.email && (
-                              <div className="text-xs text-gray-500">{user.email}</div>
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))}
-                      {availableEvaluators.length === 0 && (
-                        <div className="px-2 py-2 text-sm text-gray-500">
-                          No more evaluators available
-                        </div>
-                      )}
+                  <SelectContent className="w-[min(calc(100vw-2rem),400px)] p-0 relative">
+                    <div className="absolute right-2 top-2 flex flex-col z-10">
+                      <button 
+                        type="button"
+                        className="p-1 rounded-t bg-purple-100 hover:bg-purple-200 border border-purple-300"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (scrollAreaRef.current) {
+                            const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+                            if (viewport) viewport.scrollTop -= 100;
+                          }
+                        }}
+                      >
+                        <ChevronUp className="h-4 w-4 text-purple-600" />
+                      </button>
+                      <button 
+                        type="button"
+                        className="p-1 rounded-b bg-purple-100 hover:bg-purple-200 border border-purple-300 border-t-0"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (scrollAreaRef.current) {
+                            const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+                            if (viewport) viewport.scrollTop += 100;
+                          }
+                        }}
+                      >
+                        <ChevronDown className="h-4 w-4 text-purple-600" />
+                      </button>
                     </div>
+                    <ScrollArea ref={scrollAreaRef} className="h-[300px]">
+                      <div className="p-1">
+                        {availableEvaluators.map((user) => (
+                          <SelectItem 
+                            key={user.id} 
+                            value={user.id} 
+                            className="py-2 cursor-pointer hover:bg-purple-50"
+                          >
+                            <div>
+                              <div className="font-medium">{user.full_name}</div>
+                              {user.email && (
+                                <div className="text-xs text-gray-500">{user.email}</div>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                        {availableEvaluators.length === 0 && (
+                          <div className="px-2 py-2 text-sm text-gray-500">
+                            No more evaluators available
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
                   </SelectContent>
                 </Select>
                 <Select value={selectedRelationType} onValueChange={setSelectedRelationType}>
