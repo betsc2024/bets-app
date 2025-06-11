@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { X } from "lucide-react";
+import { X, ChevronUp, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../supabase";
+import { ScrollArea } from "./ui/scroll-area";
 
 export function AddEmployeesForm({ evaluation, onSave, onCancel }) {
   const [loading, setLoading] = useState(true);
   const [availableEmployees, setAvailableEmployees] = useState([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const scrollAreaRef = React.useRef(null);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -135,23 +137,66 @@ export function AddEmployeesForm({ evaluation, onSave, onCancel }) {
             <SelectTrigger className="flex-1">
               <SelectValue placeholder="Select employee" />
             </SelectTrigger>
-            <SelectContent className="max-h-[300px] overflow-y-auto w-[min(calc(100vw-2rem),400px)]">
-              <div className="max-h-[300px] overflow-y-auto">
-                {availableEmployees.map((user) => (
-                  <SelectItem key={user.id} value={user.id} className="py-2">
-                    <div>
-                      <div className="font-medium">{user.full_name}</div>
-                      {user.email && (
-                        <div className="text-xs text-gray-500">{user.email}</div>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-                {availableEmployees.length === 0 && (
-                  <div className="px-2 py-2 text-sm text-gray-500">
-                    No more employees available
+            <SelectContent className="w-[min(calc(100vw-2rem),400px)] p-0 relative">
+              <div className="flex flex-col w-full">
+                {/* Top navigation button - larger and more accessible */}
+                <button 
+                  type="button"
+                  className="w-full p-2 bg-gradient-to-b from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 border-b border-purple-200 flex items-center justify-center transition-colors duration-150 focus:outline-none focus:bg-purple-100"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (scrollAreaRef.current) {
+                      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+                      if (viewport) viewport.scrollTop -= 50;
+                    }
+                  }}
+                >
+                  <ChevronUp className="h-5 w-5 text-purple-700" />
+                  <span className="ml-2 text-sm text-purple-700 font-medium">Scroll Up</span>
+                </button>
+                
+                {/* Scrollable content area */}
+                <ScrollArea ref={scrollAreaRef} className="h-[300px]">
+                  <div className="p-1">
+                    {availableEmployees.map((user) => (
+                      <SelectItem 
+                        key={user.id} 
+                        value={user.id} 
+                        className="py-3 cursor-pointer hover:bg-purple-50 border-b border-gray-100 last:border-b-0"
+                      >
+                        <div>
+                          <div className="font-medium">{user.full_name}</div>
+                          {user.email && (
+                            <div className="text-xs text-gray-500">{user.email}</div>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                    {availableEmployees.length === 0 && (
+                      <div className="px-2 py-4 text-sm text-gray-500 text-center">
+                        No more employees available
+                      </div>
+                    )}
                   </div>
-                )}
+                </ScrollArea>
+                
+                {/* Bottom navigation button - larger and more accessible */}
+                <button 
+                  type="button"
+                  className="w-full p-2 bg-gradient-to-b from-purple-100 to-purple-200 hover:from-purple-200 hover:to-purple-300 border-t border-purple-200 flex items-center justify-center transition-colors duration-150 focus:outline-none focus:bg-purple-200"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (scrollAreaRef.current) {
+                      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+                      if (viewport) viewport.scrollTop += 50;
+                    }
+                  }}
+                >
+                  <ChevronDown className="h-5 w-5 text-purple-700" />
+                  <span className="ml-2 text-sm text-purple-700 font-medium">Scroll Down</span>
+                </button>
               </div>
             </SelectContent>
           </Select>
