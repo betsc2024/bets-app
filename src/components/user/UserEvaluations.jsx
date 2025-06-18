@@ -223,17 +223,29 @@ const UserEvaluations = () => {
 
       if (statementsError) throw statementsError;
 
-      // Get existing responses
-      const { data: existingResponses, error: responsesError } = await supabase
+      // Fetch draft (in-progress) responses
+      const { data: draftResponses, error: draftRespError } = await supabase
+        .from('draft_responses')
+        .select('statement_id, selected_option_id')
+        .eq('evaluation_id', evaluationId);
+
+      if (draftRespError) throw draftRespError;
+
+      // Fetch final submitted responses (if any)
+      const { data: finalResponses, error: finalRespError } = await supabase
         .from('evaluation_responses')
         .select('statement_id, selected_option_id')
         .eq('evaluation_id', evaluationId);
 
-      if (responsesError) throw responsesError;
+      if (finalRespError) throw finalRespError;
 
+      // Merge: start with drafts, then let final responses overwrite if they exist
       const responseMap = {};
-      existingResponses.forEach(response => {
-        responseMap[response.statement_id] = response.selected_option_id;
+      (draftResponses || []).forEach(r => {
+        responseMap[r.statement_id] = r.selected_option_id;
+      });
+      (finalResponses || []).forEach(r => {
+        responseMap[r.statement_id] = r.selected_option_id;
       });
 
       // Group statements by attribute
@@ -454,6 +466,8 @@ const UserEvaluations = () => {
         }
         setShowExitDialog(false);
         handleDialogClose(false);
+        // Refresh list so this evaluation moves from pending to in_progress
+        await fetchEvaluations();
         break;
       case 'continue':
         setShowExitDialog(false);
@@ -461,6 +475,8 @@ const UserEvaluations = () => {
       case 'exit':
         setShowExitDialog(false);
         handleDialogClose(false);
+        // Refresh evaluations list
+        await fetchEvaluations();
         break;
     }
   };
