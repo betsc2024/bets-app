@@ -988,7 +988,41 @@ function EvaluationReportsTable({ companyId, bankId }) {
 
   return (
     <div className="mt-8">
-      <h2 className="text-2xl font-semibold mb-4 text-primary">Evaluation Status Reports</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-semibold text-primary">Evaluation Status Reports</h2>
+        <button
+          type="button"
+          className="px-4 py-2 rounded bg-primary text-white hover:bg-primary/90 border border-primary shadow-sm transition"
+          onClick={() => {
+            // Prepare CSV
+            const csvRows = [
+              ["Evaluator Name", "Assigned", "Completed", "Pending"],
+              ...filteredRows.map(row => [row.name, row.assigned, row.completed, row.pending])
+            ];
+            // Only quote if value contains comma, quote, or newline
+            function escapeCSV(val) {
+              if (val == null) return '';
+              const s = String(val).trim();
+              if (/[",\n]/.test(s)) {
+                return '"' + s.replace(/"/g, '""') + '"';
+              }
+              return s;
+            }
+            const csvContent = csvRows.map(r => r.map(escapeCSV).join(",")).join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'evaluation_status_reports.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }}
+        >
+          Download Report
+        </button>
+      </div>
       {/* Evaluator filter dropdown */}
       {uniqueEvaluators.length > 0 && (
         <div className="mb-4">
