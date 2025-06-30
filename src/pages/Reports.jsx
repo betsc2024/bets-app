@@ -758,6 +758,7 @@ export default function Reports() {
                   <SelectLabel>Report Type</SelectLabel>
                   <SelectItem value="individual">Individual Report</SelectItem>
                   <SelectItem value="status">Status Report</SelectItem>
+                  <SelectItem value="evaluation">Evaluation Status Reports</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -896,6 +897,159 @@ export default function Reports() {
           />
         </div>
       )}
+
+      {/* Evaluation Status Reports UI */}
+      {selectedCompany && bank && reportType === 'evaluation' && (
+        <EvaluationReportsTable companyId={selectedCompany?.id} bankId={bank} />
+      )}
+    </div>
+  );
+}
+
+// --- Evaluation Status Reports Table Component ---
+function EvaluationReportsTable({ companyId, bankId }) {
+  const [rows, setRows] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [evaluatorFilter, setEvaluatorFilter] = React.useState('all-evaluators');
+
+  // Build unique evaluators for dropdown
+  const uniqueEvaluators = React.useMemo(() => {
+    const seen = new Set();
+    return rows
+      .filter(row => {
+        if (!row.name) return false;
+        if (seen.has(row.name)) return false;
+        seen.add(row.name);
+        return true;
+      })
+      .map(row => ({ name: row.name }));
+  }, [rows]);
+
+  // Filtered rows by selected evaluator
+  const filteredRows = evaluatorFilter === 'all-evaluators'
+    ? rows
+    : rows.filter(row => row.name === evaluatorFilter);
+
+  React.useEffect(() => {
+    let ignore = false;
+    async function fetchEvaluationReportData() {
+      setLoading(true);
+      // Fetch all evaluations for the selected company and bank
+      const { data: evaluations, error } = await supabase
+        .from('evaluations')
+        .select(`
+          id,
+          status,
+          is_self_evaluator,
+          evaluator:users!evaluator_id (
+            id,
+            full_name
+          ),
+          evaluation_assignments!inner(
+            company_id,
+            attribute_bank_id
+          )
+        `)
+        .eq('evaluation_assignments.company_id', companyId)
+        .eq('evaluation_assignments.attribute_bank_id', bankId);
+      if (error || !evaluations) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+      // Aggregate by evaluator
+      const evaluatorMap = {};
+      evaluations.forEach(e => {
+        const evaluator = e.evaluator;
+        if (!evaluator) return;
+        if (!evaluatorMap[evaluator.id]) {
+          evaluatorMap[evaluator.id] = {
+            name: evaluator.full_name || '',
+            assigned: 0,
+            completed: 0,
+            pending: 0,
+          };
+        }
+        evaluatorMap[evaluator.id].assigned += 1;
+        if (e.status === 'completed') {
+          evaluatorMap[evaluator.id].completed += 1;
+        } else {
+          evaluatorMap[evaluator.id].pending += 1;
+        }
+      });
+      // Convert to sorted array
+      const rowArr = Object.values(evaluatorMap).sort((a, b) => a.name.localeCompare(b.name));
+      if (!ignore) setRows(rowArr);
+      setLoading(false);
+    }
+    fetchEvaluationReportData();
+    return () => { ignore = true; };
+  }, [companyId, bankId]);
+
+  return (
+    <div className="mt-8">
+      <h2 className="text-2xl font-semibold mb-4 text-primary">Evaluation Status Reports</h2>
+      {/* Evaluator filter dropdown */}
+      {uniqueEvaluators.length > 0 && (
+        <div className="mb-4">
+          <Select
+            value={evaluatorFilter}
+            onValueChange={setEvaluatorFilter}
+            className="min-w-[220px]"
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Filter by Evaluator" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Evaluators</SelectLabel>
+                <SelectItem value="all-evaluators">All Evaluators</SelectItem>
+                {uniqueEvaluators.map(ev => (
+                  <SelectItem key={ev.name} value={ev.name}>{ev.name}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <div className="rounded-md border overflow-x-auto bg-background">
+        <Table className="min-w-[500px]">
+          <TableHeader>
+            <TableRow className="bg-secondary/30 border-b border-border">
+              <TableHead className="font-semibold text-primary border-r border-border">Evaluator Name</TableHead>
+              <TableHead className="font-semibold text-primary border-r border-border text-center">Assigned</TableHead>
+              <TableHead className="font-semibold text-primary border-r border-border text-center">Completed</TableHead>
+              <TableHead className="font-semibold text-primary text-center">Pending</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-8">Loading...</TableCell>
+              </TableRow>
+            ) : filteredRows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-8">No data available</TableCell>
+              </TableRow>
+            ) : (
+              filteredRows.map((row, idx) => (
+                <TableRow
+                  key={row.name + idx}
+                  className={
+                    (idx % 2 === 0 ? "bg-background" : "bg-secondary/10 hover:bg-accent/30") +
+                    " border-b border-border"
+                  }
+                >
+                  <TableCell className="py-2 px-4 font-medium text-foreground border-r border-border">{row.name}</TableCell>
+                  <TableCell className="py-2 px-4 text-center border-r border-border">{row.assigned}</TableCell>
+                  <TableCell className="py-2 px-4 text-center text-green-700 font-semibold border-r border-border">{row.completed}</TableCell>
+                  <TableCell className="py-2 px-4 text-center text-yellow-700 font-semibold">{row.pending}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
