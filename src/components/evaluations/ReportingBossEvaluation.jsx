@@ -121,6 +121,7 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
   const processEvaluationData = (reportingBossData, selfData) => {
     // Helper function for consistent decimal formatting
     const formatScore = (score) => {
+      if (isNaN(score)) return 0.0;
       return Number(Number(score).toFixed(1));
     };
 
