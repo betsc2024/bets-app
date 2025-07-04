@@ -36,6 +36,7 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
           evaluations!inner (
             id,
             relationship_type,
+            status,
             evaluation_responses (
               attribute_statement_options ( 
                 weight, 
@@ -125,8 +126,13 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
     const attributeResponses = {};
 
     // Process HR evaluations
+    let hrEvalExists = false;
     hrData.forEach(assignment => {
       assignment.evaluations.forEach(evaluation => {
+        if (evaluation.relationship_type === 'hr') {
+          hrEvalExists = true;
+          if (evaluation.status !== 'completed') return; // Don't aggregate, but mark as existing
+        }
         evaluation.evaluation_responses.forEach(response => {
           const attributeName = response.attribute_statement_options.attribute_statements.attributes.name;
           if (!attributeResponses[attributeName]) {
@@ -208,8 +214,8 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
         attributeName: attribute,
         selfAverageScore: formatScore(selfAverageScore),
         selfPercentageScore: formatScore(selfPercentageScore),
-        hrAverageScore: formatScore(hrAverageScore),
-        hrPercentageScore: formatScore(hrPercentageScore),
+        hrAverageScore: hrEvalExists && hrAverageScore === 0 ? 0 : formatScore(hrAverageScore),
+        hrPercentageScore: hrEvalExists && hrPercentageScore === 0 ? 0 : formatScore(hrPercentageScore),
       };
     });
   };
