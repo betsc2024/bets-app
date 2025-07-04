@@ -21,7 +21,8 @@ ChartJS.register(
   Legend
 );
 
-export const RadarChartTotal = ({ companyId, userId, attribute, bankId, onDataLoad }) => {
+// Accept assignmentId as an optional prop for robust filtering
+export const RadarChartTotal = ({ companyId, userId, attribute, bankId, assignmentId, onDataLoad }) => {
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -102,36 +103,63 @@ export const RadarChartTotal = ({ companyId, userId, attribute, bankId, onDataLo
         return;
       }
 
-      // Get self evaluations
-      const { data: selfEvals, error: selfError } = await supabase
-        .from("evaluations")
-        .select(`
-          is_self_evaluator,
-          relationship_type,
-          evaluation_assignments (
-            id,
-            company_id,
-            user_to_evaluate_id,
-            attribute_banks (
+      // Get self evaluation for this assignment (if assignmentId is provided, use it)
+      let selfEvals, selfError;
+      if (assignmentId) {
+        ({ data: selfEvals, error: selfError } = await supabase
+          .from("evaluations")
+          .select(`
+            is_self_evaluator,
+            relationship_type,
+            evaluation_assignment: evaluation_assignments!inner (
               id,
-              name
-            )
-          ),
-          evaluation_responses (
-            attribute_statement_options ( 
-              weight, 
-              attribute_statements ( 
-                statement,
-                attributes ( name )
+              company_id,
+              user_to_evaluate_id,
+              attribute_bank_id
+            ),
+            evaluation_responses (
+              attribute_statement_options ( 
+                weight, 
+                attribute_statements ( 
+                  statement,
+                  attributes ( name )
+                ) 
               ) 
-            ) 
-          )
-        `)
-        .eq("status", "completed")
-        .eq("is_self_evaluator", true)
-        .eq("evaluation_assignments.company_id", companyId)
-        .eq("evaluation_assignments.user_to_evaluate_id", userId)
-        .eq("evaluation_assignments.attribute_banks.id", bankId);
+            )
+          `)
+          .eq("status", "completed")
+          .eq("is_self_evaluator", true)
+          .eq("evaluation_assignments.id", assignmentId)
+        );
+      } else {
+        ({ data: selfEvals, error: selfError } = await supabase
+          .from("evaluations")
+          .select(`
+            is_self_evaluator,
+            relationship_type,
+            evaluation_assignment: evaluation_assignments!inner (
+              id,
+              company_id,
+              user_to_evaluate_id,
+              attribute_bank_id
+            ),
+            evaluation_responses (
+              attribute_statement_options ( 
+                weight, 
+                attribute_statements ( 
+                  statement,
+                  attributes ( name )
+                ) 
+              ) 
+            )
+          `)
+          .eq("status", "completed")
+          .eq("is_self_evaluator", true)
+          .eq("evaluation_assignments.company_id", companyId)
+          .eq("evaluation_assignments.user_to_evaluate_id", userId)
+          .eq("evaluation_assignments.attribute_bank_id", bankId)
+        );
+      }
 
       console.log('Self evaluations query result:', {
         selfEvals: selfEvals?.length || 0,
@@ -146,49 +174,82 @@ export const RadarChartTotal = ({ companyId, userId, attribute, bankId, onDataLo
         return;
       }
 
-      // Process the evaluations
+      // Only use the self-evaluation for this assignment (if any)
+      let filteredSelfEvals = selfEvals;
+      console.log('[RadarChartTotal] assignmentId:', assignmentId);
+      console.log('[RadarChartTotal] selfEvals:', JSON.stringify(selfEvals, null, 2));
+      if (assignmentId) {
+        filteredSelfEvals = selfEvals?.filter(item => item.evaluation_assignment?.id === assignmentId);
+        console.log('[RadarChartTotal] filteredSelfEvals by assignmentId:', JSON.stringify(filteredSelfEvals, null, 2));
+      }
+      // If none or not completed, treat as empty
+      if (!filteredSelfEvals || filteredSelfEvals.length === 0) {
+        console.log('[RadarChartTotal] No completed self-evaluation found for assignment. Will show zero for self.');
+        filteredSelfEvals = [];
+      } else {
+        console.log('[RadarChartTotal] Using self-evaluation:', JSON.stringify(filteredSelfEvals[0], null, 2));
+        if (filteredSelfEvals[0]?.evaluation_responses) {
+          console.log('[RadarChartTotal] Self evaluation_responses:', JSON.stringify(filteredSelfEvals[0].evaluation_responses, null, 2));
+        }
+      }
       const processedData = {
-        self: selfEvals || [],
+        self: filteredSelfEvals,
         others: totalData || []
       };
 
-      // Process the evaluations to get scores per statement
+
+      // Process the evaluations to get scores per statement (self: only one, others: aggregate)
       const processEvaluations = (evaluations, isSelf = false) => {
         const statementScores = {};
-        
-        evaluations.forEach(evaluation => {
-          const responses = isSelf ? evaluation.evaluation_responses :
-            evaluation.evaluations.flatMap(e => e.evaluation_responses);
-
+        if (isSelf) {
+          // Only one completed self-evaluation per assignment (if any)
+          if (evaluations.length === 0) {
+            return {}; // pending: show zero
+          }
+          const responses = evaluations[0].evaluation_responses || [];
           responses.forEach(response => {
             const attrStatement = response.attribute_statement_options?.attribute_statements;
             if (!attrStatement) return;
-            
-            // Only process statements for this attribute
             if (attrStatement.attributes?.name !== attribute) return;
-            
             const statement = attrStatement.statement;
             if (!statement) return;
-            
-            if (!statementScores[statement]) {
-              statementScores[statement] = {
-                total: 0,
-                count: 0
-              };
-            }
-            statementScores[statement].total += response.attribute_statement_options.weight;
-            statementScores[statement].count += 1;
+            // Formula: (raw score for that statement / 100) * 100
+            statementScores[statement] = Number(response.attribute_statement_options.weight.toFixed(1));
           });
-        });
-
-        // Convert raw scores to percentages
-        return Object.entries(statementScores).reduce((acc, [statement, data]) => {
-          const averageScore = data.total / data.count;
-          const percentageScore = (averageScore / 100) * 100;
-          acc[statement] = Number(percentageScore.toFixed(1));
-          return acc;
-        }, {});
+          // Convert to percent (out of 100)
+          return Object.fromEntries(
+            Object.entries(statementScores).map(([statement, raw]) => [statement, Number(((raw / 100) * 100).toFixed(1))])
+          );
+        } else {
+          // Aggregate for others (unchanged)
+          evaluations.forEach(evaluation => {
+            const responses = evaluation.evaluations.flatMap(e => e.evaluation_responses);
+            responses.forEach(response => {
+              const attrStatement = response.attribute_statement_options?.attribute_statements;
+              if (!attrStatement) return;
+              if (attrStatement.attributes?.name !== attribute) return;
+              const statement = attrStatement.statement;
+              if (!statement) return;
+              if (!statementScores[statement]) {
+                statementScores[statement] = {
+                  total: 0,
+                  count: 0
+                };
+              }
+              statementScores[statement].total += response.attribute_statement_options.weight;
+              statementScores[statement].count += 1;
+            });
+          });
+          // Convert raw scores to percentages
+          return Object.entries(statementScores).reduce((acc, [statement, data]) => {
+            const averageScore = data.total / data.count;
+            const percentageScore = (averageScore / 100) * 100;
+            acc[statement] = Number(percentageScore.toFixed(1));
+            return acc;
+          }, {});
+        }
       };
+
 
       // Get scores for self and others
       const selfScores = processEvaluations(processedData.self, true);

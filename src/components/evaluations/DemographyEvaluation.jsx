@@ -54,6 +54,7 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
             id,
             relationship_type,
             is_self_evaluator,
+            status,
             evaluation_responses (
               attribute_statement_options ( 
                 weight, 
@@ -80,13 +81,18 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
       const allAttributes = new Set();
       const foundRelationTypes = new Set();
 
+      let selfEvalExists = false;
       filteredEvals.forEach(evalItem => {
         evalItem.evaluations?.forEach(evaluation => {
           if (!evaluation) return;
           
           const relationType = evaluation.is_self_evaluator ? 'self' : evaluation.relationship_type;
           if (!relationType) return;
-          
+
+          if (relationType === 'self') {
+            selfEvalExists = true;
+            if (evaluation.status !== 'completed') return; // Don't aggregate, but mark as existing
+          }
           foundRelationTypes.add(relationType);
           
           if (!relationshipData[relationType]) {
@@ -155,20 +161,26 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
 
       // Get actual available relationship types and sort them in a specific order
       const sortOrder = ['self', 'top_boss', 'reporting_boss', 'peers', 'subordinates', 'hr'];
-      const relationTypes = Array.from(foundRelationTypes).sort((a, b) => {
+      let relationTypes = Array.from(foundRelationTypes).sort((a, b) => {
         // Always put 'self' first
         if (a === 'self') return -1;
         if (b === 'self') return 1;
         // Then sort the rest according to sortOrder
         return sortOrder.indexOf(a) - sortOrder.indexOf(b);
       });
+      // If self-evaluation exists but not completed, ensure 'self' is in relationTypes
+      if (selfEvalExists && !relationTypes.includes('self')) {
+        relationTypes = ['self', ...relationTypes];
+      }
       setAvailableRelationTypes(relationTypes);
 
       // Prepare table data with total score
       const tableRows = Array.from(allAttributes).map((attr, index) => ({
         srNo: index + 1,
         attribute: attr,
-        ...Object.fromEntries(relationTypes.map(type => [type, formatScore(processedData[attr]?.[type] || '-')])),
+        ...Object.fromEntries(relationTypes.map(type => [type, formatScore(
+              type === 'self' && (!processedData[attr]?.[type] || processedData[attr]?.[type] === '-') ? 0 : (processedData[attr]?.[type] || '-')
+            )])), // This will show 0.0 if self exists but is not completed
         total: formatScore(totalScores[attr])
       }));
 

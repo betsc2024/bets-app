@@ -20,6 +20,7 @@ import { RadarChartTotal } from '@/components/RadarChartTotal';
 import CopyToClipboard from '@/components/CopyToClipboard';
 
 const TotalEvaluation = ({ userId, companyId, bankId }) => {
+  const [assignmentId, setAssignmentId] = useState(null);
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
   const [viewType, setViewType] = useState('table');
@@ -64,18 +65,29 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
         .neq('evaluations.relationship_type', 'self')
         .eq('company_id', companyId);
 
+      // Set assignmentId for current evaluation assignment (first matching assignment for this user/bank)
+      let assignmentIdToUse = null;
+      let filteredTotalData = totalData;
+      if (bankId) {
+        filteredTotalData = totalData?.filter(item => item.attribute_banks?.id === bankId);
+      }
+      if (filteredTotalData && filteredTotalData.length > 0) {
+        assignmentIdToUse = filteredTotalData[0].id;
+        setAssignmentId(assignmentIdToUse);
+      }
+
       if (totalError) {
         console.error('Error fetching total evaluations:', totalError);
         return;
       }
 
       // Filter by bankId after fetching
-      let filteredTotalData = totalData;
-      if (bankId) {
-        filteredTotalData = totalData?.filter(item => 
-          item.attribute_banks?.id === bankId
-        );
-      }
+      // let filteredTotalData = totalData;
+      // if (bankId) {
+      //   filteredTotalData = totalData?.filter(item => 
+      //     item.attribute_banks?.id === bankId
+      //   );
+      // }
 
       // Get self evaluations
       const { data: selfEvals, error: selfError } = await supabase
@@ -131,6 +143,7 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
       if (uniqueAttributes.length > 0 && !selectedAttribute) {
         setSelectedAttribute(uniqueAttributes[0]);
       }
+
     } catch (error) {
       console.error('Error in fetchData:', error);
     }
@@ -451,6 +464,7 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
               userId={userId}
               attribute={selectedAttribute}
               bankId={bankId}
+              assignmentId={assignmentId}
             />
           </div>
         </div>
