@@ -82,6 +82,7 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
       const foundRelationTypes = new Set();
 
       let selfEvalExists = false;
+      let hrEvalExists = false;
       filteredEvals.forEach(evalItem => {
         evalItem.evaluations?.forEach(evaluation => {
           if (!evaluation) return;
@@ -91,6 +92,10 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
 
           if (relationType === 'self') {
             selfEvalExists = true;
+            if (evaluation.status !== 'completed') return; // Don't aggregate, but mark as existing
+          }
+          if (relationType === 'hr') {
+            hrEvalExists = true;
             if (evaluation.status !== 'completed') return; // Don't aggregate, but mark as existing
           }
           foundRelationTypes.add(relationType);
@@ -172,6 +177,9 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
       if (selfEvalExists && !relationTypes.includes('self')) {
         relationTypes = ['self', ...relationTypes];
       }
+      if (hrEvalExists && !relationTypes.includes('hr')) {
+        relationTypes = [...relationTypes, 'hr'];
+      }
       setAvailableRelationTypes(relationTypes);
 
       // Prepare table data with total score
@@ -179,8 +187,10 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
         srNo: index + 1,
         attribute: attr,
         ...Object.fromEntries(relationTypes.map(type => [type, formatScore(
-              type === 'self' && (!processedData[attr]?.[type] || processedData[attr]?.[type] === '-') ? 0 : (processedData[attr]?.[type] || '-')
-            )])), // This will show 0.0 if self exists but is not completed
+              (type === 'self' && (!processedData[attr]?.[type] || processedData[attr]?.[type] === '-')) ? 0 :
+              (type === 'hr' && (!processedData[attr]?.[type] || processedData[attr]?.[type] === '-')) ? 0 :
+              (processedData[attr]?.[type] || '-')
+            )])), // This will show 0.0 if self/hr exists but is not completed
         total: formatScore(totalScores[attr])
       }));
 
