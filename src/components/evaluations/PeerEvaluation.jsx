@@ -290,7 +290,8 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
                   return lines;
                 },
                 maxRotation: 0,
-                minRotation: 0
+                minRotation: 0,
+                 autoSkip: false
               }
             }
           },

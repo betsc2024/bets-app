@@ -211,7 +211,8 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                       return lines;
                     },
                     maxRotation: 0,
-                    minRotation: 0
+                    minRotation: 0,
+                 autoSkip: false
                   }
                 }
               },
