@@ -302,49 +302,54 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
 
       {/* Table View */}
       {viewType === 'table' && (
-        <div ref={tableRef} className="border rounded-lg p-4 bg-white">
-          {tableData.length === 0 ? (
-            <div className="text-center py-4 text-gray-500">
-              No self evaluation data available
-            </div>
-          ) : (
-            <Table className="border">
-              <TableHeader>
-                <TableRow className="border-b">
-                  <TableHead className="border-r w-16 font-semibold">Sr. No.</TableHead>
-                  <TableHead className="border-r font-semibold">Attribute Name</TableHead>
-                  <TableHead className="border-r text-right font-semibold">Self - Average Score</TableHead>
-                  <TableHead className="border-r text-right font-semibold">Self - % Score</TableHead>
-                  <TableHead className="text-right font-semibold">Cumulative Score</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tableData.map((row) => (
-                  <TableRow key={row.srNo} className="border-b">
-                    <TableCell className="border-r">{row.srNo}</TableCell>
-                    <TableCell className="border-r">{row.attributeName}</TableCell>
-                    <TableCell className="border-r text-right">{Number(row.averageScore).toFixed(1)}</TableCell>
-                    <TableCell className="border-r text-right">{Number(row.percentageScore).toFixed(1)}</TableCell>
-                     <TableCell className="text-right">{cumulativeScore.toFixed(1)}</TableCell>
+        <div className="w-full overflow-x-auto">
+          <div ref={tableRef} className="border rounded-lg p-4 bg-white">
+            {tableData.length === 0 ? (
+              <div className="text-center py-4 text-gray-500">
+                No self evaluation data available
+              </div>
+            ) : (
+              <Table className="border">
+                <TableHeader>
+                  <TableRow className="border-b">
+                    <TableHead className="border-r w-16 font-semibold">Sr. No.</TableHead>
+                    <TableHead className="border-r font-semibold">Attribute Name</TableHead>
+                    <TableHead className="border-r text-right font-semibold">Self - Average Score</TableHead>
+                    <TableHead className="border-r text-right font-semibold">Self - % Score</TableHead>
+                    <TableHead className="text-right font-semibold">Cumulative Score</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                </TableHeader>
+                <TableBody>
+                  {tableData.map((row) => (
+                    <TableRow key={row.srNo} className="border-b">
+                      <TableCell className="border-r">{row.srNo}</TableCell>
+                      <TableCell className="border-r">{row.attributeName}</TableCell>
+                      <TableCell className="border-r text-right">{Number(row.averageScore).toFixed(1)}</TableCell>
+                      <TableCell className="border-r text-right">{Number(row.percentageScore).toFixed(1)}</TableCell>
+                      <TableCell className="text-right">{cumulativeScore.toFixed(1)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
         </div>
       )}
 
       {/* Chart View */}
-      {viewType === 'chart' && (
-        <div ref={chartRef} className="border rounded-lg p-4 bg-white h-[400px]">
-          {/* cumulative score column only affects table view; no chart changes needed */}
-          {chartData ? (
-            <Bar data={chartData.chartData} options={chartData.chartOptions} />
-          ) : (
-            <div className="text-center py-4 text-gray-500">
-              No data available for chart
+      {viewType === 'chart' && chartData && (
+        <div className="w-full overflow-x-auto">
+          <div style={{ minWidth: `${tableData.length * 120}px` }}>
+            <div ref={chartRef} className="h-[400px] border rounded-lg p-4 bg-white">
+              {chartData ? (
+                <Bar data={chartData.chartData} options={chartData.chartOptions} />
+              ) : (
+                <div className="text-center py-4 text-gray-500">
+                  No data available for chart
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
