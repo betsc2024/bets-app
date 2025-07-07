@@ -14,6 +14,8 @@ import CopyToClipboard from '../CopyToClipboard';
 const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
+  const [cumulativeSelf, setCumulativeSelf] = useState(0);
+  const [cumulativeSub, setCumulativeSub] = useState(0);
   const [viewType, setViewType] = useState('table');
   const tableRef = useRef(null);
   const chartRef = useRef(null);
@@ -112,6 +114,13 @@ const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
       // Process the data
       const processedData = processEvaluationData(filteredSubordinateData, filteredSelfEvals);
       setTableData(processedData);
+      // calculate cumulative averages
+      if (processedData.length > 0) {
+        const totalSelf = processedData.reduce((sum, item) => sum + item.selfAverageScore, 0);
+        const totalSub = processedData.reduce((sum, item) => sum + item.subordinateAverageScore, 0);
+        setCumulativeSelf(Number((totalSelf / processedData.length).toFixed(1)));
+        setCumulativeSub(Number((totalSub / processedData.length).toFixed(1)));
+      }
       generateChartData(processedData);
     } catch (error) {
       console.error('Error in fetchData:', error);
@@ -219,19 +228,35 @@ const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
   const generateChartData = (data) => {
     try {
       if (data && data.length > 0) {
+        const cumSelf = data.reduce((s,i)=>s+i.selfAverageScore,0)/data.length;
+        const cumSub = data.reduce((s,i)=>s+i.subordinateAverageScore,0)/data.length;
+        const allVals=[...data.map(i=>i.selfAverageScore),...data.map(i=>i.subordinateAverageScore),cumSelf,cumSub];
+        const yMax=Math.ceil(Math.max(...allVals)*1.1/10)*10;
         const chartData = {
           labels: data.map(item => item.attributeName),
           datasets: [
             {
               label: 'Self Score (%)',
               data: data.map(item => item.selfPercentageScore),
-              backgroundColor: '#733e93',  // primary purple
+              backgroundColor: '#733e93',  // purple
               borderWidth: 0
             },
             {
               label: 'Subordinate Score (%)',
               data: data.map(item => item.subordinatePercentageScore),
               backgroundColor: '#4ade80',  // green
+              borderWidth: 0
+            },
+            {
+              label: 'Cumulative Self',
+              data: Array(data.length).fill(cumSelf),
+              backgroundColor: '#FFCF55', // yellow
+              borderWidth: 0
+            },
+            {
+              label: 'Cumulative Subordinate',
+              data: Array(data.length).fill(cumSub),
+              backgroundColor: '#1E90FF', // blue
               borderWidth: 0
             }
           ]
@@ -243,7 +268,7 @@ const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
           scales: {
             y: {
               beginAtZero: true,
-              max: 100,
+              max: yMax,
               title: {
                 display: true,
                 text: 'Score'
@@ -358,7 +383,9 @@ const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
                   <TableHead className="border-r text-right font-semibold">Self - Average Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">Self - % Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">Subordinate - Average Score</TableHead>
-                  <TableHead className="text-right font-semibold">Subordinate - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Subordinate - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Cumulative Self</TableHead>
+                  <TableHead className="text-right font-semibold">Cumulative Subordinate</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -369,7 +396,9 @@ const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
                     <TableCell className="border-r text-right">{Number(row.selfAverageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.selfPercentageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.subordinateAverageScore).toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{Number(row.subordinatePercentageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.subordinatePercentageScore).toFixed(1)}</TableCell>
+                     <TableCell className="border-r text-right">{cumulativeSelf.toFixed(1)}</TableCell>
+                     <TableCell className="text-right">{cumulativeSub.toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

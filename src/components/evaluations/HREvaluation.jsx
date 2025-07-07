@@ -14,6 +14,8 @@ import CopyToClipboard from '../CopyToClipboard';
 const HREvaluation = ({ userId, companyId, bankId }) => {
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
+  const [cumulativeSelf, setCumulativeSelf] = useState(0);
+  const [cumulativeHR, setCumulativeHR] = useState(0);
   const [viewType, setViewType] = useState('table');
   const tableRef = useRef(null);
   const chartRef = useRef(null);
@@ -111,6 +113,15 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
       // Process the data
       const processedData = processEvaluationData(filteredHrData, filteredSelfEvals);
       setTableData(processedData);
+      // calculate cumulative self and HR average scores
+      if (processedData.length > 0) {
+        const totalSelf = processedData.reduce((sum, item) => sum + item.selfAverageScore, 0);
+        const totalHR = processedData.reduce((sum, item) => sum + item.hrAverageScore, 0);
+        const cumSelf = Number((totalSelf / processedData.length).toFixed(1));
+        const cumHR = Number((totalHR / processedData.length).toFixed(1));
+        setCumulativeSelf(cumSelf);
+        setCumulativeHR(cumHR);
+      }
       generateChartData(processedData);
     } catch (error) {
       console.error('Error in fetchData:', error);
@@ -223,21 +234,43 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
   const generateChartData = (data) => {
     try {
       if (data && data.length > 0) {
+        const cumSelfPerc = data.reduce((s, i) => s + i.selfPercentageScore, 0) / data.length;
+        const cumHRPerc = data.reduce((s, i) => s + i.hrPercentageScore, 0) / data.length;
+        const allVals = [
+            ...data.map(i=>i.selfPercentageScore),
+            ...data.map(i=>i.hrPercentageScore),
+            cumSelfPerc,
+            cumHRPerc
+          ];
+        const rawMax = Math.max(...allVals);
+        const yMax = Math.ceil(rawMax * 1.1 / 10) * 10;
         const chartData = {
           labels: data.map(item => item.attributeName),
           datasets: [
-            {
-              label: 'Self Score (%)',
-              data: data.map(item => item.selfPercentageScore),
-              backgroundColor: '#733e93',  // primary purple
-              borderWidth: 0
-            },
-            {
-              label: 'HR Score (%)',
-              data: data.map(item => item.hrPercentageScore),
-              backgroundColor: '#4ade80',  // green
-              borderWidth: 0
-            }
+             {
+               label: 'Self Score (%)',
+               data: data.map(item => item.selfPercentageScore),
+               backgroundColor: '#733e93',  // purple
+               borderWidth: 0
+             },
+             {
+               label: 'HR Score (%)',
+               data: data.map(item => item.hrPercentageScore),
+               backgroundColor: '#4ade80',  // green
+               borderWidth: 0
+             },
+             {
+               label: 'Cumulative Self (%)',
+               data: Array(data.length).fill(cumSelfPerc),
+               backgroundColor: '#FFCF55', // yellow
+               borderWidth: 0
+             },
+             {
+               label: 'Cumulative HR (%)',
+               data: Array(data.length).fill(cumHRPerc),
+               backgroundColor: '#1E90FF', // blue
+               borderWidth: 0
+             }
           ]
         };
 
@@ -247,7 +280,7 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
           scales: {
             y: {
               beginAtZero: true,
-              max: 100,
+              max: yMax,
               title: {
                 display: true,
                 text: 'Score'
@@ -362,7 +395,9 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
                   <TableHead className="border-r text-right font-semibold">Self - Average Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">Self - % Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">HR - Average Score</TableHead>
-                  <TableHead className="text-right font-semibold">HR - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">HR - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Cumulative Self</TableHead>
+                  <TableHead className="text-right font-semibold">Cumulative HR</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -373,7 +408,9 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
                     <TableCell className="border-r text-right">{Number(row.selfAverageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.selfPercentageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.hrAverageScore).toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{Number(row.hrPercentageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.hrPercentageScore).toFixed(1)}</TableCell>
+                     <TableCell className="border-r text-right">{cumulativeSelf.toFixed(1)}</TableCell>
+                     <TableCell className="text-right">{cumulativeHR.toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

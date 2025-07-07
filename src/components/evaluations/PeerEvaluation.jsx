@@ -16,6 +16,8 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
   const [viewType, setViewType] = useState('table');
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
+  const [cumulativeSelf, setCumulativeSelf] = useState(0);
+  const [cumulativePeer, setCumulativePeer] = useState(0);
   const tableRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -107,6 +109,15 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
       if ((filteredPeerEvals && filteredPeerEvals.length > 0) || (filteredSelfEvals && filteredSelfEvals.length > 0)) {
         const processedData = processPeerData(filteredPeerEvals, filteredSelfEvals);
         setTableData(processedData);
+        // Calculate cumulative averages
+        if (processedData.length > 0) {
+          const totalSelf = processedData.reduce((sum, item) => sum + item.selfAverageScore, 0);
+          const totalPeer = processedData.reduce((sum, item) => sum + item.peerAverageScore, 0);
+          const cumSelf = Number((totalSelf / processedData.length).toFixed(1));
+          const cumPeer = Number((totalPeer / processedData.length).toFixed(1));
+          setCumulativeSelf(cumSelf);
+          setCumulativePeer(cumPeer);
+        }
         generateChartData(processedData);
       } else {
         setTableData([]);
@@ -234,13 +245,15 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
   const generateChartData = (data) => {
     try {
       if (data && data.length > 0) {
+        const cumSelf = data.reduce((s, i) => s + i.selfAverageScore, 0) / data.length;
+        const cumPeer = data.reduce((s, i) => s + i.peerAverageScore, 0) / data.length;
         const chartData = {
           labels: data.map(item => item.attributeName),
           datasets: [
             {
               label: 'Self Score (%)',
               data: data.map(item => item.selfPercentageScore),
-              backgroundColor: '#733e93',  // primary purple
+              backgroundColor: '#733e93',  // purple
               borderWidth: 0
             },
             {
@@ -248,17 +261,37 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
               data: data.map(item => item.peerPercentageScore),
               backgroundColor: '#4ade80',  // green
               borderWidth: 0
+            },
+            {
+              label: 'Cumulative Self (%)',
+              data: Array(data.length).fill(cumSelf),
+              backgroundColor: '#FFCF55', // yellow
+              borderWidth: 0
+            },
+            {
+              label: 'Cumulative Peer (%)',
+              data: Array(data.length).fill(cumPeer),
+              backgroundColor: '#1E90FF', // blue
+              borderWidth: 0
             }
           ]
         };
 
-        const chartOptions = {
+        const allVals = [
+            ...data.map(i=>i.selfPercentageScore),
+            ...data.map(i=>i.peerPercentageScore),
+            cumSelf,
+            cumPeer
+          ];
+          const rawMax = Math.max(...allVals);
+          const yMax = Math.ceil(rawMax * 1.1 / 10) * 10;
+          const chartOptions = {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
             y: {
               beginAtZero: true,
-              max: 100,
+              max: yMax,
               title: {
                 display: true,
                 text: 'Score'
@@ -373,7 +406,9 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
                   <TableHead className="border-r text-right font-semibold">Self - Average Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">Self - % Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">Peer - Average Score</TableHead>
-                  <TableHead className="text-right font-semibold">Peer - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Peer - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Cumulative Self</TableHead>
+                  <TableHead className="text-right font-semibold">Cumulative Peer</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -384,7 +419,9 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
                     <TableCell className="border-r text-right">{Number(row.selfAverageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.selfPercentageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.peerAverageScore).toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{Number(row.peerPercentageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.peerPercentageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{cumulativeSelf.toFixed(1)}</TableCell>
+                    <TableCell className="text-right">{cumulativePeer.toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

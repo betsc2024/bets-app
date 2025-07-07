@@ -15,6 +15,7 @@ import CopyToClipboard from '@/components/CopyToClipboard';
 export default function SelfEvaluation({ companyId, userId, bankId }) {
   const [viewType, setViewType] = useState('table');
   const [tableData, setTableData] = useState([]);
+  const [cumulativeScore, setCumulativeScore] = useState(0);
   const [chartData, setChartData] = useState(null);
 
   const tableRef = useRef(null);
@@ -157,6 +158,14 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
       const processedData = processEvaluationData(evaluations);
       console.log("Processed data:", processedData);
       setTableData(processedData);
+      // declare cumulative variable for later use
+      let cumulative = 0;
+      // calculate cumulative (average of self average scores across attributes)
+      if (processedData.length > 0) {
+        const totalAvg = processedData.reduce((sum, item) => sum + item.averageScore, 0);
+        cumulative = Number((totalAvg / processedData.length).toFixed(1));
+        setCumulativeScore(cumulative);
+      }
 
       if (processedData.length > 0) {
         const generateChartData = (data) => {
@@ -168,6 +177,12 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                   label: 'Score (%)',
                   data: data.map(item => item.percentageScore),
                   backgroundColor: '#733e93',  // primary purple
+                  borderWidth: 0
+                },
+                {
+                  label: 'Cumulative Score (%)',
+                  data: Array(data.length).fill(cumulative),
+                  backgroundColor: '#FFCF55',
                   borderWidth: 0
                 }
               ]
@@ -299,7 +314,8 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                   <TableHead className="border-r w-16 font-semibold">Sr. No.</TableHead>
                   <TableHead className="border-r font-semibold">Attribute Name</TableHead>
                   <TableHead className="border-r text-right font-semibold">Self - Average Score</TableHead>
-                  <TableHead className="text-right font-semibold">Self - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Self - % Score</TableHead>
+                  <TableHead className="text-right font-semibold">Cumulative Score</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -308,7 +324,8 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                     <TableCell className="border-r">{row.srNo}</TableCell>
                     <TableCell className="border-r">{row.attributeName}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.averageScore).toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{Number(row.percentageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.percentageScore).toFixed(1)}</TableCell>
+                     <TableCell className="text-right">{cumulativeScore.toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -320,6 +337,7 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
       {/* Chart View */}
       {viewType === 'chart' && (
         <div ref={chartRef} className="border rounded-lg p-4 bg-white h-[400px]">
+          {/* cumulative score column only affects table view; no chart changes needed */}
           {chartData ? (
             <Bar data={chartData.chartData} options={chartData.chartOptions} />
           ) : (

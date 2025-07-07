@@ -23,6 +23,8 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
   const [assignmentId, setAssignmentId] = useState(null);
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
+  const [cumulativeSelf, setCumulativeSelf] = useState(0);
+  const [cumulativeTotal, setCumulativeTotal] = useState(0);
   const [viewType, setViewType] = useState('table');
   const [selectedAttribute, setSelectedAttribute] = useState('');
   const [attributes, setAttributes] = useState([]);
@@ -135,6 +137,13 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
       // Process the data
       const processedData = processEvaluationData(filteredTotalData, filteredSelfEvals);
       setTableData(processedData);
+      // compute cumulative averages
+      if (processedData.length > 0) {
+        const totalSelf = processedData.reduce((sum,item)=> sum + Number(item.selfAverageScore), 0);
+        const totalTotal = processedData.reduce((sum,item)=> sum + Number(item.totalAverageScore), 0);
+        setCumulativeSelf(Number((totalSelf/processedData.length).toFixed(1)));
+        setCumulativeTotal(Number((totalTotal/processedData.length).toFixed(1)));
+      }
       generateChartData(processedData);
 
       // Extract unique attributes for the dropdown
@@ -250,21 +259,37 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
   const generateChartData = (data) => {
     try {
       if (data && data.length > 0) {
+        const cumSelf = data.reduce((s,i)=> s + Number(i.selfAverageScore),0)/data.length;
+        const cumTotal = data.reduce((s,i)=> s + Number(i.totalAverageScore),0)/data.length;
+        const allVals=[...data.map(i=>Number(i.selfAverageScore)), ...data.map(i=>Number(i.totalAverageScore)), cumSelf, cumTotal];
+        const yMax=Math.ceil(Math.max(...allVals)*1.1/10)*10;
         const chartData = {
           labels: data.map(item => item.attributeName),
           datasets: [
-            {
-              label: 'Self Score (%)',
-              data: data.map(item => item.selfPercentageScore),
-              backgroundColor: '#733e93',  // primary purple
-              borderWidth: 0
-            },
-            {
-              label: 'Total Score (%)',
-              data: data.map(item => item.totalPercentageScore),
-              backgroundColor: '#4ade80',  // green
-              borderWidth: 0
-            }
+             {
+               label: 'Self Score',
+               data: data.map(item=>item.selfAverageScore),
+               backgroundColor: '#733e93',
+               borderWidth:0
+             },
+             {
+               label: 'Total Score',
+               data: data.map(item=>item.totalAverageScore),
+               backgroundColor: '#4ade80',
+               borderWidth:0
+             },
+             {
+               label: 'Cumulative Self',
+               data: Array(data.length).fill(cumSelf),
+               backgroundColor: '#FFCF55',
+               borderWidth:0
+             },
+             {
+               label: 'Cumulative Total',
+               data: Array(data.length).fill(cumTotal),
+               backgroundColor: '#1E90FF',
+               borderWidth:0
+             }
           ]
         };
 
@@ -274,7 +299,7 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
           scales: {
             y: {
               beginAtZero: true,
-              max: 100,
+              max: yMax,
               title: {
                 display: true,
                 text: 'Score'
@@ -397,7 +422,9 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
                   <TableHead className="border-r text-right font-semibold">Self - Average Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">Self - % Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">Total - Average Score</TableHead>
-                  <TableHead className="text-right font-semibold">Total - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Total - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Cumulative Self</TableHead>
+                  <TableHead className="text-right font-semibold">Cumulative Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -408,7 +435,9 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
                     <TableCell className="border-r text-right">{row.selfAverageScore}</TableCell>
                     <TableCell className="border-r text-right">{row.selfPercentageScore}</TableCell>
                     <TableCell className="border-r text-right">{row.totalAverageScore}</TableCell>
-                    <TableCell className="text-right">{row.totalPercentageScore}</TableCell>
+                    <TableCell className="border-r text-right">{row.totalPercentageScore}</TableCell>
+                     <TableCell className="border-r text-right">{cumulativeSelf.toFixed(1)}</TableCell>
+                     <TableCell className="text-right">{cumulativeTotal.toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

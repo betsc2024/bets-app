@@ -14,6 +14,8 @@ import CopyToClipboard from '../CopyToClipboard';
 const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
+  const [cumulativeSelf, setCumulativeSelf] = useState(0);
+  const [cumulativeReportingBoss, setCumulativeReportingBoss] = useState(0);
   const [viewType, setViewType] = useState('table');
   const tableRef = useRef(null);
   const chartRef = useRef(null);
@@ -112,6 +114,13 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
       // Process the data
       const processedData = processEvaluationData(filteredReportingBossData, filteredSelfEvals);
       setTableData(processedData);
+      // calculate cumulative averages
+      if (processedData.length > 0) {
+        const totalSelf = processedData.reduce((sum, item) => sum + item.selfAverageScore, 0);
+        const totalBoss = processedData.reduce((sum, item) => sum + item.reportingBossAverageScore, 0);
+        setCumulativeSelf(Number((totalSelf / processedData.length).toFixed(1)));
+        setCumulativeReportingBoss(Number((totalBoss / processedData.length).toFixed(1)));
+      }
       generateChartData(processedData);
     } catch (error) {
       console.error('Error in fetchData:', error);
@@ -220,21 +229,37 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
   const generateChartData = (data) => {
     try {
       if (data && data.length > 0) {
+        const cumSelf = data.reduce((s,i)=>s+i.selfAverageScore,0)/data.length;
+        const cumBoss = data.reduce((s,i)=>s+i.reportingBossAverageScore,0)/data.length;
+        const allVals=[...data.map(i=>i.selfAverageScore),...data.map(i=>i.reportingBossAverageScore),cumSelf,cumBoss];
+        const yMax=Math.ceil(Math.max(...allVals)*1.1/10)*10;
         const chartData = {
           labels: data.map(item => item.attributeName),
           datasets: [
-            {
-              label: 'Self Score (%)',
-              data: data.map(item => item.selfPercentageScore),
-              backgroundColor: '#733e93',  // primary purple
-              borderWidth: 0
-            },
-            {
-              label: 'Reporting Boss Score (%)',
-              data: data.map(item => item.reportingBossPercentageScore),
-              backgroundColor: '#4ade80',  // green
-              borderWidth: 0
-            }
+             {
+               label: 'Self Score',
+               data: data.map(item => item.selfAverageScore),
+               backgroundColor: '#733e93',  // purple
+               borderWidth: 0
+             },
+             {
+               label: 'Reporting Boss Score',
+               data: data.map(item => item.reportingBossAverageScore),
+               backgroundColor: '#4ade80',  // green
+               borderWidth: 0
+             },
+             {
+               label: 'Cumulative Self',
+               data: Array(data.length).fill(cumSelf),
+               backgroundColor: '#FFCF55', // yellow
+               borderWidth: 0
+             },
+             {
+               label: 'Cumulative Reporting Boss',
+               data: Array(data.length).fill(cumBoss),
+               backgroundColor: '#1E90FF', // blue
+               borderWidth: 0
+             }
           ]
         };
 
@@ -244,7 +269,7 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
           scales: {
             y: {
               beginAtZero: true,
-              max: 100,
+              max: yMax,
               title: {
                 display: true,
                 text: 'Score'
@@ -359,7 +384,9 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
                   <TableHead className="border-r text-right font-semibold">Self - Average Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">Self - % Score</TableHead>
                   <TableHead className="border-r text-right font-semibold">Reporting Boss - Average Score</TableHead>
-                  <TableHead className="text-right font-semibold">Reporting Boss - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Reporting Boss - % Score</TableHead>
+                  <TableHead className="border-r text-right font-semibold">Cumulative Self</TableHead>
+                  <TableHead className="text-right font-semibold">Cumulative Reporting Boss</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -370,7 +397,9 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
                     <TableCell className="border-r text-right">{Number(row.selfAverageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.selfPercentageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.reportingBossAverageScore).toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{Number(row.reportingBossPercentageScore).toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{Number(row.reportingBossPercentageScore).toFixed(1)}</TableCell>
+                     <TableCell className="border-r text-right">{cumulativeSelf.toFixed(1)}</TableCell>
+                     <TableCell className="text-right">{cumulativeReportingBoss.toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
