@@ -385,7 +385,8 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
 
       {/* Table View */}
       {viewType === 'table' && (
-        <div ref={tableRef} className="border rounded-lg p-4 bg-white">
+        <div className="w-full overflow-x-auto">
+          <div ref={tableRef} className="border rounded-lg p-4 bg-white">
           {tableData.length === 0 ? (
             <div className="text-center py-4 text-gray-500">
               No evaluation data available
@@ -413,26 +414,28 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
                     <TableCell className="border-r text-right">{Number(row.selfPercentageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.topBossAverageScore).toFixed(1)}</TableCell>
                     <TableCell className="border-r text-right">{Number(row.topBossPercentageScore).toFixed(1)}</TableCell>
-                     <TableCell className="border-r text-right">{cumulativeSelf.toFixed(1)}</TableCell>
-                     <TableCell className="text-right">{cumulativeTopBoss.toFixed(1)}</TableCell>
+                    <TableCell className="border-r text-right">{cumulativeSelf.toFixed(1)}</TableCell>
+                    <TableCell className="text-right">{cumulativeTopBoss.toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          )}
+          )}</div>
         </div>
       )}
 
       {/* Chart View */}
       {viewType === 'chart' && chartData && (
-        <div ref={chartRef} className="h-[400px] border rounded-lg p-4 bg-white">
-          {chartData ? (
-            <Bar data={chartData.chartData} options={chartData.chartOptions} />
-          ) : (
-            <div className="text-center py-4 text-gray-500">
-              No data available for chart
+        <div className="w-full overflow-x-auto">
+          <div style={{ minWidth: `${tableData.length * 120}px` }}>
+            <div ref={chartRef} className="h-[400px] border rounded-lg p-4 bg-white">
+              {chartData ? (
+                <Bar data={chartData.chartData} options={chartData.chartOptions} />
+              ) : (
+                <div className="text-center py-4 text-gray-500">No data available for chart</div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
