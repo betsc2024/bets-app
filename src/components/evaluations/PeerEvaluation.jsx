@@ -110,15 +110,24 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
         const processedData = processPeerData(filteredPeerEvals, filteredSelfEvals);
         setTableData(processedData);
         // Calculate cumulative averages using percentage scores
+        let cumSelf = 0;
+        let cumPeer = 0;
         if (processedData.length > 0) {
           const totalSelf = processedData.reduce((sum, item) => sum + item.selfPercentageScore, 0);
           const totalPeer = processedData.reduce((sum, item) => sum + item.peerPercentageScore, 0);
-          const cumSelf = Number((totalSelf / processedData.length).toFixed(1));
-          const cumPeer = Number((totalPeer / processedData.length).toFixed(1));
+          cumSelf = Number((totalSelf / processedData.length).toFixed(1));
+          cumPeer = Number((totalPeer / processedData.length).toFixed(1));
+          console.log('Calculated cumulative scores:', { cumSelf, cumPeer });
+          console.log('Individual scores:', processedData.map(item => ({ 
+            attribute: item.attributeName, 
+            self: item.selfPercentageScore, 
+            peer: item.peerPercentageScore 
+          })));
           setCumulativeSelf(cumSelf);
           setCumulativePeer(cumPeer);
         }
-        generateChartData(processedData);
+        // Pass the calculated values directly to generateChartData
+        generateChartData(processedData, cumSelf, cumPeer);
       } else {
         setTableData([]);
         setChartData(null);
@@ -242,19 +251,25 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
     });
   };
 
-  const generateChartData = (data) => {
+  const generateChartData = (data, cumSelf, cumPeer) => {
     try {
       if (data && data.length > 0) {
-        // Get cumulative scores from state instead of recalculating
-        const cumSelf = cumulativeSelf;
-        const cumPeer = cumulativePeer;
+        console.log('generateChartData - received cumulative values:', { cumSelf, cumPeer });
         
         // Create labels with attribute names and add 'Cumulative' at the end
         const labels = [...data.map(item => item.attributeName), 'Cumulative'];
+        console.log('Chart labels:', labels);
         
         // Create data arrays with scores and add cumulative scores at the end
         const selfScoreData = [...data.map(item => item.selfPercentageScore), cumSelf];
         const peerScoreData = [...data.map(item => item.peerPercentageScore), cumPeer];
+        
+        console.log('Chart data arrays:', { 
+          selfScoreData, 
+          peerScoreData, 
+          selfLength: selfScoreData.length, 
+          peerLength: peerScoreData.length 
+        });
         
         const chartData = {
           labels: labels,
@@ -360,6 +375,16 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
           }
         };
 
+        console.log('Final chart data structure:', { 
+          chartData, 
+          chartOptions,
+          datasetLengths: {
+            labels: chartData.labels.length,
+            selfData: chartData.datasets[0].data.length,
+            peerData: chartData.datasets[1].data.length
+          }
+        });
+        
         setChartData({ chartData, chartOptions });
       }
     } catch (error) {
