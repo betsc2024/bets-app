@@ -182,10 +182,7 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                 {
                   label: 'Score (%)',
                   data: scoreData,
-                  backgroundColor: (context) => {
-                    // Use different color for the cumulative bar
-                    return context.dataIndex === data.length ? '#FFCF55' : '#733e93';
-                  },
+                  backgroundColor: '#733e93', // Use same purple color for all bars including cumulative
                   borderWidth: 0
                 }
               ]
@@ -213,6 +210,13 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                   ticks: {
                     callback: function(val) {
                       const label = this.getLabelForValue(val);
+                      
+                      // Make 'Cumulative' label bold using font weight property only
+                      if (label === 'Cumulative') {
+                        return [label]; // Return without asterisks
+                      }
+                      
+                      // Regular word-wrapping for other labels
                       const words = label.split(' ');
                       const lines = [];
                       let currentLine = words[0];
@@ -227,6 +231,15 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                       }
                       lines.push(currentLine);
                       return lines;
+                    },
+                    font: function(context) {
+                      const label = context.chart.data.labels[context.index];
+                      if (label === 'Cumulative') {
+                        return {
+                          weight: 'bold'
+                        };
+                      }
+                      return {};
                     },
                     maxRotation: 0,
                     minRotation: 0,

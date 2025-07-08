@@ -252,19 +252,13 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
              {
                label: 'Self Score',
                data: selfScoreData,
-               backgroundColor: (context) => {
-                 // Use different color for the cumulative bar
-                 return context.dataIndex === data.length ? '#FFCF55' : '#733e93';
-               },
+               backgroundColor: '#733e93', // Same purple color for all self bars including cumulative
                borderWidth: 0
              },
              {
                label: 'Reporting Boss Score',
                data: bossScoreData,
-               backgroundColor: (context) => {
-                 // Use different color for the cumulative bar
-                 return context.dataIndex === data.length ? '#1E90FF' : '#4ade80';
-               },
+               backgroundColor: '#4ade80', // Same green color for all reporting boss bars including cumulative
                borderWidth: 0
              }
           ]
@@ -292,6 +286,13 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
               ticks: {
                 callback: function(val) {
                   const label = this.getLabelForValue(val);
+                  
+                  // Make 'Cumulative' label bold using font weight property only
+                  if (label === 'Cumulative') {
+                    return [label]; // Return without asterisks
+                  }
+                  
+                  // Regular word-wrapping for other labels
                   const words = label.split(' ');
                   const lines = [];
                   let currentLine = words[0];
@@ -306,6 +307,15 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
                   }
                   lines.push(currentLine);
                   return lines;
+                },
+                font: function(context) {
+                  const label = context.chart.data.labels[context.index];
+                  if (label === 'Cumulative') {
+                    return {
+                      weight: 'bold'
+                    };
+                  }
+                  return {};
                 },
                 maxRotation: 0,
                 minRotation: 0,
