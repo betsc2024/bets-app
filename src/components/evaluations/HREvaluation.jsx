@@ -113,10 +113,10 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
       // Process the data
       const processedData = processEvaluationData(filteredHrData, filteredSelfEvals);
       setTableData(processedData);
-      // calculate cumulative self and HR average scores
+      // calculate cumulative self and HR percentage scores
       if (processedData.length > 0) {
-        const totalSelf = processedData.reduce((sum, item) => sum + item.selfAverageScore, 0);
-        const totalHR = processedData.reduce((sum, item) => sum + item.hrAverageScore, 0);
+        const totalSelf = processedData.reduce((sum, item) => sum + item.selfPercentageScore, 0);
+        const totalHR = processedData.reduce((sum, item) => sum + item.hrPercentageScore, 0);
         const cumSelf = Number((totalSelf / processedData.length).toFixed(1));
         const cumHR = Number((totalHR / processedData.length).toFixed(1));
         setCumulativeSelf(cumSelf);
@@ -234,41 +234,43 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
   const generateChartData = (data) => {
     try {
       if (data && data.length > 0) {
-        const cumSelfPerc = data.reduce((s, i) => s + i.selfPercentageScore, 0) / data.length;
-        const cumHRPerc = data.reduce((s, i) => s + i.hrPercentageScore, 0) / data.length;
+        // Get cumulative scores from state instead of recalculating
+        const cumSelf = cumulativeSelf;
+        const cumHR = cumulativeHR;
+        
+        // Create labels with attribute names and add 'Cumulative' at the end
+        const labels = [...data.map(item => item.attributeName), 'Cumulative'];
+        
+        // Create data arrays with scores and add cumulative scores at the end
+        const selfScoreData = [...data.map(item => item.selfPercentageScore), cumSelf];
+        const hrScoreData = [...data.map(item => item.hrPercentageScore), cumHR];
+        
         const allVals = [
-            ...data.map(i=>i.selfPercentageScore),
-            ...data.map(i=>i.hrPercentageScore),
-            cumSelfPerc,
-            cumHRPerc
+            ...selfScoreData,
+            ...hrScoreData
           ];
         const rawMax = Math.max(...allVals);
         const yMax = Math.ceil(rawMax * 1.1 / 10) * 10;
+        
         const chartData = {
-          labels: data.map(item => item.attributeName),
+          labels: labels,
           datasets: [
              {
                label: 'Self Score (%)',
-               data: data.map(item => item.selfPercentageScore),
-               backgroundColor: '#733e93',  // purple
+               data: selfScoreData,
+               backgroundColor: (context) => {
+                 // Use different color for the cumulative bar
+                 return context.dataIndex === data.length ? '#FFCF55' : '#733e93';
+               },
                borderWidth: 0
              },
              {
                label: 'HR Score (%)',
-               data: data.map(item => item.hrPercentageScore),
-               backgroundColor: '#4ade80',  // green
-               borderWidth: 0
-             },
-             {
-               label: 'Cumulative Self (%)',
-               data: Array(data.length).fill(cumSelfPerc),
-               backgroundColor: '#FFCF55', // yellow
-               borderWidth: 0
-             },
-             {
-               label: 'Cumulative HR (%)',
-               data: Array(data.length).fill(cumHRPerc),
-               backgroundColor: '#1E90FF', // blue
+               data: hrScoreData,
+               backgroundColor: (context) => {
+                 // Use different color for the cumulative bar
+                 return context.dataIndex === data.length ? '#1E90FF' : '#4ade80';
+               },
                borderWidth: 0
              }
           ]

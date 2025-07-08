@@ -114,10 +114,10 @@ const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
       // Process the data
       const processedData = processEvaluationData(filteredSubordinateData, filteredSelfEvals);
       setTableData(processedData);
-      // calculate cumulative averages
+      // calculate cumulative averages using percentage scores
       if (processedData.length > 0) {
-        const totalSelf = processedData.reduce((sum, item) => sum + item.selfAverageScore, 0);
-        const totalSub = processedData.reduce((sum, item) => sum + item.subordinateAverageScore, 0);
+        const totalSelf = processedData.reduce((sum, item) => sum + Number(item.selfPercentageScore), 0);
+        const totalSub = processedData.reduce((sum, item) => sum + Number(item.subordinatePercentageScore), 0);
         setCumulativeSelf(Number((totalSelf / processedData.length).toFixed(1)));
         setCumulativeSub(Number((totalSub / processedData.length).toFixed(1)));
       }
@@ -228,35 +228,39 @@ const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
   const generateChartData = (data) => {
     try {
       if (data && data.length > 0) {
-        const cumSelf = data.reduce((s,i)=>s+i.selfAverageScore,0)/data.length;
-        const cumSub = data.reduce((s,i)=>s+i.subordinateAverageScore,0)/data.length;
-        const allVals=[...data.map(i=>i.selfAverageScore),...data.map(i=>i.subordinateAverageScore),cumSelf,cumSub];
-        const yMax=Math.ceil(Math.max(...allVals)*1.1/10)*10;
+        // Get cumulative scores from state instead of recalculating
+        const cumSelf = cumulativeSelf;
+        const cumSub = cumulativeSub;
+        
+        // Create labels with attribute names and add 'Cumulative' at the end
+        const labels = [...data.map(item => item.attributeName), 'Cumulative'];
+        
+        // Create data arrays with scores and add cumulative scores at the end
+        const selfScoreData = [...data.map(item => Number(item.selfPercentageScore)), cumSelf];
+        const subScoreData = [...data.map(item => Number(item.subordinatePercentageScore)), cumSub];
+        
+        const allVals = [...selfScoreData, ...subScoreData];
+        const yMax = Math.ceil(Math.max(...allVals) * 1.1 / 10) * 10;
+        
         const chartData = {
-          labels: data.map(item => item.attributeName),
+          labels: labels,
           datasets: [
             {
               label: 'Self Score (%)',
-              data: data.map(item => item.selfPercentageScore),
-              backgroundColor: '#733e93',  // purple
+              data: selfScoreData,
+              backgroundColor: (context) => {
+                // Use different color for the cumulative bar
+                return context.dataIndex === data.length ? '#FFCF55' : '#733e93';
+              },
               borderWidth: 0
             },
             {
               label: 'Subordinate Score (%)',
-              data: data.map(item => item.subordinatePercentageScore),
-              backgroundColor: '#4ade80',  // green
-              borderWidth: 0
-            },
-            {
-              label: 'Cumulative Self',
-              data: Array(data.length).fill(cumSelf),
-              backgroundColor: '#FFCF55', // yellow
-              borderWidth: 0
-            },
-            {
-              label: 'Cumulative Subordinate',
-              data: Array(data.length).fill(cumSub),
-              backgroundColor: '#1E90FF', // blue
+              data: subScoreData,
+              backgroundColor: (context) => {
+                // Use different color for the cumulative bar
+                return context.dataIndex === data.length ? '#1E90FF' : '#4ade80';
+              },
               borderWidth: 0
             }
           ]

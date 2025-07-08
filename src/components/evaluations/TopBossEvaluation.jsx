@@ -109,10 +109,10 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
       if ((filteredTopBossEvals && filteredTopBossEvals.length > 0) || (filteredSelfEvals && filteredSelfEvals.length > 0)) {
         const processedData = processTopBossData(filteredTopBossEvals, filteredSelfEvals);
         setTableData(processedData);
-      // calculate cumulative averages
+      // calculate cumulative averages using percentage scores
       if (processedData.length > 0) {
-        const totalSelf = processedData.reduce((sum, item) => sum + item.selfAverageScore, 0);
-        const totalTopBoss = processedData.reduce((sum, item) => sum + item.topBossAverageScore, 0);
+        const totalSelf = processedData.reduce((sum, item) => sum + Number(item.selfPercentageScore), 0);
+        const totalTopBoss = processedData.reduce((sum, item) => sum + Number(item.topBossPercentageScore), 0);
         setCumulativeSelf(Number((totalSelf / processedData.length).toFixed(1)));
         setCumulativeTopBoss(Number((totalTopBoss / processedData.length).toFixed(1)));
       }
@@ -244,35 +244,39 @@ const TopBossEvaluation = ({ userId, companyId, bankId }) => {
   const generateChartData = (data) => {
     try {
       if (data && data.length > 0) {
-        const cumSelf = data.reduce((s,i)=>s+i.selfAverageScore,0)/data.length;
-        const cumTop = data.reduce((s,i)=>s+i.topBossAverageScore,0)/data.length;
-        const allVals=[...data.map(i=>i.selfAverageScore),...data.map(i=>i.topBossAverageScore),cumSelf,cumTop];
-        const yMax=Math.ceil(Math.max(...allVals)*1.1/10)*10;
+        // Get cumulative scores from state instead of recalculating
+        const cumSelf = cumulativeSelf;
+        const cumTop = cumulativeTopBoss;
+        
+        // Create labels with attribute names and add 'Cumulative' at the end
+        const labels = [...data.map(item => item.attributeName), 'Cumulative'];
+        
+        // Create data arrays with scores and add cumulative scores at the end
+        const selfScoreData = [...data.map(item => Number(item.selfPercentageScore)), cumSelf];
+        const topBossScoreData = [...data.map(item => Number(item.topBossPercentageScore)), cumTop];
+        
+        const allVals = [...selfScoreData, ...topBossScoreData];
+        const yMax = Math.ceil(Math.max(...allVals) * 1.1 / 10) * 10;
+        
         const chartData = {
-          labels: data.map(item => item.attributeName),
+          labels: labels,
           datasets: [
              {
                label: 'Self Score',
-               data: data.map(item => item.selfAverageScore),
-               backgroundColor: '#733e93',  // purple
+               data: selfScoreData,
+               backgroundColor: (context) => {
+                 // Use different color for the cumulative bar
+                 return context.dataIndex === data.length ? '#FFCF55' : '#733e93';
+               },
                borderWidth: 0
              },
              {
                label: 'Top Boss Score',
-               data: data.map(item => item.topBossAverageScore),
-               backgroundColor: '#4ade80',  // green
-               borderWidth: 0
-             },
-             {
-               label: 'Cumulative Self',
-               data: Array(data.length).fill(cumSelf),
-               backgroundColor: '#FFCF55', // yellow
-               borderWidth: 0
-             },
-             {
-               label: 'Cumulative Top Boss',
-               data: Array(data.length).fill(cumTop),
-               backgroundColor: '#1E90FF', // blue
+               data: topBossScoreData,
+               backgroundColor: (context) => {
+                 // Use different color for the cumulative bar
+                 return context.dataIndex === data.length ? '#1E90FF' : '#4ade80';
+               },
                borderWidth: 0
              }
           ]

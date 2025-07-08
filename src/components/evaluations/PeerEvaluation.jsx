@@ -109,10 +109,10 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
       if ((filteredPeerEvals && filteredPeerEvals.length > 0) || (filteredSelfEvals && filteredSelfEvals.length > 0)) {
         const processedData = processPeerData(filteredPeerEvals, filteredSelfEvals);
         setTableData(processedData);
-        // Calculate cumulative averages
+        // Calculate cumulative averages using percentage scores
         if (processedData.length > 0) {
-          const totalSelf = processedData.reduce((sum, item) => sum + item.selfAverageScore, 0);
-          const totalPeer = processedData.reduce((sum, item) => sum + item.peerAverageScore, 0);
+          const totalSelf = processedData.reduce((sum, item) => sum + item.selfPercentageScore, 0);
+          const totalPeer = processedData.reduce((sum, item) => sum + item.peerPercentageScore, 0);
           const cumSelf = Number((totalSelf / processedData.length).toFixed(1));
           const cumPeer = Number((totalPeer / processedData.length).toFixed(1));
           setCumulativeSelf(cumSelf);
@@ -245,33 +245,36 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
   const generateChartData = (data) => {
     try {
       if (data && data.length > 0) {
-        const cumSelf = data.reduce((s, i) => s + i.selfAverageScore, 0) / data.length;
-        const cumPeer = data.reduce((s, i) => s + i.peerAverageScore, 0) / data.length;
+        // Get cumulative scores from state instead of recalculating
+        const cumSelf = cumulativeSelf;
+        const cumPeer = cumulativePeer;
+        
+        // Create labels with attribute names and add 'Cumulative' at the end
+        const labels = [...data.map(item => item.attributeName), 'Cumulative'];
+        
+        // Create data arrays with scores and add cumulative scores at the end
+        const selfScoreData = [...data.map(item => item.selfPercentageScore), cumSelf];
+        const peerScoreData = [...data.map(item => item.peerPercentageScore), cumPeer];
+        
         const chartData = {
-          labels: data.map(item => item.attributeName),
+          labels: labels,
           datasets: [
             {
               label: 'Self Score (%)',
-              data: data.map(item => item.selfPercentageScore),
-              backgroundColor: '#733e93',  // purple
+              data: selfScoreData,
+              backgroundColor: (context) => {
+                // Use different color for the cumulative bar
+                return context.dataIndex === data.length ? '#FFCF55' : '#733e93';
+              },
               borderWidth: 0
             },
             {
               label: 'Peer Score (%)',
-              data: data.map(item => item.peerPercentageScore),
-              backgroundColor: '#4ade80',  // green
-              borderWidth: 0
-            },
-            {
-              label: 'Cumulative Self (%)',
-              data: Array(data.length).fill(cumSelf),
-              backgroundColor: '#FFCF55', // yellow
-              borderWidth: 0
-            },
-            {
-              label: 'Cumulative Peer (%)',
-              data: Array(data.length).fill(cumPeer),
-              backgroundColor: '#1E90FF', // blue
+              data: peerScoreData,
+              backgroundColor: (context) => {
+                // Use different color for the cumulative bar
+                return context.dataIndex === data.length ? '#1E90FF' : '#4ade80';
+              },
               borderWidth: 0
             }
           ]

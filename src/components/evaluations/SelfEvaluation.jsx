@@ -160,29 +160,32 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
       setTableData(processedData);
       // declare cumulative variable for later use
       let cumulative = 0;
-      // calculate cumulative (average of self average scores across attributes)
+      // calculate cumulative (average of self percentage scores across attributes)
       if (processedData.length > 0) {
-        const totalAvg = processedData.reduce((sum, item) => sum + item.averageScore, 0);
-        cumulative = Number((totalAvg / processedData.length).toFixed(1));
+        const totalPercentage = processedData.reduce((sum, item) => sum + item.percentageScore, 0);
+        cumulative = Number((totalPercentage / processedData.length).toFixed(1));
         setCumulativeScore(cumulative);
       }
 
       if (processedData.length > 0) {
         const generateChartData = (data) => {
           try {
+            // Create labels with attribute names and add 'Cumulative' at the end
+            const labels = [...data.map(item => item.attributeName), 'Cumulative'];
+            
+            // Create data array with attribute scores and add cumulative score at the end
+            const scoreData = [...data.map(item => item.percentageScore), cumulative];
+            
             const chartData = {
-              labels: data.map(item => item.attributeName),
+              labels: labels,
               datasets: [
                 {
                   label: 'Score (%)',
-                  data: data.map(item => item.percentageScore),
-                  backgroundColor: '#733e93',  // primary purple
-                  borderWidth: 0
-                },
-                {
-                  label: 'Cumulative Score (%)',
-                  data: Array(data.length).fill(cumulative),
-                  backgroundColor: '#FFCF55',
+                  data: scoreData,
+                  backgroundColor: (context) => {
+                    // Use different color for the cumulative bar
+                    return context.dataIndex === data.length ? '#FFCF55' : '#733e93';
+                  },
                   borderWidth: 0
                 }
               ]
