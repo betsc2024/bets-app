@@ -115,13 +115,18 @@ const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
       const processedData = processEvaluationData(filteredSubordinateData, filteredSelfEvals);
       setTableData(processedData);
       // calculate cumulative averages using percentage scores
+      let cumSelf = 0;
+      let cumSub = 0;
       if (processedData.length > 0) {
         const totalSelf = processedData.reduce((sum, item) => sum + Number(item.selfPercentageScore), 0);
         const totalSub = processedData.reduce((sum, item) => sum + Number(item.subordinatePercentageScore), 0);
-        setCumulativeSelf(Number((totalSelf / processedData.length).toFixed(1)));
-        setCumulativeSub(Number((totalSub / processedData.length).toFixed(1)));
+        cumSelf = Number((totalSelf / processedData.length).toFixed(1));
+        cumSub = Number((totalSub / processedData.length).toFixed(1));
+        setCumulativeSelf(cumSelf);
+        setCumulativeSub(cumSub);
       }
-      generateChartData(processedData);
+      // Pass the calculated values directly to generateChartData
+      generateChartData(processedData, cumSelf, cumSub);
     } catch (error) {
       console.error('Error in fetchData:', error);
     }
@@ -225,12 +230,10 @@ const SubordinateEvaluation = ({ userId, companyId, bankId }) => {
     });
   };
 
-  const generateChartData = (data) => {
+  const generateChartData = (data, cumSelf, cumSub) => {
     try {
       if (data && data.length > 0) {
-        // Get cumulative scores from state instead of recalculating
-        const cumSelf = cumulativeSelf;
-        const cumSub = cumulativeSub;
+        // Using passed cumulative values instead of state
         
         // Create labels with attribute names and add 'Cumulative' at the end
         const labels = [...data.map(item => item.attributeName), 'Cumulative'];

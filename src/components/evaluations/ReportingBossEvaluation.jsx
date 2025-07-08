@@ -115,13 +115,18 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
       const processedData = processEvaluationData(filteredReportingBossData, filteredSelfEvals);
       setTableData(processedData);
       // calculate cumulative averages using percentage scores
+      let cumSelf = 0;
+      let cumBoss = 0;
       if (processedData.length > 0) {
         const totalSelf = processedData.reduce((sum, item) => sum + Number(item.selfPercentageScore), 0);
         const totalBoss = processedData.reduce((sum, item) => sum + Number(item.reportingBossPercentageScore), 0);
-        setCumulativeSelf(Number((totalSelf / processedData.length).toFixed(1)));
-        setCumulativeReportingBoss(Number((totalBoss / processedData.length).toFixed(1)));
+        cumSelf = Number((totalSelf / processedData.length).toFixed(1));
+        cumBoss = Number((totalBoss / processedData.length).toFixed(1));
+        setCumulativeSelf(cumSelf);
+        setCumulativeReportingBoss(cumBoss);
       }
-      generateChartData(processedData);
+      // Pass the calculated values directly to generateChartData
+      generateChartData(processedData, cumSelf, cumBoss);
     } catch (error) {
       console.error('Error in fetchData:', error);
     }
@@ -226,12 +231,10 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
     });
   };
 
-  const generateChartData = (data) => {
+  const generateChartData = (data, cumSelf, cumBoss) => {
     try {
       if (data && data.length > 0) {
-        // Get cumulative scores from state instead of recalculating
-        const cumSelf = cumulativeSelf;
-        const cumBoss = cumulativeReportingBoss;
+        // Using passed cumulative values instead of state
         
         // Create labels with attribute names and add 'Cumulative' at the end
         const labels = [...data.map(item => item.attributeName), 'Cumulative'];

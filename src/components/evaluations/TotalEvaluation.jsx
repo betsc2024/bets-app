@@ -138,13 +138,18 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
       const processedData = processEvaluationData(filteredTotalData, filteredSelfEvals);
       setTableData(processedData);
       // compute cumulative averages using percentage scores
+      let cumSelf = 0;
+      let cumTotal = 0;
       if (processedData.length > 0) {
         const totalSelf = processedData.reduce((sum,item)=> sum + Number(item.selfPercentageScore), 0);
         const totalTotal = processedData.reduce((sum,item)=> sum + Number(item.totalPercentageScore), 0);
-        setCumulativeSelf(Number((totalSelf/processedData.length).toFixed(1)));
-        setCumulativeTotal(Number((totalTotal/processedData.length).toFixed(1)));
+        cumSelf = Number((totalSelf/processedData.length).toFixed(1));
+        cumTotal = Number((totalTotal/processedData.length).toFixed(1));
+        setCumulativeSelf(cumSelf);
+        setCumulativeTotal(cumTotal);
       }
-      generateChartData(processedData);
+      // Pass the calculated values directly to generateChartData
+      generateChartData(processedData, cumSelf, cumTotal);
 
       // Extract unique attributes for the dropdown
       const uniqueAttributes = [...new Set(processedData.map(item => item.attributeName))];
@@ -256,12 +261,10 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
     });
   };
 
-  const generateChartData = (data) => {
+  const generateChartData = (data, cumSelf, cumTotal) => {
     try {
       if (data && data.length > 0) {
-        // Get cumulative scores from state instead of recalculating
-        const cumSelf = cumulativeSelf;
-        const cumTotal = cumulativeTotal;
+        // Using passed cumulative values instead of state
         
         // Create labels with attribute names and add 'Cumulative' at the end
         const labels = [...data.map(item => item.attributeName), 'Cumulative'];

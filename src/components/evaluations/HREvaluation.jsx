@@ -114,15 +114,18 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
       const processedData = processEvaluationData(filteredHrData, filteredSelfEvals);
       setTableData(processedData);
       // calculate cumulative self and HR percentage scores
+      let cumSelf = 0;
+      let cumHR = 0;
       if (processedData.length > 0) {
         const totalSelf = processedData.reduce((sum, item) => sum + item.selfPercentageScore, 0);
         const totalHR = processedData.reduce((sum, item) => sum + item.hrPercentageScore, 0);
-        const cumSelf = Number((totalSelf / processedData.length).toFixed(1));
-        const cumHR = Number((totalHR / processedData.length).toFixed(1));
+        cumSelf = Number((totalSelf / processedData.length).toFixed(1));
+        cumHR = Number((totalHR / processedData.length).toFixed(1));
         setCumulativeSelf(cumSelf);
         setCumulativeHR(cumHR);
       }
-      generateChartData(processedData);
+      // Pass the calculated values directly to generateChartData
+      generateChartData(processedData, cumSelf, cumHR);
     } catch (error) {
       console.error('Error in fetchData:', error);
     }
@@ -231,12 +234,10 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
     });
   };
 
-  const generateChartData = (data) => {
+  const generateChartData = (data, cumSelf, cumHR) => {
     try {
       if (data && data.length > 0) {
-        // Get cumulative scores from state instead of recalculating
-        const cumSelf = cumulativeSelf;
-        const cumHR = cumulativeHR;
+        // Using passed cumulative values instead of state
         
         // Create labels with attribute names and add 'Cumulative' at the end
         const labels = [...data.map(item => item.attributeName), 'Cumulative'];
