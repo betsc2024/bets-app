@@ -408,9 +408,27 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
         }
       }
 
-      // Create headers with all evaluatee names
+      // Filter out evaluatees with zero data points
+      const evaluateesWithData = {};
+      
+      // Count data points for each evaluatee
+      Object.values(attributeMap).forEach(data => {
+        Object.entries(data.scores).forEach(([evalId, score]) => {
+          if (score && score !== '') {
+            if (!evaluateesWithData[evalId]) {
+              evaluateesWithData[evalId] = 0;
+            }
+            evaluateesWithData[evalId]++;
+          }
+        });
+      });
+      
+      // Filter userIds to only include those with at least one data point
+      const filteredUserIds = userIds.filter(id => evaluateesWithData[id] && evaluateesWithData[id] > 0);
+      
+      // Create headers with filtered evaluatee names
       const headers = ['Sr. No.', 'Attribute Name'];
-      userIds.forEach(userId => {
+      filteredUserIds.forEach(userId => {
         headers.push(`${userNameMap[userId] || 'User ' + userId}`);
       });
       
@@ -418,8 +436,8 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
       const rows = Object.entries(attributeMap).map(([attributeName, data]) => {
         const row = [data.srNo, attributeName];
         
-        // Add scores for each evaluatee
-        userIds.forEach(userId => {
+        // Add scores for each evaluatee (only those with data)
+        filteredUserIds.forEach(userId => {
           row.push(data.scores[userId] || '');
         });
         
@@ -439,7 +457,7 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
       // Only include the first cell to avoid extra commas
       // Use HTML bold tags for Excel compatibility
       const totalEvaluateesRow = [
-        `Total Number of Evaluatees: ${userIds.length}` // Sr. No. column with bold formatting
+        `Total Number of Evaluatees: ${filteredUserIds.length}` // Sr. No. column with bold formatting
       ];
       
       // Combine headers and rows, including the total evaluatees row at the end
