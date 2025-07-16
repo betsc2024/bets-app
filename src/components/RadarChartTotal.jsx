@@ -176,20 +176,16 @@ export const RadarChartTotal = ({ companyId, userId, attribute, bankId, assignme
 
       // Only use the self-evaluation for this assignment (if any)
       let filteredSelfEvals = selfEvals;
-      console.log('[RadarChartTotal] assignmentId:', assignmentId);
-      console.log('[RadarChartTotal] selfEvals:', JSON.stringify(selfEvals, null, 2));
       if (assignmentId) {
         filteredSelfEvals = selfEvals?.filter(item => item.evaluation_assignment?.id === assignmentId);
-        console.log('[RadarChartTotal] filteredSelfEvals by assignmentId:', JSON.stringify(filteredSelfEvals, null, 2));
       }
       // If none or not completed, treat as empty
       if (!filteredSelfEvals || filteredSelfEvals.length === 0) {
-        console.log('[RadarChartTotal] No completed self-evaluation found for assignment. Will show zero for self.');
         filteredSelfEvals = [];
       } else {
-        console.log('[RadarChartTotal] Using self-evaluation:', JSON.stringify(filteredSelfEvals[0], null, 2));
+        // console.log('[RadarChartTotal] Using self-evaluation:', JSON.stringify(filteredSelfEvals[0], null, 2));
         if (filteredSelfEvals[0]?.evaluation_responses) {
-          console.log('[RadarChartTotal] Self evaluation_responses:', JSON.stringify(filteredSelfEvals[0].evaluation_responses, null, 2));
+          // console.log('[RadarChartTotal] Self evaluation_responses:', JSON.stringify(filteredSelfEvals[0].evaluation_responses, null, 2));
         }
       }
       const processedData = {
