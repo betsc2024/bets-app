@@ -28,6 +28,8 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
   const [viewType, setViewType] = useState('table');
   const [selectedAttribute, setSelectedAttribute] = useState('');
   const [attributes, setAttributes] = useState([]);
+  const [evaluateeName, setEvaluateeName] = useState('');
+  const [csvStatus, setCsvStatus] = useState(null); // null, 'loading', 'success', 'error'
   const tableRef = useRef(null);
   const chartRef = useRef(null);
   const radarRef = useRef(null);
@@ -35,8 +37,30 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
   useEffect(() => {
     if (userId && companyId && bankId) {
       fetchData();
+      fetchEvaluateeName();
     }
   }, [userId, companyId, bankId]);
+
+  const fetchEvaluateeName = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching evaluatee name:', error);
+        return;
+      }
+
+      if (data) {
+        setEvaluateeName(data.full_name);
+      }
+    } catch (error) {
+      console.error('Error in fetchEvaluateeName:', error);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -261,6 +285,202 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
     });
   };
 
+  const handleDownloadCSV = async () => {
+    try {
+      if (tableData.length === 0) {
+        console.error('No data available for CSV download');
+        setCsvStatus('error');
+        setTimeout(() => setCsvStatus(null), 3000);
+        return;
+      }
+      
+      // Set loading status
+      setCsvStatus('loading');
+
+      // Fetch all evaluatees for this company and attribute bank
+      const { data: evaluatees, error: evaluateesError } = await supabase
+        .from('evaluation_assignments')
+        .select(`
+          id,
+          user_to_evaluate_id
+        `)
+        .eq('company_id', companyId)
+        .eq('attribute_bank_id', bankId)
+        .order('id', { ascending: true });
+
+      if (evaluateesError) {
+        console.error('Error fetching evaluatees:', evaluateesError);
+        return;
+      }
+
+      // Get unique user IDs
+      const userIds = [...new Set(evaluatees?.map(item => item.user_to_evaluate_id) || [])];
+      
+      // Fetch user names - use separate queries for each user ID to avoid SQL errors
+      const userNameMap = {};
+      
+      // Process each user ID individually to avoid SQL formatting issues
+      for (const id of userIds) {
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('full_name')
+            .eq('id', id)
+            .single();
+            
+          if (error) {
+            console.error(`Error fetching name for user ${id}:`, error);
+            continue;
+          }
+          
+          if (data) {
+            userNameMap[id] = data.full_name;
+          }
+        } catch (err) {
+          console.error(`Error processing user ${id}:`, err);
+        }
+      }
+
+      // Create a structure to hold all evaluatee data
+      const allEvaluateeData = {};
+      
+      // Initialize with the current evaluatee's data that we already have
+      const attributeMap = {};
+      tableData.forEach(row => {
+        attributeMap[row.attributeName] = {
+          srNo: row.srNo,
+          scores: {}
+        };
+        attributeMap[row.attributeName].scores[userId] = row.totalPercentageScore;
+      });
+
+      // Fetch data for each evaluatee
+      for (const evaluateeId of userIds) {
+        if (evaluateeId === userId) continue; // Skip current user as we already have their data
+        
+        try {
+          // Fetch evaluations for this evaluatee
+          const { data: evalData, error: evalError } = await supabase
+            .from('evaluation_assignments')
+            .select(`
+              id,
+              evaluations!inner (
+                id,
+                relationship_type,
+                evaluation_responses (
+                  attribute_statement_options ( 
+                    weight, 
+                    attribute_statements ( 
+                      statement,
+                      attributes ( name )
+                    ) 
+                  ) 
+                )
+              )
+            `)
+            .eq('user_to_evaluate_id', evaluateeId)
+            .neq('evaluations.relationship_type', 'self')
+            .eq('company_id', companyId)
+            .eq('attribute_bank_id', bankId);
+
+          if (evalError) {
+            console.error(`Error fetching data for evaluatee ${evaluateeId}:`, evalError);
+            continue;
+          }
+
+          // Process the data for this evaluatee
+          if (evalData && evalData.length > 0) {
+            const processedData = processEvaluationData(evalData, []);
+            
+            // Add to our attribute map
+            processedData.forEach(item => {
+              if (!attributeMap[item.attributeName]) {
+                attributeMap[item.attributeName] = {
+                  srNo: item.srNo,
+                  scores: {}
+                };
+              }
+              attributeMap[item.attributeName].scores[evaluateeId] = item.totalPercentageScore;
+            });
+          }
+        } catch (error) {
+          console.error(`Error processing data for evaluatee ${evaluateeId}:`, error);
+        }
+      }
+
+      // Create headers with all evaluatee names
+      const headers = ['Sr. No.', 'Attribute Name'];
+      userIds.forEach(userId => {
+        headers.push(`${userNameMap[userId] || 'User ' + userId}`);
+      });
+      
+      // Create data rows
+      const rows = Object.entries(attributeMap).map(([attributeName, data]) => {
+        const row = [data.srNo, attributeName];
+        
+        // Add scores for each evaluatee
+        userIds.forEach(userId => {
+          row.push(data.scores[userId] || '');
+        });
+        
+        return row;
+      });
+
+      // Sort rows by Sr. No.
+      rows.sort((a, b) => a[0] - b[0]);
+
+      // Add "Total - % Score" text to the header
+      const headerWithTotal = headers.map((header, index) => {
+        if (index < 2) return header; // Keep Sr. No. and Attribute Name as is
+        return `${header} - Total % Score`;
+      });
+
+      // Add a final row showing the total number of evaluatees
+      // Only include the first cell to avoid extra commas
+      // Use HTML bold tags for Excel compatibility
+      const totalEvaluateesRow = [
+        `Total Number of Evaluatees: ${userIds.length}` // Sr. No. column with bold formatting
+      ];
+      
+      // Combine headers and rows, including the total evaluatees row at the end
+      const csvRows = [headerWithTotal, ...rows, totalEvaluateesRow];
+
+      // Function to escape CSV values properly
+      function escapeCSV(val) {
+        if (val == null) return '';
+        const s = String(val).trim();
+        if (/[",\n]/.test(s)) {
+          return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+      }
+
+      // Convert to CSV format
+      const csvContent = csvRows.map(r => r.map(escapeCSV).join(",")).join("\n");
+      
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `individual_evaluation_report.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      // Set success status
+      setCsvStatus('success');
+      setTimeout(() => setCsvStatus(null), 3000); // Clear status after 3 seconds
+    } catch (error) {
+      console.error('Error generating CSV:', error);
+      
+      // Set error status
+      setCsvStatus('error');
+      setTimeout(() => setCsvStatus(null), 3000); // Clear status after 3 seconds
+    }
+  };
+
   const generateChartData = (data, cumSelf, cumTotal) => {
     try {
       if (data && data.length > 0) {
@@ -394,6 +614,40 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-primary">Total Evaluation</h2>
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              className={`px-4 py-2 rounded-lg ${csvStatus === 'loading' ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white transition-colors flex items-center gap-2`}
+              onClick={() => handleDownloadCSV()}
+              disabled={csvStatus === 'loading'}
+            >
+              {csvStatus === 'loading' ? (
+                <>
+                  <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Generating...
+                </>
+              ) : (
+                'Download CSV'
+              )}
+            </button>
+            
+            {csvStatus === 'success' && (
+              <span className="text-green-500 flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                Downloaded!
+              </span>
+            )}
+            
+            {csvStatus === 'error' && (
+              <span className="text-red-500 flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                Failed to generate CSV
+              </span>
+            )}
+          </div>
           <div className="flex gap-2">
             <button
               className={`px-4 py-2 rounded-lg ${viewType === 'table' ? 'bg-primary text-white' : 'bg-gray-200'}`}
