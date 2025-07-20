@@ -19,11 +19,13 @@ import { toast } from 'sonner';
 import { Bar } from 'react-chartjs-2';
 import Chart from 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
+import annotationPlugin from 'chartjs-plugin-annotation';
 import CopyToClipboard from '../CopyToClipboard';
 
-Chart.register(ChartDataLabels);
+Chart.register(ChartDataLabels, annotationPlugin);
 
 const DemographyEvaluation = ({ userId, companyId, bankId }) => {
+  const [idealScore, setIdealScore] = useState(0);
   const [viewType, setViewType] = useState('table');
   const [selectedAttribute, setSelectedAttribute] = useState(null);
   const [attributes, setAttributes] = useState([]);
@@ -34,12 +36,38 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
   const chartRef = useRef(null);
 
   useEffect(() => {
-    if (userId && companyId && bankId) {
-      fetchDemographyData();
+    let isMounted = true;
+    async function fetchAll() {
+      if (userId && companyId && bankId) {
+        // Fetch ideal score first
+        const ideal = await fetchIdealScore(bankId);
+        if (!isMounted) return;
+        // Only after ideal score is fetched, fetch demography data
+        await fetchDemographyData(ideal);
+      }
     }
+    fetchAll();
+    return () => { isMounted = false; };
   }, [userId, companyId, bankId, selectedAttribute]);
 
-  const fetchDemographyData = async () => {
+  const fetchIdealScore = async (bankIdParam) => {
+    if (!bankIdParam) return 0;
+    const { data, error } = await supabase
+      .from('attribute_banks')
+      .select('ideal_score')
+      .eq('id', bankIdParam)
+      .single();
+    if (!error && data) {
+      setIdealScore(data.ideal_score == null ? 0 : data.ideal_score);
+      return data.ideal_score == null ? 0 : data.ideal_score;
+    } else {
+      setIdealScore(0);
+      return 0;
+    }
+  };
+
+  // Accept idealScore as argument for guaranteed sync
+  const fetchDemographyData = async (ideal = idealScore) => {
     try {
       // Get all evaluations for different relationship types
       const { data: evaluations, error } = await supabase
@@ -240,6 +268,25 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
         };
 
         const chartOptions = {
+          // Use the ideal argument, not possibly stale state
+          annotation: {
+            annotations: {
+              idealScoreLine: {
+                type: 'line',
+                yMin: ideal,
+                yMax: ideal,
+                xMin: -0.5,
+                xMax: chartLabels.length - 0.5,
+                borderColor: '#1e90ff',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                label: {
+                  display: false
+                }
+              }
+            }
+          },
+
           responsive: true,
           maintainAspectRatio: false,
           scales: {
@@ -253,7 +300,25 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
           },
           plugins: {
             legend: {
-              display: false
+              display: true,
+              labels: {
+                filter: (legendItem, data) => legendItem.text === 'Ideal Score',
+                generateLabels: (chart) => {
+                  // Only show the Ideal Score legend entry
+                  const datasetIndex = chart.data.datasets.findIndex(ds => ds.label === 'Ideal Score');
+                  if (datasetIndex === -1) return [];
+                  return [{
+                    text: 'Ideal Score',
+                    fillStyle: '#ffffff',
+                    strokeStyle: '#1e90ff',
+                    lineDash: [5, 5],
+                    lineWidth: 2,
+                    hidden: false,
+                    datasetIndex,
+                  }];
+                }
+              },
+              onClick: null // Disable toggling
             },
             tooltip: {
               callbacks: {
@@ -280,9 +345,39 @@ const DemographyEvaluation = ({ userId, companyId, bankId }) => {
                 top: 10,
                 bottom: 20
               }
+            },
+            annotation: {
+              annotations: {
+                idealScoreLine: {
+                  type: 'line',
+                  yMin: idealScore,
+                  yMax: idealScore,
+                  xMin: -0.5,
+                  xMax: chartLabels.length - 0.5,
+                  borderColor: '#1e90ff',
+                  borderWidth: 2,
+                  borderDash: [5, 5],
+                  label: {
+                    display: false
+                  }
+                }
+              }
             }
           }
         };
+        // Add an ideal score dataset (for legend and consistency, as in TotalEvaluation)
+        chartData.datasets.push({
+          label: 'Ideal Score',
+          data: Array(chartLabels.length).fill(null),
+          borderColor: '#1e90ff',
+          backgroundColor: '#ffffff',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          type: 'line',
+          fill: false,
+          pointRadius: 0,
+          pointHoverRadius: 0
+        });
 
         setChartData({ data: chartData, options: chartOptions });
       }

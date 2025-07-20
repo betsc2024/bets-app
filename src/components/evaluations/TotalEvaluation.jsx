@@ -16,6 +16,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Bar } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+import annotationPlugin from 'chartjs-plugin-annotation';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, annotationPlugin);
 import { RadarChartTotal } from '@/components/RadarChartTotal';
 import CopyToClipboard from '@/components/CopyToClipboard';
 
@@ -25,6 +29,7 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
   const [chartData, setChartData] = useState(null);
   const [cumulativeSelf, setCumulativeSelf] = useState(0);
   const [cumulativeTotal, setCumulativeTotal] = useState(0);
+  const [idealScore, setIdealScore] = useState(0);
   const [viewType, setViewType] = useState('table');
   const [selectedAttribute, setSelectedAttribute] = useState('');
   const [attributes, setAttributes] = useState([]);
@@ -33,6 +38,20 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
   const tableRef = useRef(null);
   const chartRef = useRef(null);
   const radarRef = useRef(null);
+
+  const fetchIdealScore = async (bankIdParam) => {
+    if (!bankIdParam) return 0;
+    const { data, error } = await supabase
+      .from('attribute_banks')
+      .select('ideal_score')
+      .eq('id', bankIdParam)
+      .single();
+    if (!error && data) {
+      return data.ideal_score == null ? 0 : data.ideal_score;
+    } else {
+      return 0;
+    }
+  };
 
   useEffect(() => {
     if (userId && companyId && bankId) {
@@ -64,6 +83,9 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
 
   const fetchData = async () => {
     try {
+      // Fetch ideal score first
+      const idealScoreValue = await fetchIdealScore(bankId);
+      setIdealScore(idealScoreValue);
       // Fetch all evaluations except self
       const { data: totalData, error: totalError } = await supabase
         .from('evaluation_assignments')
@@ -173,7 +195,7 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
         setCumulativeTotal(cumTotal);
       }
       // Pass the calculated values directly to generateChartData
-      generateChartData(processedData, cumSelf, cumTotal);
+      generateChartData(processedData, cumSelf, cumTotal, idealScoreValue);
 
       // Extract unique attributes for the dropdown
       const uniqueAttributes = [...new Set(processedData.map(item => item.attributeName))];
@@ -499,7 +521,7 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
     }
   };
 
-  const generateChartData = (data, cumSelf, cumTotal) => {
+  const generateChartData = (data, cumSelf, cumTotal, idealScoreValue) => {
     try {
       if (data && data.length > 0) {
         // Using passed cumulative values instead of state
@@ -528,6 +550,18 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
                data: totalScoreData,
                backgroundColor: '#4ade80', // Same green color for all total bars including cumulative
                borderWidth: 0
+             },
+             {
+               label: 'Ideal Score',
+               data: Array(labels.length).fill(null),
+               borderColor: '#1e90ff',
+               backgroundColor: '#ffffff',
+               borderWidth: 2,
+               borderDash: [5, 5],
+               type: 'line',
+               fill: false,
+               pointRadius: 0,
+               pointHoverRadius: 0
              }
           ]
         };
@@ -615,6 +649,23 @@ const TotalEvaluation = ({ userId, companyId, bankId }) => {
               font: {
                 size: 16,
                 weight: 'bold'
+              }
+            },
+            annotation: {
+              annotations: {
+                idealScoreLine: {
+                  type: 'line',
+                  yMin: idealScoreValue,
+                  yMax: idealScoreValue,
+                  xMin: -0.5,
+                  xMax: labels.length - 0.5,
+                  borderColor: '#1e90ff',
+                  borderWidth: 2,
+                  borderDash: [5, 5],
+                  label: {
+                    display: false
+                  }
+                }
               }
             }
           }
