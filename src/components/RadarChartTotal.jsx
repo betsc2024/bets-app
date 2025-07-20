@@ -376,6 +376,19 @@ export const RadarChartTotal = ({ companyId, userId, attribute, bankId, assignme
           }
         },
         plugins: {
+          title: {
+            display: true,
+            text: attribute,
+            font: {
+              size: 16,
+              weight: 'bold'
+            },
+            padding: {
+              top: 10,
+              bottom: 10
+            },
+            color: '#374151'
+          },
           legend: {
             position: 'top',
             align: 'center',
