@@ -12,22 +12,80 @@ import { supabase } from '@/supabase';
 import { toast } from 'sonner';
 import CopyToClipboard from '@/components/CopyToClipboard';
 
+// Import and register Chart.js annotation plugin
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import annotationPlugin from 'chartjs-plugin-annotation';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  annotationPlugin,
+  ChartDataLabels
+);
+
 export default function SelfEvaluation({ companyId, userId, bankId }) {
   const [viewType, setViewType] = useState('table');
   const [tableData, setTableData] = useState([]);
   const [cumulativeScore, setCumulativeScore] = useState(0);
   const [chartData, setChartData] = useState(null);
+  const [idealScore, setIdealScore] = useState(0);
 
   const tableRef = useRef(null);
   const chartRef = useRef(null);
 
   useEffect(() => {
-    if (companyId && userId) {
-      fetchSelfEvaluationData();
+    if (companyId && userId && bankId) {
+      // First fetch ideal score, then fetch evaluation data
+      const fetchIdealScoreAndData = async () => {
+        const idealScoreValue = await fetchIdealScore(bankId);
+        fetchSelfEvaluationData(idealScoreValue);
+      };
+      fetchIdealScoreAndData();
+    } else if (companyId && userId) {
+      // If no bankId, just fetch evaluation data without ideal score
+      fetchSelfEvaluationData(0);
     }
   }, [companyId, userId, bankId]);
+  
+  // Fetch ideal score from attribute_banks
+  const fetchIdealScore = async (bankIdParam) => {
+    try {
+      const { data, error } = await supabase
+        .from('attribute_banks')
+        .select('ideal_score')
+        .eq('id', bankIdParam)
+        .single();
+      if (!error && data) {
+        const score = data.ideal_score == null ? 0 : data.ideal_score;
+        setIdealScore(score);
+        return score;
+      } else {
+        console.error('Error fetching ideal score:', error, 'for bankId:', bankIdParam);
+        setIdealScore(0);
+        return 0;
+      }
+    } catch (error) {
+      console.error('Error fetching ideal score:', error);
+      toast.error('Error fetching ideal score');
+      setIdealScore(0);
+      return 0;
+    }
+  };
 
-  const fetchSelfEvaluationData = async () => {
+  const fetchSelfEvaluationData = async (idealScoreValue = 0) => {
     try {
       console.log("Fetching self evaluation data for:", { companyId, userId, bankId });
 
@@ -168,13 +226,18 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
       }
 
       if (processedData.length > 0) {
-        const generateChartData = (data) => {
+        const generateChartData = (data, ideal) => {
           try {
             // Create labels with attribute names and add 'Cumulative' at the end
             const labels = [...data.map(item => item.attributeName), 'Cumulative'];
             
             // Create data array with attribute scores and add cumulative score at the end
             const scoreData = [...data.map(item => item.percentageScore), cumulative];
+            
+            // Calculate max value for y-axis scale, including ideal score
+            const allVals = [...scoreData, ideal];
+            const rawMax = Math.max(...allVals);
+            const yMax = Math.max(Math.ceil(rawMax * 1.1 / 10) * 10, ideal + 10); // Ensure ideal score is visible
             
             const chartData = {
               labels: labels,
@@ -184,6 +247,18 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                   data: scoreData,
                   backgroundColor: '#733e93', // Use same purple color for all bars including cumulative
                   borderWidth: 0
+                },
+                {
+                  label: 'Ideal Score',
+                  data: Array(labels.length).fill(null), // Use null to make line invisible
+                  borderColor: '#1e90ff',
+                  backgroundColor: '#ffffff',
+                  borderWidth: 2,
+                  borderDash: [5, 5],
+                  type: 'line',
+                  fill: false,
+                  pointRadius: 0,
+                  pointHoverRadius: 0
                 }
               ]
             };
@@ -194,7 +269,7 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
               scales: {
                 y: {
                   beginAtZero: true,
-                  max: 100,
+                  max: yMax,
                   title: {
                     display: true,
                     text: 'Score'
@@ -272,6 +347,34 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
                     size: 16,
                     weight: 'bold'
                   }
+                },
+                // Add annotation for ideal score line
+                annotation: {
+                  annotations: {
+                    idealScoreLine: {
+                      type: 'line',
+                      yMin: ideal,
+                      yMax: ideal,
+                      xMin: -0.5,
+                      xMax: labels.length - 0.5,
+                      borderColor: '#1e90ff',
+                      borderWidth: 2,
+                      borderDash: [5, 5],
+                      label: {
+                        display: false
+                      }
+                    }
+                  }
+                }
+              },
+              // Only allow toggling Self, not Ideal Score
+              onClick: function(e, legendItem, legend) {
+                if (legendItem.text !== 'Ideal Score') {
+                  const index = legendItem.datasetIndex;
+                  const ci = legend.chart;
+                  const meta = ci.getDatasetMeta(index);
+                  meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                  ci.update();
                 }
               }
             };
@@ -282,7 +385,7 @@ export default function SelfEvaluation({ companyId, userId, bankId }) {
           }
         };
 
-        const chartData = generateChartData(processedData);
+        const chartData = generateChartData(processedData, idealScoreValue);
         setChartData(chartData);
       }
     } catch (error) {

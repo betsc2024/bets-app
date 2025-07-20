@@ -10,9 +10,15 @@ import {
 import { supabase } from '@/supabase';
 import { toast } from 'sonner';
 import { Bar } from 'react-chartjs-2';
+import Chart from 'chart.js/auto';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+import annotationPlugin from 'chartjs-plugin-annotation';
 import CopyToClipboard from '../CopyToClipboard';
 
+Chart.register(ChartDataLabels, annotationPlugin);
+
 const PeerEvaluation = ({ userId, companyId, bankId }) => {
+  const [idealScore, setIdealScore] = useState(0);
   const [viewType, setViewType] = useState('table');
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
@@ -22,12 +28,40 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
   const chartRef = useRef(null);
 
   useEffect(() => {
-    if (userId && companyId && bankId) {
-      fetchPeerData();
+    let isMounted = true;
+    async function fetchAll() {
+      if (userId && companyId && bankId) {
+        // Fetch ideal score first
+        const ideal = await fetchIdealScore(bankId);
+        if (!isMounted) return;
+        // Only after ideal score is fetched, fetch peer data
+        await fetchPeerData(ideal);
+      }
     }
+    fetchAll();
+    return () => { isMounted = false; };
   }, [userId, companyId, bankId]);
+  
+  const fetchIdealScore = async (bankIdParam) => {
+    if (!bankIdParam) return 0;
+    const { data, error } = await supabase
+      .from('attribute_banks')
+      .select('ideal_score')
+      .eq('id', bankIdParam)
+      .single();
+    if (!error && data) {
+      const score = data.ideal_score == null ? 0 : data.ideal_score;
+      setIdealScore(score);
+      return score;
+    } else {
+      console.error('Error fetching ideal score:', error, 'for bankId:', bankIdParam);
+      setIdealScore(0);
+      return 0;
+    }
+  };
 
-  const fetchPeerData = async () => {
+  // Accept idealScore as argument for guaranteed sync
+  const fetchPeerData = async (ideal = idealScore) => {
     try {
       // First get the peer evaluations
       const { data: peerEvals, error: peerError } = await supabase
@@ -117,17 +151,11 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
           const totalPeer = processedData.reduce((sum, item) => sum + item.peerPercentageScore, 0);
           cumSelf = Number((totalSelf / processedData.length).toFixed(1));
           cumPeer = Number((totalPeer / processedData.length).toFixed(1));
-          console.log('Calculated cumulative scores:', { cumSelf, cumPeer });
-          console.log('Individual scores:', processedData.map(item => ({ 
-            attribute: item.attributeName, 
-            self: item.selfPercentageScore, 
-            peer: item.peerPercentageScore 
-          })));
           setCumulativeSelf(cumSelf);
           setCumulativePeer(cumPeer);
         }
-        // Pass the calculated values directly to generateChartData
-        generateChartData(processedData, cumSelf, cumPeer);
+        // Pass the calculated values directly to generateChartData, including ideal score
+        generateChartData(processedData, cumSelf, cumPeer, ideal);
       } else {
         setTableData([]);
         setChartData(null);
@@ -251,25 +279,15 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
     });
   };
 
-  const generateChartData = (data, cumSelf, cumPeer) => {
+  const generateChartData = (data, cumSelf, cumPeer, ideal) => {
     try {
       if (data && data.length > 0) {
-        console.log('generateChartData - received cumulative values:', { cumSelf, cumPeer });
-        
         // Create labels with attribute names and add 'Cumulative' at the end
         const labels = [...data.map(item => item.attributeName), 'Cumulative'];
-        console.log('Chart labels:', labels);
         
         // Create data arrays with scores and add cumulative scores at the end
         const selfScoreData = [...data.map(item => item.selfPercentageScore), cumSelf];
         const peerScoreData = [...data.map(item => item.peerPercentageScore), cumPeer];
-        
-        console.log('Chart data arrays:', { 
-          selfScoreData, 
-          peerScoreData, 
-          selfLength: selfScoreData.length, 
-          peerLength: peerScoreData.length 
-        });
         
         const chartData = {
           labels: labels,
@@ -288,16 +306,98 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
             }
           ]
         };
+        
+        // Add ideal score dataset for legend only (not as visible line)
+        chartData.datasets.push({
+          label: 'Ideal Score',
+          data: Array(labels.length).fill(null), // Use null to make line invisible
+          borderColor: '#1e90ff',
+          backgroundColor: '#ffffff',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          type: 'line',
+          fill: false,
+          pointRadius: 0,
+          pointHoverRadius: 0
+        });
+        
+        // Ideal score dataset added for legend only
 
         const allVals = [
             ...data.map(i=>i.selfPercentageScore),
             ...data.map(i=>i.peerPercentageScore),
             cumSelf,
-            cumPeer
+            cumPeer,
+            ideal // Include ideal score in max calculation
           ];
           const rawMax = Math.max(...allVals);
-          const yMax = Math.ceil(rawMax * 1.1 / 10) * 10;
+          const yMax = Math.max(Math.ceil(rawMax * 1.1 / 10) * 10, ideal + 10); // Ensure ideal score is visible
+          
+          // Calculate y-axis max to ensure ideal score is visible
           const chartOptions = {
+          // Match exactly how it's done in TotalEvaluation.jsx
+          plugins: {
+            // Move existing plugins here
+            datalabels: {
+              anchor: 'end',
+              align: 'top',
+              offset: 4,
+              font: {
+                weight: 'bold'
+              },
+              formatter: value => Number(value).toFixed(1)
+            },
+            legend: {
+              position: 'top',
+              // Show all legend entries (Self, Peer, and Ideal Score)
+              onClick: function(e, legendItem, legend) {
+                // Only allow toggling for Self and Peer, not for Ideal Score
+                if (legendItem.text !== 'Ideal Score') {
+                  const index = legendItem.datasetIndex;
+                  const ci = legend.chart;
+                  const meta = ci.getDatasetMeta(index);
+                  meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                  ci.update();
+                }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: context => `${context.dataset.label.replace(' (%)', '')}: ${Number(context.raw).toFixed(1)}`
+              }
+            },
+            title: {
+              display: true,
+              text: 'Self vs Peer Evaluation Scores',
+              font: {
+                size: 16,
+                weight: 'bold'
+              }
+            },
+            // Add annotation exactly like TotalEvaluation.jsx
+            annotation: {
+              annotations: {
+                idealScoreLine: {
+                  type: 'line',
+                  yMin: ideal,
+                  yMax: ideal,
+                  xMin: -0.5,
+                  xMax: labels.length - 0.5,
+                  borderColor: '#1e90ff',
+                  borderWidth: 2,
+                  borderDash: [5, 5],
+                  label: {
+                    display: false
+                  }
+                }
+              }
+            }
+          },
+          // Debug logs for ideal score
+          onAfterDraw: (chart) => {
+            // Drawing chart with ideal score
+            console.log('📏 Chart dimensions:', chart.chartArea);
+          },
           responsive: true,
           maintainAspectRatio: false,
           scales: {
@@ -352,34 +452,7 @@ const PeerEvaluation = ({ userId, companyId, bankId }) => {
                 },
                 maxRotation: 0,
                 minRotation: 0,
-                 autoSkip: false
-              }
-            }
-          },
-          plugins: {
-            datalabels: {
-              anchor: 'end',
-              align: 'top',
-              offset: 4,
-              font: {
-                weight: 'bold'
-              },
-              formatter: value => Number(value).toFixed(1)
-            },
-            legend: {
-              position: 'top',
-            },
-            tooltip: {
-              callbacks: {
-                label: context => `${context.dataset.label.replace(' (%)', '')}: ${Number(context.raw).toFixed(1)}`
-              }
-            },
-            title: {
-              display: true,
-              text: 'Self vs Peer Evaluation Scores',
-              font: {
-                size: 16,
-                weight: 'bold'
+                autoSkip: false
               }
             }
           }

@@ -10,6 +10,31 @@ import {
 import { Bar } from 'react-chartjs-2';
 import { supabase } from '@/supabase';
 import CopyToClipboard from '../CopyToClipboard';
+import { toast } from 'sonner';
+
+// Import and register Chart.js annotation plugin
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import annotationPlugin from 'chartjs-plugin-annotation';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  annotationPlugin,
+  ChartDataLabels
+);
 
 const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
   const [tableData, setTableData] = useState([]);
@@ -17,16 +42,47 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
   const [cumulativeSelf, setCumulativeSelf] = useState(0);
   const [cumulativeReportingBoss, setCumulativeReportingBoss] = useState(0);
   const [viewType, setViewType] = useState('table');
+  const [idealScore, setIdealScore] = useState(0);
   const tableRef = useRef(null);
   const chartRef = useRef(null);
 
   useEffect(() => {
     if (userId && companyId && bankId) {
-      fetchData();
+      // First fetch ideal score, then fetch evaluation data
+      const fetchIdealScoreAndData = async () => {
+        const idealScoreValue = await fetchIdealScore(bankId);
+        fetchData(idealScoreValue);
+      };
+      fetchIdealScoreAndData();
     }
   }, [userId, companyId, bankId]);
+  
+  // Fetch ideal score from attribute_banks
+  const fetchIdealScore = async (bankIdParam) => {
+    try {
+      const { data, error } = await supabase
+        .from('attribute_banks')
+        .select('ideal_score')
+        .eq('id', bankIdParam)
+        .single();
+      if (!error && data) {
+        const score = data.ideal_score == null ? 0 : data.ideal_score;
+        setIdealScore(score);
+        return score;
+      } else {
+        console.error('Error fetching ideal score:', error, 'for bankId:', bankIdParam);
+        setIdealScore(0);
+        return 0;
+      }
+    } catch (error) {
+      console.error('Error fetching ideal score:', error);
+      toast.error('Error fetching ideal score');
+      setIdealScore(0);
+      return 0;
+    }
+  };
 
-  const fetchData = async () => {
+  const fetchData = async (idealScoreValue = 0) => {
     try {
       // Fetch reporting boss evaluations
       const { data: reportingBossData, error: reportingBossError } = await supabase
@@ -111,22 +167,23 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
         );
       }
 
-      // Process the data
+      // Process the data for chart and table
       const processedData = processEvaluationData(filteredReportingBossData, filteredSelfEvals);
       setTableData(processedData);
-      // calculate cumulative averages using percentage scores
-      let cumSelf = 0;
-      let cumBoss = 0;
+
+      // Calculate cumulative scores
       if (processedData.length > 0) {
         const totalSelf = processedData.reduce((sum, item) => sum + Number(item.selfPercentageScore), 0);
         const totalBoss = processedData.reduce((sum, item) => sum + Number(item.reportingBossPercentageScore), 0);
-        cumSelf = Number((totalSelf / processedData.length).toFixed(1));
-        cumBoss = Number((totalBoss / processedData.length).toFixed(1));
+        const cumSelf = Number((totalSelf / processedData.length).toFixed(1));
+        const cumBoss = Number((totalBoss / processedData.length).toFixed(1));
         setCumulativeSelf(cumSelf);
         setCumulativeReportingBoss(cumBoss);
+
+        // Generate chart data with ideal score
+        const chartData = generateChartData(processedData, cumSelf, cumBoss, idealScoreValue);
+        setChartData(chartData);
       }
-      // Pass the calculated values directly to generateChartData
-      generateChartData(processedData, cumSelf, cumBoss);
     } catch (error) {
       console.error('Error in fetchData:', error);
     }
@@ -231,11 +288,9 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
     });
   };
 
-  const generateChartData = (data, cumSelf, cumBoss) => {
+  const generateChartData = (data, cumSelf, cumBoss, ideal) => {
     try {
       if (data && data.length > 0) {
-        // Using passed cumulative values instead of state
-        
         // Create labels with attribute names and add 'Cumulative' at the end
         const labels = [...data.map(item => item.attributeName), 'Cumulative'];
         
@@ -243,8 +298,13 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
         const selfScoreData = [...data.map(item => Number(item.selfPercentageScore)), cumSelf];
         const bossScoreData = [...data.map(item => Number(item.reportingBossPercentageScore)), cumBoss];
         
-        const allVals = [...selfScoreData, ...bossScoreData];
-        const yMax = Math.ceil(Math.max(...allVals) * 1.1 / 10) * 10;
+        const allVals = [
+          ...selfScoreData, 
+          ...bossScoreData,
+          ideal // Include ideal score in max calculation
+        ];
+        const rawMax = Math.max(...allVals);
+        const yMax = Math.max(Math.ceil(rawMax * 1.1 / 10) * 10, ideal + 10); // Ensure ideal score is visible
         
         const chartData = {
           labels: labels,
@@ -263,6 +323,20 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
              }
           ]
         };
+        
+        // Add ideal score dataset for legend only (not as visible line)
+        chartData.datasets.push({
+          label: 'Ideal Score',
+          data: Array(labels.length).fill(null), // Use null to make line invisible
+          borderColor: '#1e90ff',
+          backgroundColor: '#ffffff',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          type: 'line',
+          fill: false,
+          pointRadius: 0,
+          pointHoverRadius: 0
+        });
 
         const chartOptions = {
           responsive: true,
@@ -348,12 +422,41 @@ const ReportingBossEvaluation = ({ userId, companyId, bankId }) => {
                 size: 16,
                 weight: 'bold'
               }
+            },
+            // Add annotation for ideal score line
+            annotation: {
+              annotations: {
+                idealScoreLine: {
+                  type: 'line',
+                  yMin: ideal,
+                  yMax: ideal,
+                  xMin: -0.5,
+                  xMax: labels.length - 0.5,
+                  borderColor: '#1e90ff',
+                  borderWidth: 2,
+                  borderDash: [5, 5],
+                  label: {
+                    display: false
+                  }
+                }
+              }
+            }
+          },
+          // Only allow toggling Self and Reporting Boss, not Ideal Score
+          onClick: function(e, legendItem, legend) {
+            if (legendItem.text !== 'Ideal Score') {
+              const index = legendItem.datasetIndex;
+              const ci = legend.chart;
+              const meta = ci.getDatasetMeta(index);
+              meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+              ci.update();
             }
           }
         };
 
-        setChartData({ chartData, chartOptions });
+        return { chartData, chartOptions };
       }
+      return null;
     } catch (error) {
       console.error("Error processing evaluation data:", error);
     }
