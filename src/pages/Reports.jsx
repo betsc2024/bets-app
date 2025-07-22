@@ -23,6 +23,8 @@ import Status from '@/components/evaluations/Status';
 import CopyToClipboard from '@/components/CopyToClipboard';
 import html2canvas from "html2canvas";
 import OverallStatus from './OverallStatus';
+import QuotientTable from "@/components/QuotientTable";
+import QuotientStatus from "@/components/QuotientStatus";
 
 import {
   Select,
@@ -773,6 +775,7 @@ export default function Reports() {
           {selectedCompany && reportType === 'quotient' && beforeBank && (
             <Select value={afterBank} onValueChange={(value) => {
               setAfterBank(value);
+              setSelectedUser(null); // Reset user selection when after bank changes
             }}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select After Bank (Optional)" />
@@ -785,6 +788,27 @@ export default function Reports() {
                     item?.id && item?.name ? (
                       <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
                     ) : null
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
+          
+          {/* User Selection for Quotient: only show if company, report type, and before bank are selected */}
+          {selectedCompany && reportType === 'quotient' && beforeBank && (
+            <Select value={selectedUser?.id} onValueChange={(value) => {
+              const user = users.find(c => c.id === value);
+              setSelectedUser(user);
+              setEmployeeStepDone(true);
+            }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a User" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
+                <SelectGroup>
+                  <SelectLabel className="flex items-center justify-between">Users</SelectLabel>
+                  {[...users].sort((a, b) => a.full_name.localeCompare(b.full_name)).map((user) => (
+                    <SelectItem key={user.id} value={user.id}>{user.full_name}</SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
@@ -956,11 +980,26 @@ export default function Reports() {
       )}
 
       {/* Quotient Report UI */}
-      {selectedCompany && reportType === 'quotient' && beforeBank && (
+      {selectedCompany && reportType === 'quotient' && beforeBank && selectedUser && (
         <div className="space-y-6">
-          <h2 className="text-2xl font-semibold text-primary">Quotient</h2>
-          <div className="p-4 border rounded-md bg-white shadow-sm">
-            <p className="text-gray-500 italic">Quotient report content will be rendered here.</p>
+          <h2 className="text-2xl font-bold text-primary">Quotient</h2>
+          
+          {/* Evaluation Status Component */}
+          <QuotientStatus
+            companyId={selectedCompany?.id}
+            userId={selectedUser?.id}
+            beforeBankId={beforeBank}
+            afterBankId={afterBank}
+          />
+          
+          {/* Quotient Table Component */}
+          <div className="border rounded-lg p-4 bg-white">
+            <QuotientTable 
+              companyId={selectedCompany?.id} 
+              userId={selectedUser?.id} 
+              beforeBankId={beforeBank} 
+              afterBankId={afterBank} 
+            />
           </div>
         </div>
       )}
