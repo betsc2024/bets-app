@@ -59,6 +59,10 @@ export default function Reports() {
   const [barData, setBarData] = useState(null);
   const [scoreType, setScoreType] = useState(null);
   const [selectedAttribute, setSelectedAttribute] = useState(null);
+  
+  // Quotient report states
+  const [beforeBank, setBeforeBank] = useState("");
+  const [afterBank, setAfterBank] = useState("");
 
   // Table data states
   const [tableData, setTableData] = useState([]);
@@ -430,10 +434,10 @@ export default function Reports() {
   };
 
   useEffect(() => {
-    if (selectedCompany) {
+    if (selectedCompany && reportType) {
       fetch_bank(selectedCompany, analysis);
     }
-  }, [selectedCompany, analysis]);
+  }, [selectedCompany, reportType, analysis]);
 
   useEffect(() => {
     if (selectedCompany && selectedUser) {
@@ -671,6 +675,8 @@ export default function Reports() {
     setSelectedUser(null);
     setAnalysis("");
     setBank("");
+    setBeforeBank("");
+    setAfterBank("");
     setSelectedAttribute(null);
     setScoreType(null);
     setBarData(null);
@@ -702,6 +708,7 @@ export default function Reports() {
               setBankStepDone(false);
               setEmployeeStepDone(false);
               setSelectedEvaluationGroup(null);
+              setReportType('');
             }}
           >
             <SelectTrigger className="w-full">
@@ -717,8 +724,75 @@ export default function Reports() {
             </SelectContent>
           </Select>
 
-          {/* Bank Selection: only show if company selected */}
+          {/* Report Type Selection: show after company is selected */}
           {selectedCompany && (
+            <Select value={reportType} onValueChange={(value) => {
+              setReportType(value);
+              setEmployeeStepDone(false);
+              setSelectedUser(null);
+              setSelectedEvaluationGroup(null);
+              setBank(""); // Reset bank when report type changes
+            }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select Report Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Report Type</SelectLabel>
+                  <SelectItem value="individual">Individual Report</SelectItem>
+                  <SelectItem value="status">Status Report</SelectItem>
+                  <SelectItem value="evaluation">Evaluation Status Reports</SelectItem>
+                  <SelectItem value="quotient">Quotient</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Before Bank Selection: only show if company and report type is 'quotient' */}
+          {selectedCompany && reportType === 'quotient' && (
+            <Select value={beforeBank} onValueChange={(value) => {
+              setBeforeBank(value);
+            }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select Before Bank" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
+                <SelectGroup>
+                  <SelectLabel className="flex items-center justify-between">Before Banks</SelectLabel>
+                  {[...bankList].sort((a, b) => a.name.localeCompare(b.name)).map((item) => (
+                    item?.id && item?.name ? (
+                      <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                    ) : null
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* After Bank Selection: only show if company and report type is 'quotient' and before bank is selected */}
+          {selectedCompany && reportType === 'quotient' && beforeBank && (
+            <Select value={afterBank} onValueChange={(value) => {
+              setAfterBank(value);
+            }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select After Bank (Optional)" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[200px] overflow-y-auto [&_*]:scrollbar [&_*]:scrollbar-w-1.5 [&_*]:scrollbar-thumb-gray-400 [&_*]:scrollbar-track-gray-200">
+                <SelectGroup>
+                  <SelectLabel className="flex items-center justify-between">After Banks</SelectLabel>
+                  <SelectItem value="none">None</SelectItem>
+                  {[...bankList].sort((a, b) => a.name.localeCompare(b.name)).map((item) => (
+                    item?.id && item?.name ? (
+                      <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                    ) : null
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Bank Selection: only show if company and report type selected (except quotient) */}
+          {selectedCompany && reportType && reportType !== 'quotient' && (
             <Select value={bank} onValueChange={(value) => {
               setBank(value);
               setBankStepDone(true);
@@ -742,30 +816,8 @@ export default function Reports() {
             </Select>
           )}
 
-          {/* Report Type Selection: only show if company and bank selected */}
-          {selectedCompany && bank && (
-            <Select value={reportType} onValueChange={(value) => {
-              setReportType(value);
-              setEmployeeStepDone(false);
-              setSelectedUser(null);
-              setSelectedEvaluationGroup(null);
-            }}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select Report Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Report Type</SelectLabel>
-                  <SelectItem value="individual">Individual Report</SelectItem>
-                  <SelectItem value="status">Status Report</SelectItem>
-                  <SelectItem value="evaluation">Evaluation Status Reports</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          )}
-
-          {/* Employee Selection: only show if company, bank, and report type is 'individual' */}
-          {selectedCompany && bank && reportType === 'individual' && (
+          {/* Employee Selection: only show if company, report type, bank, and report type is 'individual' */}
+          {selectedCompany && reportType === 'individual' && bank && (
             <Select value={selectedUser?.id} onValueChange={(value) => {
               const user = users.find(c => c.id === value);
               setSelectedUser(user);
@@ -786,7 +838,7 @@ export default function Reports() {
           )}
 
           {/* Evaluation Selection: only show if reportType is 'status' */}
-          {selectedCompany && bank && reportType === 'status' && (
+          {selectedCompany && reportType === 'status' && bank && (
             <Select value={selectedEvaluationGroup?.name || ''} onValueChange={(value) => {
               const group = evaluationGroups.find(g => g.name === value);
               setSelectedEvaluationGroup(group);
@@ -813,7 +865,7 @@ export default function Reports() {
       </div>
 
       {/* Individual Report UI */}
-      {selectedCompany && bank && reportType === 'individual' && selectedUser && (
+      {selectedCompany && reportType === 'individual' && bank && selectedUser && (
         <div className="space-y-6" ref={barChartRef}>
           {/* Always show Status component if selections are valid */}
           <Status 
@@ -887,7 +939,7 @@ export default function Reports() {
       )}
 
       {/* Status Report UI */}
-      {selectedCompany && bank && reportType === 'status' && selectedEvaluationGroup && (
+      {selectedCompany && reportType === 'status' && bank && selectedEvaluationGroup && (
         <div className="space-y-6" ref={barChartRef}>
           {/* Render OverallStatus with proper props */}
           <OverallStatus
@@ -899,8 +951,18 @@ export default function Reports() {
       )}
 
       {/* Evaluation Status Reports UI */}
-      {selectedCompany && bank && reportType === 'evaluation' && (
+      {selectedCompany && reportType === 'evaluation' && bank && (
         <EvaluationReportsTable companyId={selectedCompany?.id} bankId={bank} />
+      )}
+
+      {/* Quotient Report UI */}
+      {selectedCompany && reportType === 'quotient' && beforeBank && (
+        <div className="space-y-6">
+          <h2 className="text-2xl font-semibold text-primary">Quotient</h2>
+          <div className="p-4 border rounded-md bg-white shadow-sm">
+            <p className="text-gray-500 italic">Quotient report content will be rendered here.</p>
+          </div>
+        </div>
       )}
     </div>
   );
