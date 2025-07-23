@@ -295,26 +295,15 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-[90%] max-w-3xl">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Task vs People Leadership Style</h2>
-          <div className="flex items-center gap-2">
-            <CopyToClipboard targetRef={chartRef} buttonText="Copy Chart" />
-            <button 
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+    <div className="bg-white p-6 rounded-lg shadow-lg border w-full max-w-3xl mx-auto my-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold">Task vs People Leadership Style</h2>
+        <div className="flex items-center gap-2">
+          <CopyToClipboard targetRef={chartRef} buttonText="Copy Chart" />
         </div>
-        <div className="h-[500px]" ref={chartRef}>
-          <Scatter data={data} options={options} />
-        </div>
-        <div className="mt-4 text-center">
+      </div>
+      <div ref={chartRef}>
+        <div className="mt-1 text-center">
           <div className="mb-4">
             <p className="text-sm text-gray-600">
               {hasAfterScores ? (
@@ -329,7 +318,6 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
                 </>
               )}
             </p>
-            
             {hasAfterScores && (
               <p className="text-sm text-gray-600 mt-2">
                 <span className="font-semibold text-blue-500">After:</span> Leadership Quotient: 
@@ -337,12 +325,11 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
               </p>
             )}
           </div>
-          <button 
-            onClick={onClose}
-            className="bg-primary text-white px-4 py-2 rounded hover:bg-primary/90"
-          >
-            Close
-          </button>
+        </div>
+        <div className="w-full overflow-x-auto">
+          <div className="w-[220px] h-[180px] sm:w-[300px] sm:h-[220px] md:w-[350px] md:h-[300px] lg:w-[400px] lg:h-[350px] xl:w-[500px] xl:h-[400px] mx-auto">
+            <Scatter data={data} options={options} />
+          </div>
         </div>
       </div>
     </div>
