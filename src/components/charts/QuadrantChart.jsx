@@ -146,7 +146,7 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
           anchor: 'end',
           color: '#1e90ff',
           font: { weight: 'bold' },
-          formatter: () => 'Ideal'
+          formatter: () => ''
         }
       }] : [])
     ],
