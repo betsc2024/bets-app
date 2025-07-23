@@ -953,6 +953,16 @@ export default function Reports() {
                 userId={selectedUser?.id}
                 bankId={bank}
               />
+              {/* --- ADDITION: QuotientTable below DemographyEvaluation --- */}
+              <div className="border rounded-lg p-4 bg-white">
+                <QuotientTable 
+                  companyId={selectedCompany?.id} 
+                  userId={selectedUser?.id} 
+                  beforeBankId={bank} 
+                  afterBankId={"none"} 
+                />
+              </div>
+              {/* --- END ADDITION --- */}
             </div>
           ) : (
             <div className="text-center text-gray-500 mt-8 text-lg">

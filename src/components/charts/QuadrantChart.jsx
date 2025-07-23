@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Chart as ChartJS,
   LinearScale,
@@ -9,6 +9,7 @@ import {
 } from 'chart.js';
 import { Scatter } from 'react-chartjs-2';
 import annotationPlugin from 'chartjs-plugin-annotation';
+import CopyToClipboard from '@/components/CopyToClipboard';
 
 // Create a function to generate a quadrant label plugin for a specific chart instance
 const createQuadrantLabelPlugin = () => ({
@@ -62,6 +63,7 @@ ChartJS.register(
 );
 
 const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfter, showAfterBank, onClose, showQuadrantLabels = false, idealScorePoint }) => {
+  const chartRef = useRef(null);
   useEffect(() => {
     if (showQuadrantLabels) {
       ChartJS.register(quadrantLabelPlugin);
@@ -297,16 +299,19 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
       <div className="bg-white p-6 rounded-lg shadow-lg w-[90%] max-w-3xl">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">Task vs People Leadership Style</h2>
-          <button 
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <CopyToClipboard targetRef={chartRef} buttonText="Copy Chart" />
+            <button 
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <div className="h-[500px]">
+        <div className="h-[500px]" ref={chartRef}>
           <Scatter data={data} options={options} />
         </div>
         <div className="mt-4 text-center">
