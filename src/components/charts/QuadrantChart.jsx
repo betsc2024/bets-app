@@ -62,7 +62,9 @@ ChartJS.register(
   // quadrantLabelPlugin will be conditionally registered
 );
 
-const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfter, showAfterBank, onClose, showQuadrantLabels = false, idealScorePoint }) => {
+const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfter, showAfterBank, onClose, showQuadrantLabels = false }) => {
+  // Hardcoded ideal score point
+  const idealScorePoint = { x: 90, y: 90 };
   const chartRef = useRef(null);
   useEffect(() => {
     if (showQuadrantLabels) {
@@ -132,23 +134,25 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
           display: false // Disable data labels on points
         }
       }] : []),
-      // Add ideal score point if provided
-      ...(idealScorePoint ? [{
+      // Always add ideal score point
+      {
         label: 'Ideal Score',
         data: [{ x: idealScorePoint.x, y: idealScorePoint.y }],
         backgroundColor: '#1e90ff',
         borderColor: '#1e90ff',
         pointRadius: 10,
         pointHoverRadius: 12,
+        type: 'scatter',
+        showLine: false,
         datalabels: {
           display: true,
           align: 'top',
           anchor: 'end',
           color: '#1e90ff',
           font: { weight: 'bold' },
-          formatter: () => ''
+          formatter: () => 'Ideal'
         }
-      }] : [])
+      }
     ],
   };
 
