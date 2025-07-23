@@ -10,21 +10,74 @@ import {
 import { Bar } from 'react-chartjs-2';
 import { supabase } from '@/supabase';
 import CopyToClipboard from '../CopyToClipboard';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import annotationPlugin from 'chartjs-plugin-annotation';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  annotationPlugin,
+  ChartDataLabels
+);
 
 const HREvaluation = ({ userId, companyId, bankId }) => {
   const [tableData, setTableData] = useState([]);
   const [chartData, setChartData] = useState(null);
   const [cumulativeSelf, setCumulativeSelf] = useState(0);
   const [cumulativeHR, setCumulativeHR] = useState(0);
+  const [idealScore, setIdealScore] = useState(0);
   const [viewType, setViewType] = useState('table');
   const tableRef = useRef(null);
   const chartRef = useRef(null);
 
   useEffect(() => {
-    fetchData();
+    fetchIdealScoreAndData();
   }, [userId, companyId, bankId]);
 
-  const fetchData = async () => {
+  // Fetch ideal score from attribute_banks
+  const fetchIdealScore = async (bankIdParam) => {
+    try {
+      const { data, error } = await supabase
+        .from('attribute_banks')
+        .select('ideal_score')
+        .eq('id', bankIdParam)
+        .single();
+      if (!error && data) {
+        const score = data.ideal_score == null ? 0 : data.ideal_score;
+        setIdealScore(score);
+        return score;
+      } else {
+        setIdealScore(0);
+        return 0;
+      }
+    } catch (error) {
+      setIdealScore(0);
+      return 0;
+    }
+  };
+
+  // Fetch data after fetching ideal score
+  const fetchIdealScoreAndData = async () => {
+    if (!userId || !companyId || !bankId) return;
+    const idealScoreValue = await fetchIdealScore(bankId);
+    fetchData(idealScoreValue);
+  };
+
+  // Accept idealScore as param
+  const fetchData = async (idealScoreValue = 0) => {
     try {
       // Fetch HR evaluations
       const { data: hrData, error: hrError } = await supabase
@@ -125,7 +178,7 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
         setCumulativeHR(cumHR);
       }
       // Pass the calculated values directly to generateChartData
-      generateChartData(processedData, cumSelf, cumHR);
+      generateChartData(processedData, cumSelf, cumHR, idealScoreValue);
     } catch (error) {
       console.error('Error in fetchData:', error);
     }
@@ -234,7 +287,8 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
     });
   };
 
-  const generateChartData = (data, cumSelf, cumHR) => {
+  // Accept idealScore as param
+  const generateChartData = (data, cumSelf, cumHR, ideal = 0) => {
     try {
       if (data && data.length > 0) {
         // Using passed cumulative values instead of state
@@ -248,10 +302,11 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
         
         const allVals = [
             ...selfScoreData,
-            ...hrScoreData
+            ...hrScoreData,
+            ideal // Include ideal score in max calculation
           ];
         const rawMax = Math.max(...allVals);
-        const yMax = Math.ceil(rawMax * 1.1 / 10) * 10;
+        const yMax = Math.max(Math.ceil(rawMax * 1.1 / 10) * 10, ideal + 10); // Ensure ideal score is visible
         
         const chartData = {
           labels: labels,
@@ -354,6 +409,24 @@ const HREvaluation = ({ userId, companyId, bankId }) => {
               font: {
                 size: 16,
                 weight: 'bold'
+              }
+            },
+            // Add annotation for ideal score line
+            annotation: {
+              annotations: {
+                idealScoreLine: {
+                  type: 'line',
+                  yMin: ideal,
+                  yMax: ideal,
+                  xMin: -0.5,
+                  xMax: labels.length - 0.5,
+                  borderColor: '#1e90ff',
+                  borderWidth: 2,
+                  borderDash: [5, 5],
+                  label: {
+                    display: false
+                  }
+                }
               }
             }
           }

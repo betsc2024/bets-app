@@ -10,10 +10,13 @@ import {
 import { Scatter } from 'react-chartjs-2';
 import annotationPlugin from 'chartjs-plugin-annotation';
 
-// Create a simple plugin to draw quadrant labels
-const quadrantLabelPlugin = {
+// Create a function to generate a quadrant label plugin for a specific chart instance
+const createQuadrantLabelPlugin = () => ({
   id: 'quadrantLabels',
   afterDraw: (chart) => {
+    // Only apply to charts that have the quadrantLabelsEnabled flag
+    if (!chart.options.plugins.quadrantLabelsEnabled) return;
+    
     const { ctx, chartArea } = chart;
     if (!chartArea) return;
     
@@ -42,7 +45,10 @@ const quadrantLabelPlugin = {
     
     ctx.restore();
   }
-};
+});
+
+// Create an instance of the plugin
+const quadrantLabelPlugin = createQuadrantLabelPlugin();
 
 // Register ChartJS components
 ChartJS.register(
@@ -51,11 +57,20 @@ ChartJS.register(
   LineElement,
   Tooltip,
   Legend,
-  annotationPlugin,
-  quadrantLabelPlugin
+  annotationPlugin
+  // quadrantLabelPlugin will be conditionally registered
 );
 
-const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfter, showAfterBank, onClose }) => {
+const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfter, showAfterBank, onClose, showQuadrantLabels = false, idealScorePoint }) => {
+  useEffect(() => {
+    if (showQuadrantLabels) {
+      ChartJS.register(quadrantLabelPlugin);
+    } else {
+      // Unregister if needed (Chart.js does not have unregister, so this is a no-op)
+    }
+    // No cleanup needed
+  }, [showQuadrantLabels]);
+  
   // Convert percentage scores to 0-100 scale if they're in decimal form
   const normalizedTaskScore = taskScore > 1 ? taskScore : taskScore * 100;
   const normalizedPeopleScore = peopleScore > 1 ? peopleScore : peopleScore * 100;
@@ -93,7 +108,7 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
   const data = {
     datasets: [
       {
-        label: 'Before Score',
+        label: hasAfterScores ? 'Before Score' : 'Score',
         data: [{ x: normalizedTaskScore, y: normalizedPeopleScore }],
         backgroundColor: 'rgba(255, 99, 132, 1)',
         borderColor: 'rgba(255, 99, 132, 1)',
@@ -115,6 +130,23 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
           display: false // Disable data labels on points
         }
       }] : []),
+      // Add ideal score point if provided
+      ...(idealScorePoint ? [{
+        label: 'Ideal Score',
+        data: [{ x: idealScorePoint.x, y: idealScorePoint.y }],
+        backgroundColor: '#1e90ff',
+        borderColor: '#1e90ff',
+        pointRadius: 10,
+        pointHoverRadius: 12,
+        datalabels: {
+          display: true,
+          align: 'top',
+          anchor: 'end',
+          color: '#1e90ff',
+          font: { weight: 'bold' },
+          formatter: () => 'Ideal'
+        }
+      }] : [])
     ],
   };
 
@@ -178,6 +210,8 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
       },
     },
     plugins: {
+      // Enable quadrant labels only for this chart
+      quadrantLabelsEnabled: showQuadrantLabels,
       legend: {
         display: true,
         position: 'top',
@@ -278,20 +312,23 @@ const QuadrantChart = ({ taskScore, peopleScore, taskScoreAfter, peopleScoreAfte
         <div className="mt-4 text-center">
           <div className="mb-4">
             <p className="text-sm text-gray-600">
-              <span className="font-semibold text-red-500">Before:</span> Your leadership style is characterized as: 
-              <span className="font-bold"> {quadrant.name}</span>
-              <span className="block text-xs">
-                (Task: {normalizedTaskScore.toFixed(1)}%, People: {normalizedPeopleScore.toFixed(1)}%)
-              </span>
+              {hasAfterScores ? (
+                <>
+                  <span className="font-semibold text-red-500">Before:</span> Leadership Quotient: 
+                  <span className="font-bold">(task = {normalizedTaskScore.toFixed(1)}%, people = {normalizedPeopleScore.toFixed(1)}%)</span>
+                </>
+              ) : (
+                <>
+                  Leadership Quotient: 
+                  <span className="font-bold">(task = {normalizedTaskScore.toFixed(1)}%, people = {normalizedPeopleScore.toFixed(1)}%)</span>
+                </>
+              )}
             </p>
             
             {hasAfterScores && (
               <p className="text-sm text-gray-600 mt-2">
-                <span className="font-semibold text-blue-500">After:</span> Your leadership style is characterized as: 
-                <span className="font-bold"> {afterQuadrant.name}</span>
-                <span className="block text-xs">
-                  (Task: {normalizedTaskScoreAfter.toFixed(1)}%, People: {normalizedPeopleScoreAfter.toFixed(1)}%)
-                </span>
+                <span className="font-semibold text-blue-500">After:</span> Leadership Quotient: 
+                <span className="font-bold">(task = {normalizedTaskScoreAfter.toFixed(1)}%, people = {normalizedPeopleScoreAfter.toFixed(1)}%)</span>
               </p>
             )}
           </div>

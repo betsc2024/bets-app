@@ -8,11 +8,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from '@/supabase';
 import { toast } from 'sonner';
 import { processEvaluationData, formatScoreWithPadding, calculateCumulativeScore, calculateTotalScore, formatScore as formatScoreUtil } from '@/utils/evaluationUtils';
 import QuadrantChart from './charts/QuadrantChart';
+
+// Predefined attribute categories
+const ATTRIBUTE_CATEGORIES = {
+  // Task-based attributes
+  'Accountability & Ownership - (LeaderShip)': 'task',
+  'Committed': 'task',
+  'Visionary': 'task',
+  'Decision Making - (LeaderShip)': 'task',
+  'Goals & Objectives': 'task',
+
+  
+  // People-based attributes
+  'Communication': 'people',
+  'Inspiring': 'people',
+  'Team building': 'people',
+  'Leadership Style': 'people',
+  'Emotional Intelligence': 'people',
+};
+
+// Code-level flag to control rendering of the raw quotient table
+const SHOW_RAW_QUOTIENT_TABLE = false;
 
 export default function QuotientTable({ companyId, userId, beforeBankId, afterBankId }) {
   const [loading, setLoading] = useState(true);
@@ -22,13 +42,36 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
   const [relationTypes, setRelationTypes] = useState([]);
   const [beforeBankRelations, setBeforeBankRelations] = useState([]);
   const [afterBankRelations, setAfterBankRelations] = useState([]);
-  const [attributeCategories, setAttributeCategories] = useState({});
-  const [showCategoryScores, setShowCategoryScores] = useState(false);
+  const [showCategoryScores, setShowCategoryScores] = useState(true); // Always show category scores
   const [showChart, setShowChart] = useState(false);
   const [categoryScores, setCategoryScores] = useState({
     task: { before: "NA", after: "NA" },
     people: { before: "NA", after: "NA" }
   });
+  const [idealScore, setIdealScore] = useState(null);
+  const [afterIdealScore, setAfterIdealScore] = useState(null);
+
+  // Fetch ideal score for beforeBankId and afterBankId
+  const fetchIdealScore = async (bankId, setter) => {
+    if (!bankId) {
+      setter(null);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('attribute_banks')
+        .select('ideal_score')
+        .eq('id', bankId)
+        .single();
+      if (!error && data && typeof data.ideal_score === 'number') {
+        setter(data.ideal_score);
+      } else {
+        setter(null);
+      }
+    } catch (error) {
+      setter(null);
+    }
+  };
 
   useEffect(() => {
     if (companyId && userId && beforeBankId) {
@@ -38,6 +81,25 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
       setTableData([]);
     }
   }, [companyId, userId, beforeBankId, afterBankId]);
+  
+  useEffect(() => {
+    if (companyId && beforeBankId) {
+      fetchIdealScore(beforeBankId, setIdealScore);
+    }
+    if (companyId && afterBankId && afterBankId !== 'none') {
+      fetchIdealScore(afterBankId, setAfterIdealScore);
+    } else {
+      setAfterIdealScore(null);
+    }
+  }, [companyId, beforeBankId, afterBankId]);
+
+  // Calculate category scores whenever table data changes
+  useEffect(() => {
+    if (tableData.length > 0) {
+      const scores = calculateCategoryScores();
+      setCategoryScores(scores);
+    }
+  }, [tableData]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -546,9 +608,14 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
   
   // Calculate scores by category (task-based or people-based)
   const calculateCategoryScores = () => {
-    // Group attributes by category
-    const taskAttributes = Object.keys(attributeCategories).filter(attr => attributeCategories[attr] === 'task');
-    const peopleAttributes = Object.keys(attributeCategories).filter(attr => attributeCategories[attr] === 'people');
+    // Group attributes by category using predefined list
+    const taskAttributes = totalQuotientData
+      .filter(row => getAttributeCategory(row.attributeName) === 'task')
+      .map(row => row.attributeName);
+      
+    const peopleAttributes = totalQuotientData
+      .filter(row => getAttributeCategory(row.attributeName) === 'people')
+      .map(row => row.attributeName);
     
     // Calculate average scores for task attributes
     const taskBeforeScores = taskAttributes
@@ -586,7 +653,7 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
     const peopleBeforeAvg = peopleBeforeScores.length > 0 ? peopleBeforeScores.reduce((sum, score) => sum + score, 0) / peopleBeforeScores.length : "NA";
     const peopleAfterAvg = peopleAfterScores.length > 0 ? peopleAfterScores.reduce((sum, score) => sum + score, 0) / peopleAfterScores.length : "NA";
     
-    // Update state
+    // Return the scores
     return {
       task: { before: taskBeforeAvg, after: taskAfterAvg },
       people: { before: peopleBeforeAvg, after: peopleAfterAvg }
@@ -600,32 +667,20 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
     if (categoryScores.task.before !== "NA" && categoryScores.people.before !== "NA") {
       setShowChart(true);
     } else {
-      toast.error("Please calculate category scores first");
+      toast.error("Unable to show chart - missing task or people scores");
     }
   };
 
-  // Handle attribute category toggle
-  const toggleAttributeCategory = (attributeName, category) => {
-    setAttributeCategories(prev => {
-      const newCategories = { ...prev };
-      
-      // If already set to this category, remove it
-      if (prev[attributeName] === category) {
-        delete newCategories[attributeName];
-      } else {
-        // Otherwise set to this category
-        newCategories[attributeName] = category;
+  // Replace the old getAttributeCategory function with a robust version
+  const getAttributeCategory = (attributeName) => {
+    if (!attributeName) return 'other';
+    const normalized = attributeName.trim().toLowerCase();
+    for (const key in ATTRIBUTE_CATEGORIES) {
+      if (key.trim().toLowerCase() === normalized) {
+        return ATTRIBUTE_CATEGORIES[key];
       }
-      
-      return newCategories;
-    });
-  };
-  
-  // Handle calculate button click
-  const handleCalculateClick = () => {
-    const scores = calculateCategoryScores();
-    setCategoryScores(scores);
-    setShowCategoryScores(true);
+    }
+    return 'other';
   };
 
   const totalQuotientCumulativeScores = calculateTotalQuotientCumulativeScores();
@@ -652,118 +707,95 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
   return (
     <>
       {/* Raw Quotient Section */}
-      <h2 className="text-xl font-semibold text-primary mb-4">Raw Quotient</h2>
-      <div className="w-full overflow-x-auto">
-        <Table className="border-collapse">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[200px] border border-gray-300">Attribute</TableHead>
-            
-            {/* Interleaved Before/After Bank Column Headers */}
-            {relationTypes.map(relationType => (
-              <React.Fragment key={`relation_${relationType}`}>
-                {/* Before Bank Column */}
-                {beforeBankRelations.includes(relationType) && (
-                  <TableHead className="border border-gray-300">
-                    Before Bank - {capitalizeFirst(relationType)}
-                  </TableHead>
-                )}
+      {SHOW_RAW_QUOTIENT_TABLE && (
+        <>
+          <h2 className="text-xl font-semibold text-primary mb-4">Raw Quotient</h2>
+          <div className="w-full overflow-x-auto">
+            <Table className="border-collapse">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[200px] border border-gray-300">Attribute</TableHead>
                 
-                {/* After Bank Column (if applicable) */}
-                {showAfterBank && afterBankRelations.includes(relationType) && (
-                  <TableHead className="border border-gray-300">
-                    After Bank - {capitalizeFirst(relationType)}
-                  </TableHead>
-                )}
-              </React.Fragment>
-            ))}
-            
-            {/* Total Column Headers */}
-            <TableHead className="border border-gray-300 font-bold">
-              Before Bank - Total
-            </TableHead>
-            
-            {showAfterBank && (
-              <TableHead className="border border-gray-300 font-bold">
-                After Bank - Total
-              </TableHead>
-            )}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tableData.map((row, index) => (
-            <TableRow key={index}>
-              <TableCell className="font-medium border border-gray-300">{row.attributeName}</TableCell>
-              
-              {/* Interleaved Before/After Bank Cells */}
-              {relationTypes.map(relationType => (
-                <React.Fragment key={`relation_${relationType}_${index}`}>
-                  {/* Before Bank Cell */}
-                  {beforeBankRelations.includes(relationType) && (
-                    <TableCell className="border border-gray-300">
-                      {row[`before_${relationType}`] === "NA" ? "NA" : formatScore(row[`before_${relationType}`])}
-                    </TableCell>
-                  )}
+                {/* Interleaved Before/After Bank Column Headers */}
+                {relationTypes.map(relationType => (
+                  <React.Fragment key={`relation_${relationType}`}>
+                    {/* Before Bank Column */}
+                    {beforeBankRelations.includes(relationType) && (
+                      <TableHead className="border border-gray-300">
+                        Before Bank - {capitalizeFirst(relationType)}
+                      </TableHead>
+                    )}
+                    
+                    {/* After Bank Column (if applicable) */}
+                    {showAfterBank && afterBankRelations.includes(relationType) && (
+                      <TableHead className="border border-gray-300">
+                        After Bank - {capitalizeFirst(relationType)}
+                      </TableHead>
+                    )}
+                  </React.Fragment>
+                ))}
+                
+                {/* Total Column Headers removed */}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tableData.map((row, index) => (
+                <TableRow key={index}>
+                  <TableCell className="font-medium border border-gray-300">{row.attributeName}</TableCell>
                   
-                  {/* After Bank Cell (if applicable) */}
-                  {showAfterBank && afterBankRelations.includes(relationType) && (
-                    <TableCell className="border border-gray-300">
-                      {row[`after_${relationType}`] === "NA" ? "NA" : formatScore(row[`after_${relationType}`])}
-                    </TableCell>
-                  )}
-                </React.Fragment>
+                  {/* Interleaved Before/After Bank Cells */}
+                  {relationTypes.map(relationType => (
+                    <React.Fragment key={`relation_${relationType}_${index}`}>
+                      {/* Before Bank Cell */}
+                      {beforeBankRelations.includes(relationType) && (
+                        <TableCell className="border border-gray-300">
+                          {row[`before_${relationType}`] === "NA" ? "NA" : formatScore(row[`before_${relationType}`])}
+                        </TableCell>
+                      )}
+                      
+                      {/* After Bank Cell (if applicable) */}
+                      {showAfterBank && afterBankRelations.includes(relationType) && (
+                        <TableCell className="border border-gray-300">
+                          {row[`after_${relationType}`] === "NA" ? "NA" : formatScore(row[`after_${relationType}`])}
+                        </TableCell>
+                      )}
+                    </React.Fragment>
+                  ))}
+                  
+                  {/* Total Cells removed */}
+                </TableRow>
               ))}
               
-              {/* Total Cells */}
-              <TableCell className="border border-gray-300 font-bold">
-                {row.before_total === "NA" ? "NA" : formatScore(row.before_total)}
-              </TableCell>
-              
-              {showAfterBank && (
-                <TableCell className="border border-gray-300 font-bold">
-                  {row.after_total === "NA" ? "NA" : formatScore(row.after_total)}
-                </TableCell>
-              )}
-            </TableRow>
-          ))}
-          
-          {/* Cumulative Row */}
-          <TableRow className="font-bold">
-            <TableCell className="border border-gray-300">Cumulative</TableCell>
-            
-            {/* Interleaved Before/After Bank Cumulative Cells */}
-            {relationTypes.map(relationType => (
-              <React.Fragment key={`cumulative_relation_${relationType}`}>
-                {/* Before Bank Cumulative Cell */}
-                {beforeBankRelations.includes(relationType) && (
-                  <TableCell className="border border-gray-300">
-                    {cumulativeScores[`before_${relationType}`] === "NA" ? "NA" : formatScore(cumulativeScores[`before_${relationType}`])}
-                  </TableCell>
-                )}
+              {/* Cumulative Row */}
+              <TableRow className="font-bold">
+                <TableCell className="border border-gray-300">Cumulative</TableCell>
                 
-                {/* After Bank Cumulative Cell (if applicable) */}
-                {showAfterBank && afterBankRelations.includes(relationType) && (
-                  <TableCell className="border border-gray-300">
-                    {cumulativeScores[`after_${relationType}`] === "NA" ? "NA" : formatScore(cumulativeScores[`after_${relationType}`])}
-                  </TableCell>
-                )}
-              </React.Fragment>
-            ))}
-            
-            {/* Total Cumulative Cells */}
-            <TableCell className="border border-gray-300 font-bold">
-              {cumulativeScores.before_total === "NA" ? "NA" : formatScore(cumulativeScores.before_total)}
-            </TableCell>
-            
-            {showAfterBank && (
-              <TableCell className="border border-gray-300 font-bold">
-                {cumulativeScores.after_total === "NA" ? "NA" : formatScore(cumulativeScores.after_total)}
-              </TableCell>
-            )}
-          </TableRow>
-        </TableBody>
-      </Table>
-      </div>
+                {/* Interleaved Before/After Bank Cumulative Cells */}
+                {relationTypes.map(relationType => (
+                  <React.Fragment key={`cumulative_relation_${relationType}`}>
+                    {/* Before Bank Cumulative Cell */}
+                    {beforeBankRelations.includes(relationType) && (
+                      <TableCell className="border border-gray-300">
+                        {cumulativeScores[`before_${relationType}`] === "NA" ? "NA" : formatScore(cumulativeScores[`before_${relationType}`])}
+                      </TableCell>
+                    )}
+                    
+                    {/* After Bank Cumulative Cell (if applicable) */}
+                    {showAfterBank && afterBankRelations.includes(relationType) && (
+                      <TableCell className="border border-gray-300">
+                        {cumulativeScores[`after_${relationType}`] === "NA" ? "NA" : formatScore(cumulativeScores[`after_${relationType}`])}
+                      </TableCell>
+                    )}
+                  </React.Fragment>
+                ))}
+                
+                {/* Total Cumulative Cells removed */}
+              </TableRow>
+            </TableBody>
+          </Table>
+          </div>
+        </>
+      )}
       
       {/* Total Quotient Section */}
       <h2 className="text-xl font-semibold text-primary mb-4 mt-8">Total Quotient</h2>
@@ -782,26 +814,15 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
           <TableBody>
             {totalQuotientData.map((row, index) => (
               <TableRow key={index}>
-                <TableCell className="border border-gray-300">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id={`task-${index}`}
-                        checked={attributeCategories[row.attributeName] === 'task'}
-                        onCheckedChange={() => toggleAttributeCategory(row.attributeName, 'task')}
-                        className="border-blue-500 data-[state=checked]:bg-blue-500 data-[state=checked]:text-white"
-                      />
-                      <label htmlFor={`task-${index}`} className="text-sm font-medium text-blue-600">Task</label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id={`people-${index}`}
-                        checked={attributeCategories[row.attributeName] === 'people'}
-                        onCheckedChange={() => toggleAttributeCategory(row.attributeName, 'people')}
-                        className="border-green-500 data-[state=checked]:bg-green-500 data-[state=checked]:text-white"
-                      />
-                      <label htmlFor={`people-${index}`} className="text-sm font-medium text-green-600">People</label>
-                    </div>
+                <TableCell className="border border-gray-300 w-24">
+                  <div className="text-center">
+                    {getAttributeCategory(row.attributeName) === 'task' ? (
+                      <span className="text-sm font-medium text-blue-600 px-2 py-1 rounded bg-blue-100">Task</span>
+                    ) : getAttributeCategory(row.attributeName) === 'people' ? (
+                      <span className="text-sm font-medium text-green-600 px-2 py-1 rounded bg-green-100">People</span>
+                    ) : (
+                      <span className="text-sm font-medium text-gray-600 px-2 py-1 rounded bg-gray-100">Other</span>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="font-medium border border-gray-300">{row.attributeName}</TableCell>
@@ -818,57 +839,49 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
             
             {/* Cumulative row removed as requested */}
             
-            {/* Calculate Button Row */}
+            {/* Category Score Rows */}
             <TableRow>
-              <TableCell colSpan={showAfterBank ? 4 : 3} className="border border-gray-300 text-center">
+              <TableCell className="border border-gray-300 w-[100px] font-bold bg-blue-50">Task</TableCell>
+              <TableCell className="border border-gray-300 w-[300px] font-bold bg-blue-50">Task-based attributes</TableCell>
+              <TableCell className="border border-gray-300 font-bold bg-blue-50">
+                {categoryScores.task.before !== "NA" ? formatScoreWithPercentage(categoryScores.task.before) : "NA"}
+              </TableCell>
+              {showAfterBank && (
+                <TableCell className="border border-gray-300 font-bold bg-blue-50">
+                  {categoryScores.task.after !== "NA" ? formatScoreWithPercentage(categoryScores.task.after) : "NA"}
+                </TableCell>
+              )}
+            </TableRow>
+            <TableRow>
+              <TableCell className="border border-gray-300 w-[100px] font-bold bg-green-50">People</TableCell>
+              <TableCell className="border border-gray-300 w-[300px] font-bold bg-green-50">People-based attributes</TableCell>
+              <TableCell className="border border-gray-300 font-bold bg-green-50">
+                {categoryScores.people.before !== "NA" ? formatScoreWithPercentage(categoryScores.people.before) : "NA"}
+              </TableCell>
+              {showAfterBank && (
+                <TableCell className="border border-gray-300 font-bold bg-green-50">
+                  {categoryScores.people.after !== "NA" ? formatScoreWithPercentage(categoryScores.people.after) : "NA"}
+                </TableCell>
+              )}
+            </TableRow>
+            
+            {/* Show Chart Button */}
+            <TableRow>
+              <TableCell colSpan={showAfterBank ? 4 : 3} className="border border-gray-300 text-center py-4">
                 <Button 
-                  onClick={handleCalculateClick}
-                  className="bg-primary text-white hover:bg-primary/90 my-2"
+                  onClick={handleShowChartClick}
+                  className="bg-primary text-white hover:bg-primary/90 py-3 px-6 text-lg"
                 >
-                  Calculate Category Scores
+                  <span className="flex items-center gap-2 justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
+                      <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
+                    </svg>
+                    Show Leadership Style Chart
+                  </span>
                 </Button>
               </TableCell>
             </TableRow>
-            
-            {/* Category Score Rows */}
-            {showCategoryScores && (
-              <>
-                <TableRow>
-                  <TableCell className="border border-gray-300 w-[100px] font-bold">Task</TableCell>
-                  <TableCell className="border border-gray-300 w-[300px] font-bold">Task-based attributes</TableCell>
-                  <TableCell className="border border-gray-300 font-bold">
-                    {categoryScores.task.before !== "NA" ? formatScoreWithPercentage(categoryScores.task.before) : "NA"}
-                  </TableCell>
-                  {showAfterBank && (
-                    <TableCell className="border border-gray-300 font-bold">
-                      {categoryScores.task.after !== "NA" ? formatScoreWithPercentage(categoryScores.task.after) : "NA"}
-                    </TableCell>
-                  )}
-                </TableRow>
-                <TableRow>
-                  <TableCell className="border border-gray-300 w-[100px] font-bold">People</TableCell>
-                  <TableCell className="border border-gray-300 w-[300px] font-bold">People-based attributes</TableCell>
-                  <TableCell className="border border-gray-300 font-bold">
-                    {categoryScores.people.before !== "NA" ? formatScoreWithPercentage(categoryScores.people.before) : "NA"}
-                  </TableCell>
-                  {showAfterBank && (
-                    <TableCell className="border border-gray-300 font-bold">
-                      {categoryScores.people.after !== "NA" ? formatScoreWithPercentage(categoryScores.people.after) : "NA"}
-                    </TableCell>
-                  )}
-                </TableRow>
-                <TableRow>
-                  <TableCell colSpan={showAfterBank ? 4 : 3} className="border border-gray-300 text-center">
-                    <Button 
-                      onClick={handleShowChartClick}
-                      className="bg-blue-500 hover:bg-blue-600 text-white mt-2"
-                    >
-                      Show Chart
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              </>
-            )}
           </TableBody>
         </Table>
       </div>
@@ -882,6 +895,8 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
           peopleScoreAfter={showAfterBank ? categoryScores.people.after : null} 
           showAfterBank={showAfterBank}
           onClose={() => setShowChart(false)} 
+          showQuadrantLabels={true}
+          idealScorePoint={showAfterBank && afterIdealScore ? { x: afterIdealScore, y: afterIdealScore } : idealScore ? { x: idealScore, y: idealScore } : undefined}
         />
       )}
     </>
