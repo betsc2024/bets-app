@@ -120,3 +120,107 @@ export const calculateTotalScore = (attributeScores) => {
   const totalScore = validScores.reduce((sum, score) => sum + Number(score), 0);
   return Number((totalScore / validScores.length).toFixed(1));
 };
+
+/**
+ * Process evaluation data using TotalEvaluation.jsx method (statement-level grouping)
+ * This logic is extracted from TotalEvaluation.jsx
+ * @param {Array} evaluations - Array of evaluation objects
+ * @returns {Object} - Object with attribute names as keys and scores as values
+ */
+export const processEvaluationDataTotalMethod = (evaluations) => {
+  if (!evaluations || evaluations.length === 0) return {};
+
+  // Group responses by attribute and statement (TotalEvaluation.jsx method)
+  const attributeMap = {};
+  
+  evaluations.forEach(evaluation => {
+    if (!evaluation.evaluation_responses) return;
+
+    evaluation.evaluation_responses.forEach(response => {
+      const attributeName = response.attribute_statement_options?.attribute_statements?.attributes?.name;
+      if (!attributeName) return;
+
+      const weight = response.attribute_statement_options?.weight || 0;
+      const statement = response.attribute_statement_options?.attribute_statements?.statement;
+
+      if (!attributeMap[attributeName]) {
+        attributeMap[attributeName] = {};
+      }
+
+      if (!attributeMap[attributeName][statement]) {
+        attributeMap[attributeName][statement] = {
+          total: 0,
+          evaluators: 0
+        };
+      }
+
+      // Accumulate raw scores by statement
+      attributeMap[attributeName][statement].total += weight;
+      attributeMap[attributeName][statement].evaluators += 1;
+    });
+  });
+
+  // Calculate scores using TotalEvaluation.jsx formula
+  const attributeScores = {};
+  
+  Object.entries(attributeMap).forEach(([attribute, statementData]) => {
+    const numStatements = Object.keys(statementData).length;
+    const rawScore = Object.values(statementData).reduce((sum, { total }) => sum + total, 0);
+    const evaluatorsPerStatement = Object.values(statementData)[0]?.evaluators || 0;
+    const totalAverageScore = numStatements > 0 ? rawScore / numStatements : 0;
+    const maxPossible = evaluatorsPerStatement * 100;
+    const totalPercentageScore = maxPossible > 0 ? (totalAverageScore / maxPossible) * 100 : 0;
+
+    attributeScores[attribute] = formatScore(totalPercentageScore);
+  });
+
+  return attributeScores;
+};
+
+/**
+ * Process evaluation data using DemographyEvaluation.jsx method (attribute-level grouping)
+ * This logic is extracted from DemographyEvaluation.jsx
+ * @param {Array} evaluations - Array of evaluation objects
+ * @returns {Object} - Object with attribute names as keys and scores as values
+ */
+export const processEvaluationDataDemographyMethod = (evaluations) => {
+  if (!evaluations || evaluations.length === 0) return {};
+
+  // Group responses by attribute (DemographyEvaluation.jsx method)
+  const attributeMap = {};
+  
+  evaluations.forEach(evaluation => {
+    if (!evaluation.evaluation_responses) return;
+
+    evaluation.evaluation_responses.forEach(response => {
+      const attributeName = response.attribute_statement_options?.attribute_statements?.attributes?.name;
+      if (!attributeName) return;
+
+      const weight = response.attribute_statement_options?.weight || 0;
+
+      if (!attributeMap[attributeName]) {
+        attributeMap[attributeName] = {
+          total: 0,
+          count: 0
+        };
+      }
+
+      // Accumulate raw scores by attribute
+      attributeMap[attributeName].total += weight;
+      attributeMap[attributeName].count += 1;
+    });
+  });
+
+  // Calculate scores using DemographyEvaluation.jsx formula
+  const attributeScores = {};
+  
+  Object.entries(attributeMap).forEach(([attribute, data]) => {
+    const averageScore = data.total / data.count;
+    const maxPossible = 100;
+    const percentageScore = (averageScore / maxPossible) * 100;
+
+    attributeScores[attribute] = formatScore(percentageScore);
+  });
+
+  return attributeScores;
+};

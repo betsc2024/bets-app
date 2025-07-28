@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { supabase } from '@/supabase';
 import { toast } from 'sonner';
-import { processEvaluationData, formatScoreWithPadding, calculateCumulativeScore, calculateTotalScore, formatScore as formatScoreUtil } from '@/utils/evaluationUtils';
+import { processEvaluationData, formatScoreWithPadding, calculateCumulativeScore, calculateTotalScore, formatScore as formatScoreUtil, processEvaluationDataDemographyMethod } from '@/utils/evaluationUtils';
 import QuadrantChart from './charts/QuadrantChart';
 
 // Predefined attribute categories
@@ -39,9 +39,7 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
   const [tableData, setTableData] = useState([]);
   const [beforeBankName, setBeforeBankName] = useState('');
   const [afterBankName, setAfterBankName] = useState('');
-  const [relationTypes, setRelationTypes] = useState([]);
-  const [beforeBankRelations, setBeforeBankRelations] = useState([]);
-  const [afterBankRelations, setAfterBankRelations] = useState([]);
+
   const [showCategoryScores, setShowCategoryScores] = useState(true); // Always show category scores
   const [showChart, setShowChart] = useState(false);
   const [categoryScores, setCategoryScores] = useState({
@@ -163,57 +161,44 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
 
   const fetchBankData = async (bankId) => {
     try {
-      // Query structure similar to SelfEvaluation.jsx
-      let query = supabase
-        .from("evaluations")
+      // Fetch data using the same method as TotalEvaluation.jsx
+      const { data: totalData, error: totalError } = await supabase
+        .from('evaluation_assignments')
         .select(`
-          is_self_evaluator,
-          relationship_type,
-          evaluation_assignments ( 
+          id,
+          attribute_banks (
             id,
-            user_to_evaluate_id,
-            company_id,
-            attribute_banks (
-              id,
-              name
-            )
+            name
           ),
-          evaluation_responses (
-            attribute_statement_options ( 
-              weight, 
-              attribute_statements ( 
-                statement,
-                attributes ( name ),
-                statement_analysis_types (
-                  analysis_types ( name )
-                )
+          evaluations!inner (
+            id,
+            relationship_type,
+            evaluation_responses (
+              attribute_statement_options ( 
+                weight, 
+                attribute_statements ( 
+                  statement,
+                  attributes ( name )
+                ) 
               ) 
-            ) 
+            )
           )
         `)
-        .eq("status", "completed");
+        .eq('user_to_evaluate_id', userId)
+        .neq('evaluations.relationship_type', 'self')
+        .eq('company_id', companyId);
 
-      // Add filters
-      if (companyId) {
-        query = query.eq("evaluation_assignments.company_id", companyId);
-      }
-      if (userId) {
-        query = query.eq("evaluation_assignments.user_to_evaluate_id", userId);
-      }
-      
-      let { data: evaluations, error } = await query;
-
-      if (error) {
-        console.error("Error fetching evaluations:", error);
+      if (totalError) {
+        console.error("Error fetching evaluations:", totalError);
         return [];
       }
 
       // Filter by bank ID
-      evaluations = evaluations?.filter(item => 
-        item.evaluation_assignments?.attribute_banks?.id === bankId
+      const filteredData = totalData?.filter(item => 
+        item.attribute_banks?.id === bankId
       );
 
-      return evaluations || [];
+      return filteredData || [];
     } catch (error) {
       console.error("Error fetching bank data:", error);
       return [];
@@ -221,140 +206,83 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
   };
 
   const processQuotientData = (beforeBankData, afterBankData) => {
-    // Extract all unique relationship types from both banks
-    const allRelationTypes = new Set();
-    
-    // Process before bank data and extract relationship types
-    const beforeBankRelationMap = {};
-    beforeBankData.forEach(evaluation => {
-      // Handle self evaluator specially
-      const relationType = evaluation.is_self_evaluator ? 'self' : evaluation.relationship_type;
-      if (relationType) {
-        allRelationTypes.add(relationType);
-        if (!beforeBankRelationMap[relationType]) {
-          beforeBankRelationMap[relationType] = [];
-        }
-        beforeBankRelationMap[relationType].push(evaluation);
-      }
-    });
-    
-    // Process after bank data if available and extract relationship types
-    const afterBankRelationMap = {};
-    if (afterBankData?.length > 0) {
-      afterBankData.forEach(evaluation => {
-        // Handle self evaluator specially
-        const relationType = evaluation.is_self_evaluator ? 'self' : evaluation.relationship_type;
-        if (relationType) {
-          allRelationTypes.add(relationType);
-          if (!afterBankRelationMap[relationType]) {
-            afterBankRelationMap[relationType] = [];
-          }
-          afterBankRelationMap[relationType].push(evaluation);
-        }
+    // Process data using the same method as TotalEvaluation.jsx
+    const processData = (data) => {
+      const attributeResponses = {};
+
+      // Process all evaluations (same as TotalEvaluation.jsx)
+      data.forEach(assignment => {
+        assignment.evaluations.forEach(evaluation => {
+          evaluation.evaluation_responses.forEach(response => {
+            const attributeName = response.attribute_statement_options.attribute_statements.attributes.name;
+            if (!attributeResponses[attributeName]) {
+              attributeResponses[attributeName] = {
+                totalScores: []
+              };
+            }
+            attributeResponses[attributeName].totalScores.push({
+              weight: response.attribute_statement_options.weight,
+              statement: response.attribute_statement_options.attribute_statements.statement
+            });
+          });
+        });
       });
-    }
+
+      // Calculate scores using TotalEvaluation.jsx method
+      const results = {};
+      Object.entries(attributeResponses).forEach(([attribute, data]) => {
+        // Calculate per-statement scores for total
+        const statementScores = {};
+        data.totalScores.forEach((score) => {
+          const statementId = score.statement;
+          if (!statementScores[statementId]) {
+            statementScores[statementId] = {
+              total: 0,
+              evaluators: 0
+            };
+          }
+          statementScores[statementId].total += score.weight;
+          statementScores[statementId].evaluators += 1;
+        });
+
+        // Calculate total scores
+        const numStatements = Object.keys(statementScores).length;
+        const rawScore = Object.values(statementScores).reduce((sum, { total }) => sum + total, 0);
+        const evaluatorsPerStatement = Object.values(statementScores)[0]?.evaluators || 0;
+        const totalAverageScore = numStatements > 0 ? rawScore / numStatements : 0;
+        const maxPossible = evaluatorsPerStatement * 100;
+        const totalPercentageScore = maxPossible > 0 ? (totalAverageScore / maxPossible) * 100 : 0;
+
+        results[attribute] = Number(totalPercentageScore.toFixed(1));
+      });
+
+      return results;
+    };
+
+    // Process before bank data
+    const beforeBankScores = processData(beforeBankData);
     
-    // Define the fixed order for relationship types
-    const relationOrder = ['self', 'top_boss', 'peer', 'hr', 'subordinate', 'reporting_boss'];
-    
-    // Sort relationship types according to the fixed order
-    const sortedRelationTypes = Array.from(allRelationTypes).sort((a, b) => {
-      const indexA = relationOrder.indexOf(a);
-      const indexB = relationOrder.indexOf(b);
-      
-      // If both types are in the order array, sort by their position
-      if (indexA !== -1 && indexB !== -1) {
-        return indexA - indexB;
-      }
-      // If only a is in the order array, it comes first
-      if (indexA !== -1) {
-        return -1;
-      }
-      // If only b is in the order array, it comes first
-      if (indexB !== -1) {
-        return 1;
-      }
-      // If neither is in the order array, sort alphabetically
-      return a.localeCompare(b);
-    });
-    
-    setRelationTypes(sortedRelationTypes);
-    setBeforeBankRelations(Object.keys(beforeBankRelationMap));
-    setAfterBankRelations(Object.keys(afterBankRelationMap));
-    
-    // Process data for each relationship type
-    const beforeBankScores = {};
-    const afterBankScores = {};
-    
-    // Process before bank scores by relationship type
-    for (const relationType of sortedRelationTypes) {
-      if (beforeBankRelationMap[relationType]) {
-        beforeBankScores[relationType] = processEvaluationData(beforeBankRelationMap[relationType]);
-      }
-    }
-    
-    // Process after bank scores by relationship type
-    for (const relationType of sortedRelationTypes) {
-      if (afterBankRelationMap[relationType]) {
-        afterBankScores[relationType] = processEvaluationData(afterBankRelationMap[relationType]);
-      }
-    }
-    
-    // Calculate total scores for before bank
-    const beforeTotalScores = {};
-    for (const relationType in beforeBankScores) {
-      beforeTotalScores[relationType] = calculateTotalScore(beforeBankScores[relationType]);
-    }
-    
-    // Calculate total scores for after bank
-    const afterTotalScores = {};
-    for (const relationType in afterBankScores) {
-      afterTotalScores[relationType] = calculateTotalScore(afterBankScores[relationType]);
-    }
-    
-    // Merge attributes from all evaluations
-    const allAttributes = new Set();
-    
-    // Collect all attributes from before bank
-    for (const relationType in beforeBankScores) {
-      Object.keys(beforeBankScores[relationType]).forEach(attr => allAttributes.add(attr));
-    }
-    
-    // Collect all attributes from after bank
-    for (const relationType in afterBankScores) {
-      Object.keys(afterBankScores[relationType]).forEach(attr => allAttributes.add(attr));
-    }
-    
-    // Create table data with scores from both banks for all relationship types
+    // Process after bank data if available
+    const afterBankScores = afterBankData?.length > 0 ? processData(afterBankData) : {};
+
+    // Get all unique attributes
+    const allAttributes = new Set([
+      ...Object.keys(beforeBankScores),
+      ...Object.keys(afterBankScores)
+    ]);
+
+    // Create table data
     return Array.from(allAttributes).map(attribute => {
       const rowData = {
         attributeName: attribute
       };
       
-      // Add scores for each relationship type in before bank
-      for (const relationType of sortedRelationTypes) {
-        if (beforeBankScores[relationType]) {
-          rowData[`before_${relationType}`] = beforeBankScores[relationType][attribute] !== undefined 
-            ? beforeBankScores[relationType][attribute] 
-            : "NA";
-        }
-      }
+      // Add before bank total score
+      rowData[`before_total`] = beforeBankScores[attribute] !== undefined ? beforeBankScores[attribute] : "NA";
       
-      // Add scores for each relationship type in after bank
-      for (const relationType of sortedRelationTypes) {
-        if (afterBankScores[relationType]) {
-          rowData[`after_${relationType}`] = afterBankScores[relationType][attribute] !== undefined 
-            ? afterBankScores[relationType][attribute] 
-            : "NA";
-        }
-      }
-      
-      // Add total scores for before bank
-      rowData[`before_total`] = calculateAttributeTotalScore(attribute, beforeBankScores);
-      
-      // Add total scores for after bank if applicable
+      // Add after bank total score if applicable
       if (Object.keys(afterBankScores).length > 0) {
-        rowData[`after_total`] = calculateAttributeTotalScore(attribute, afterBankScores);
+        rowData[`after_total`] = afterBankScores[attribute] !== undefined ? afterBankScores[attribute] : "NA";
       }
       
       return rowData;
@@ -365,62 +293,8 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
   const formatScore = formatScoreUtil;
 
   // Use processEvaluationData from evaluationUtils
-  const processEvaluationData = (evaluations) => {
-    // Group responses by attribute
-    const attributeMap = {};
-    
-    evaluations?.forEach(evaluation => {
-      if (!evaluation.evaluation_responses) return;
-
-      evaluation.evaluation_responses.forEach(response => {
-        const attributeName = response.attribute_statement_options?.attribute_statements?.attributes?.name;
-        if (!attributeName) return;
-
-        const weight = response.attribute_statement_options?.weight || 0;
-
-        if (!attributeMap[attributeName]) {
-          attributeMap[attributeName] = {
-            rawScores: [],
-            statements: []
-          };
-        }
-
-        // Store raw score for this statement
-        attributeMap[attributeName].rawScores.push(weight);
-        attributeMap[attributeName].statements.push({
-          weight,
-          maxPossible: 100 // For self evaluation, always 1 evaluator × 100
-        });
-      });
-    });
-
-    // Calculate scores using the same formula as SelfEvaluation.jsx
-    const attributeScores = {};
-    
-    Object.entries(attributeMap).forEach(([attribute, data]) => {
-      // Calculate statement level scores
-      const statementScores = data.statements.map(statement => {
-        // Statement % = (Raw Score / Max Possible) × 100
-        return (statement.weight / statement.maxPossible) * 100;
-      });
-
-      const numStatements = statementScores.length;
-      const rawScore = statementScores.reduce((sum, score) => sum + score, 0);
-      const averageScore = numStatements > 0 ? rawScore / numStatements : 0;
-      const percentageScore = averageScore > 0 ? (averageScore / 100) * 100 : 0;
-
-      // Store raw number for calculations, formatting will be done at display time
-      attributeScores[attribute] = Number(percentageScore.toFixed(1));
-    });
-
-    return attributeScores;
-  };
-
-  // Calculate cumulative scores if there's data
-  // Use calculateCumulativeScore from evaluationUtils
-
   // Helper function to calculate total score for a specific attribute across all relation types
-  // This exactly matches the calculation in TotalEvaluation.jsx
+  // This exactly matches the calculation in TotalEvaluation.jsx and DemographyEvaluation.jsx
   const calculateAttributeTotalScore = (attribute, bankScores) => {
     // If no relation types, return NA
     if (Object.keys(bankScores).length === 0) return "NA";
@@ -456,78 +330,13 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
     // Create an object to store attribute-level total scores
     const totalQuotientData = [];
     
-    console.log('===== TOTAL QUOTIENT CALCULATION DETAILS =====');
-    
     // Process each attribute row from tableData
     tableData.forEach(row => {
       const attributeName = row.attributeName;
-      let beforeTotalScores = [];
-      let afterTotalScores = [];
       
-      console.log(`\n--- Attribute: ${attributeName} ---`);
-      console.log('Raw row data:', row);
-      
-      // Collect before bank scores for each relation type (excluding 'self')
-      console.log('Before bank relation scores:');
-      for (const relationType of relationTypes) {
-        // Skip 'self' relation type for Total Quotient calculation
-        if (relationType === 'self') {
-          console.log(`  ${relationType}: ${row[`before_${relationType}`]} (excluded from calculation)`);
-          continue;
-        }
-        
-        if (beforeBankRelations.includes(relationType)) {
-          const key = `before_${relationType}`;
-          if (row[key] !== undefined && row[key] !== "NA") {
-            beforeTotalScores.push(Number(row[key]));
-            console.log(`  ${relationType}: ${row[key]}`);
-          }
-        }
-      }
-      console.log(`  Total collected scores: [${beforeTotalScores.join(', ')}]`);
-      
-      // Collect after bank scores for each relation type (if applicable)
-      if (showAfterBank) {
-        console.log('After bank relation scores:');
-        for (const relationType of relationTypes) {
-          // Skip 'self' relation type for Total Quotient calculation
-          if (relationType === 'self') {
-            console.log(`  ${relationType}: ${row[`after_${relationType}`]} (excluded from calculation)`);
-            continue;
-          }
-          
-          if (afterBankRelations.includes(relationType)) {
-            const key = `after_${relationType}`;
-            if (row[key] !== undefined && row[key] !== "NA") {
-              afterTotalScores.push(Number(row[key]));
-              console.log(`  ${relationType}: ${row[key]}`);
-            }
-          }
-        }
-        console.log(`  Total collected scores: [${afterTotalScores.join(', ')}]`);
-      }
-      
-      // Calculate average scores
-      const beforeTotalScore = beforeTotalScores.length > 0 
-        ? beforeTotalScores.reduce((sum, score) => sum + score, 0) / beforeTotalScores.length 
-        : "NA";
-      
-      const afterTotalScore = afterTotalScores.length > 0 
-        ? afterTotalScores.reduce((sum, score) => sum + score, 0) / afterTotalScores.length 
-        : "NA";
-      
-      console.log('Calculation results:');
-      if (beforeTotalScore !== "NA") {
-        console.log(`  Before Total % Score: Sum(${beforeTotalScores.join(' + ')}) / ${beforeTotalScores.length} = ${beforeTotalScore}`);
-      } else {
-        console.log('  Before Total % Score: NA (no scores available)');
-      }
-      
-      if (afterTotalScore !== "NA") {
-        console.log(`  After Total % Score: Sum(${afterTotalScores.join(' + ')}) / ${afterTotalScores.length} = ${afterTotalScore}`);
-      } else if (showAfterBank) {
-        console.log('  After Total % Score: NA (no scores available)');
-      }
+      // Get the total scores directly from the processed data
+      const beforeTotalScore = row.before_total;
+      const afterTotalScore = showAfterBank ? row.after_total : "NA";
       
       // Add to totalQuotientData array
       totalQuotientData.push({
@@ -540,41 +349,7 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
     return totalQuotientData;
   };
   
-  // Calculate cumulative scores for each relationship type
-  const calculateCumulativeScores = () => {
-    const cumulativeScores = {};
-    
-    // Calculate for before bank relations
-    for (const relationType of relationTypes) {
-      if (beforeBankRelations.includes(relationType)) {
-        const key = `before_${relationType}`;
-        const scores = tableData.map(item => item[key]);
-        cumulativeScores[key] = calculateCumulativeScore(scores);
-      }
-    }
-    
-    // Calculate for after bank relations
-    for (const relationType of relationTypes) {
-      if (afterBankRelations.includes(relationType)) {
-        const key = `after_${relationType}`;
-        const scores = tableData.map(item => item[key]);
-        cumulativeScores[key] = calculateCumulativeScore(scores);
-      }
-    }
-    
-    // Calculate cumulative total scores
-    const beforeTotalScores = tableData.map(item => item.before_total).filter(score => score !== "NA");
-    cumulativeScores.before_total = calculateCumulativeScore(beforeTotalScores);
-    
-    if (showAfterBank) {
-      const afterTotalScores = tableData.map(item => item.after_total).filter(score => score !== "NA");
-      cumulativeScores.after_total = calculateCumulativeScore(afterTotalScores);
-    }
-    
-    return cumulativeScores;
-  };
-  
-  const cumulativeScores = calculateCumulativeScores();
+
   const totalQuotientData = calculateTotalQuotientData();
   
   // Calculate cumulative scores for Total Quotient
@@ -608,44 +383,27 @@ export default function QuotientTable({ companyId, userId, beforeBankId, afterBa
   
   // Calculate scores by category (task-based or people-based)
   const calculateCategoryScores = () => {
-    // Group attributes by category using predefined list
-    const taskAttributes = totalQuotientData
-      .filter(row => getAttributeCategory(row.attributeName) === 'task')
-      .map(row => row.attributeName);
-      
-    const peopleAttributes = totalQuotientData
-      .filter(row => getAttributeCategory(row.attributeName) === 'people')
-      .map(row => row.attributeName);
+    // Filter totalQuotientData to only include categorized attributes
+    const taskRows = totalQuotientData.filter(row => getAttributeCategory(row.attributeName) === 'task');
+    const peopleRows = totalQuotientData.filter(row => getAttributeCategory(row.attributeName) === 'people');
     
-    // Calculate average scores for task attributes
-    const taskBeforeScores = taskAttributes
-      .map(attr => {
-        const row = totalQuotientData.find(r => r.attributeName === attr);
-        return row ? row.beforeTotalScore : "NA";
-      })
-      .filter(score => score !== "NA");
+    // Calculate average scores for task attributes - only consider task-categorized attributes
+    const taskBeforeScores = taskRows
+      .map(row => row.beforeTotalScore)
+      .filter(score => score !== "NA" && score !== undefined);
       
-    const taskAfterScores = taskAttributes
-      .map(attr => {
-        const row = totalQuotientData.find(r => r.attributeName === attr);
-        return row && row.afterTotalScore ? row.afterTotalScore : "NA";
-      })
-      .filter(score => score !== "NA");
+    const taskAfterScores = taskRows
+      .map(row => row.afterTotalScore)
+      .filter(score => score !== "NA" && score !== undefined);
     
-    // Calculate average scores for people attributes
-    const peopleBeforeScores = peopleAttributes
-      .map(attr => {
-        const row = totalQuotientData.find(r => r.attributeName === attr);
-        return row ? row.beforeTotalScore : "NA";
-      })
-      .filter(score => score !== "NA");
+    // Calculate average scores for people attributes - only consider people-categorized attributes
+    const peopleBeforeScores = peopleRows
+      .map(row => row.beforeTotalScore)
+      .filter(score => score !== "NA" && score !== undefined);
       
-    const peopleAfterScores = peopleAttributes
-      .map(attr => {
-        const row = totalQuotientData.find(r => r.attributeName === attr);
-        return row && row.afterTotalScore ? row.afterTotalScore : "NA";
-      })
-      .filter(score => score !== "NA");
+    const peopleAfterScores = peopleRows
+      .map(row => row.afterTotalScore)
+      .filter(score => score !== "NA" && score !== undefined);
     
     // Calculate averages
     const taskBeforeAvg = taskBeforeScores.length > 0 ? taskBeforeScores.reduce((sum, score) => sum + score, 0) / taskBeforeScores.length : "NA";
