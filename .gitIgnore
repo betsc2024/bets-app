@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+
+
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.windsurfrules
+.git
+
+supabase
