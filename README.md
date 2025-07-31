@@ -1,126 +1,194 @@
-# FastAPI Mass User Import API
+# User Management API
 
-A professional, production-ready FastAPI microservice for bulk importing users into a Supabase backend. This project provides a single, robust endpoint for mass user creation, suitable for admin and automation use cases.
-
----
-
-## Features
-- **Bulk User Import:** Add multiple users in one API call, with company association.
-- **Supabase Integration:** Uses service role for secure, privileged access.
-- **CSV-Driven:** Reads user data from a CSV file (`data.csv`).
-- **API Key Security:** Protects endpoints with a configurable API key.
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.85-green)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/License-MIT-lightgrey)](#license)
 
 ---
 
-## Setup Instructions
+## 📖 Table of Contents
 
-### 1. Clone the Repository
-```bash
-# (If not already done)
-git clone <your-repo-url>
-cd <your-repo-folder>
-```
+1. [Overview](#-overview)
+2. [Features](#-features)
+3. [Prerequisites](#-prerequisites)
+4. [Project Structure](#-project-structure)
+5. [Installation & Setup](#-installation--setup)
+6. [Configuration](#-configuration)
+7. [Running the Server](#-running-the-server)
+8. [API Usage](#-api-usage)
 
-### 2. Create and Activate Virtual Environment
-```bash
-# Windows
-python -m venv .venv
-.venv\Scripts\activate
-```
-
-### 3. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment Variables
-- Copy `.env.example` to `.env` (or ensure `.env` exists).
-- Set your Supabase credentials and API key in `.env`:
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_ROLE_KEY`
-  - `MY_API_KEY` (for API authentication)
-
-### 5. Prepare your CSV
-- Place your user data in `data.csv` (must have columns: `email`, `full_name`, `password`).
+   * [Add Users Endpoint](#add-users-endpoint)
+9. [Client Example](#-client-example)
+10. [Scripts](#-scripts)
+11. [Logs](#-logs)
+12. [Cleaning Up](#-cleaning-up)
+13. [License](#-license)
 
 ---
 
-## Running the API
+## 🔍 Overview
 
-### 1. Start the FastAPI Server
+This **User Management API** allows bulk importing of users from a CSV file into a Supabase backend, including both database records and authentication. Uploaded CSVs are temporarily stored in `app/logs/`, processed, then automatically removed.
+
+Built with:
+
+* **FastAPI** for the HTTP server
+* **Supabase** client for database & auth
+* **python-multipart** for file uploads
+* **python-dotenv** for environment variables
+
+## ✨ Features
+
+* Upload any-size CSV of users (email, full\_name, password)
+* Automatically create auth and DB records via a Supabase RPC
+* Logs each upload in `app/logs/` with timestamped filenames
+* Cleans up log files after processing
+* Script to backfill empty department/designation fields
+
+## 🛠 Prerequisites
+
+* Python 3.8 or higher
+* Pip (Python package installer)
+* Supabase project with following tables/functions:
+
+  * `companies(id, name)`
+  * `users` table for user metadata
+  * `create_user_with_auth` RPC for combined auth + DB insert
+
+## 📂 Project Structure
+
+```
+FastAPI_Based/
+├── app/
+│   ├── logs/                # Temp storage for uploaded CSVs
+│   │   └── <timestamp>_file.csv
+│   ├── main.py              # FastAPI routes & logic
+│   ├── parser.py            # CSV parsing helper
+│   ├── user_manage.py       # Supabase client & RPC wrapper
+│   └── delete_users.py      # (if used for separate deletion)
+├── scripts/
+│   └── update_empty_fields.py  # Backfill department/designation
+├── data.csv                 # Sample CSV for testing
+├── test.py                  # Example client script
+├── .env                     # Environment variables
+├── requirements.txt         # Python dependencies
+├── README.md                # This file
+└── PushLog.txt              # (if used for logging)
+```
+
+## ⚙️ Installation & Setup
+
+1. **Clone the repo**
+
+   ```bash
+   git clone https://github.com/yourusername/UserManagementAPI.git
+   cd UserManagementAPI
+   ```
+
+2. **Create a virtual environment** (optional but recommended)
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate   # Unix/macOS
+   .\.venv\Scripts\activate  # Windows
+   ```
+
+3. **Install dependencies**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configure environment variables**
+
+   * Copy `.env.example` to `.env`
+   * Fill in your Supabase and API key values
+
+## 📝 Configuration
+
+Your `.env` should include:
+
+```ini
+SUPABASE_URL="https://xyz.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="<your-service-role-key>"
+MY_API_KEY="changeme"
+```
+
+## 🚀 Running the Server
+
 ```bash
 uvicorn app.main:app --reload
 ```
 
-### 2. Test the API (in a new terminal)
-```bash
-python ./test.py
+* The API will be available at `http://127.0.0.1:8000`
+* Swagger UI: `http://127.0.0.1:8000/docs`
+* ReDoc: `http://127.0.0.1:8000/redoc`
+
+## 📡 API Usage
+
+### Add Users Endpoint
+
+```http
+POST /users/add
 ```
 
----
-
-## API Usage
-
-### Endpoint: `POST /users/add`
-Bulk import users from the CSV for a given company.
-
-**Parameters (query or body):**
-- `num_users` (int): Number of users to import (from the top of the CSV)
-- `company_name` (str): Name of the company to associate users with
+| Parameter      | Type     | In    | Description                                        |
+| -------------- | -------- | ----- | -------------------------------------------------- |
+| `company_name` | `string` | Query | Name of the company to associate users             |
+| `csv_file`     | `file`   | Form  | CSV file with headers: email, full\_name, password |
 
 **Headers:**
-- `X-API-KEY`: Your API key (as set in `.env`)
 
-**Example Request:**
 ```
-curl -X POST "http://127.0.0.1:8000/users/add?num_users=20&company_name=Acme" -H "X-API-KEY: changeme"
+X-API-Key: <your_api_key>
 ```
 
 **Response:**
+
 ```json
 {
-  "created": 18,
-  "total": 20
+  "created": 10,
+  "total": 10
 }
 ```
-- `created`: Number of users successfully imported
-- `total`: Number of users attempted (from CSV)
 
----
+## 🧪 Client Example
 
-## File Structure
-```
-├── app/
-│   ├── main.py         # FastAPI app and API endpoint
-│   ├── parser.py       # CSV parsing utilities
-│   ├── user_manage.py  # Supabase interaction logic
-│   └── log_utils.py    # (Optional) Logging utilities
-├── data.csv            # Your user data source
-├── requirements.txt    # Python dependencies
-├── test.py             # Example API test script
-├── .env                # Environment variables (not committed)
-└── README.md           # This documentation
+Use `test.py` to quickly test:
+
+```bash
+python test.py
 ```
 
----
+```
+For better debugging , can move the test.py and data.csv to a different folder and run the test.py from that folder.
+no issues for current structure as well.
+```
 
-## Notes & Best Practices
-- **Security:** Keep your `.env` file secure. Do not expose your Supabase service role key.
-- **Idempotency:** Duplicate emails in the CSV or existing users will not be created again (see API response for counts).
-- **Extensibility:** The codebase is modular and can be extended for additional user management features.
-- **Production:** For production use, remove `--reload` from the `uvicorn` command and use a robust process manager.
+```python
+# test.py excerpt
+files = {"csv_file": open("data.csv","rb")}
+params = {"company_name": "test"}
 
----
+response = requests.post(...)
+print(response.json())
+```
 
-## License
-MIT License. See `LICENSE` file for details.
+## 🛠 Scripts
 
----
+* **Update empty fields:** `scripts/update_empty_fields.py`
 
-## Maintainer
-- [Your Name or Team]
-- [Contact/Email/Website]
+  * Backfills any user with empty `department` or `designation` to "No Department" / "No Designation".
 
----
+```bash
+python scripts/update_empty_fields.py
+```
 
-For issues, suggestions, or contributions, please open an issue or pull request on GitHub.
+## 📂 Logs
+
+Uploaded CSVs are stored in `app/logs/` with filenames like `20250731_142200_data.csv` and deleted immediately after processing.
+
+## 🧹 Cleaning Up
+
+* To disable auto-deletion for debugging, comment out the `os.remove(file_path)` line in `app/main.py`.
+* Old logs folder auto-creates; ensure it's in `.gitignore`.

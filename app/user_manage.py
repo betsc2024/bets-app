@@ -29,8 +29,8 @@ def create_user(email: str, password: str, full_name: str, company_id: str) -> d
         "p_full_name": full_name,
         "p_role": "user",
         "p_company_id": company_id,
-        "p_department": "",
-        "p_designation": "",
+        "p_department": "No Department",
+        "p_designation": "No Designation",
     }
     try:
         res = supabase.rpc("create_user_with_auth", payload).execute()
