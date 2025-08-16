@@ -49,6 +49,41 @@ import { Badge } from '../components/ui/badge';
 
 export default function AttributeManagement() {
   const { user } = useAuth();
+
+  // Helper functions
+  const getDefaultOptions = () => [
+    { text: 'Excellent (Extraordinary & consistent)', weight: 100 },
+    { text: 'Very Good (Under any circumstances)', weight: 80 },
+    { text: 'Good (Most of the time)', weight: 60 },
+    { text: 'Fair & Satisfactory (Sometimes)', weight: 40 },
+    { text: 'Needs Improvement (Rarely)', weight: 20 }
+  ];
+
+  const assignWeightsInOrder = (options) => {
+    const weights = [100, 80, 60, 40, 20];
+    return options.map((option, index) => ({
+      ...option,
+      weight: weights[index] || 20
+    }));
+  };
+
+  const updateOptionsWithWeights = (options, setterFunction, updatePath) => {
+    const updatedOptions = assignWeightsInOrder(options);
+    if (updatePath === 'newAttribute') {
+      setNewAttribute(prev => ({
+        ...prev,
+        statement: { ...prev.statement, options: updatedOptions }
+      }));
+    } else if (updatePath === 'currentStatement') {
+      setCurrentStatement(prev => ({ ...prev, options: updatedOptions }));
+    }
+  };
+
+  // Function to sort options by weight in descending order (100 to 20)
+  const sortOptionsByWeight = (options) => {
+    return [...options].sort((a, b) => (b.weight || 0) - (a.weight || 0));
+  };
+
   const [attributes, setAttributes] = useState([]);
   const [industries, setIndustries] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -62,13 +97,7 @@ export default function AttributeManagement() {
     selectedIndustries: [],
     statement: {
       text: '',
-      options: [
-        { text: 'Excellent', weight: 100 },
-        { text: 'Very Good', weight: 80 },
-        { text: 'Good', weight: 60 },
-        { text: 'Fair & Satisfactory', weight: 40 },
-        { text: 'Needs Improvement', weight: 20 }
-      ]
+      options: getDefaultOptions()
     }
   });
   const [showStatementForm, setShowStatementForm] = useState(false);
@@ -92,13 +121,7 @@ export default function AttributeManagement() {
     text: '',
     attribute_bank_id: null,
     analysisTypes: [],
-    options: [
-      { text: 'Excellent', weight: 100 },
-      { text: 'Very Good', weight: 80 },
-      { text: 'Good', weight: 60 },
-      { text: 'Fair & Satisfactory', weight: 40 },
-      { text: 'Needs Improvement', weight: 20 }
-    ]
+    options: getDefaultOptions()
   });
   const [editingRows, setEditingRows] = useState({});
   const [editedData, setEditedData] = useState({});
@@ -731,13 +754,7 @@ export default function AttributeManagement() {
         text: '',
         attribute_bank_id: null,
         analysisTypes: [],
-        options: [
-          { text: 'Excellent', weight: 100 },
-          { text: 'Very Good', weight: 80 },
-          { text: 'Good', weight: 60 },
-          { text: 'Fair & Satisfactory', weight: 40 },
-          { text: 'Needs Improvement', weight: 20 }
-        ]
+        options: getDefaultOptions()
       });
       setSelectedAttributeId(null);
       await fetchAttributes();
@@ -1046,6 +1063,7 @@ export default function AttributeManagement() {
 
                       <div>
                         <Label className="text-sm font-medium">Statement Options</Label>
+                        <p className="text-xs text-muted-foreground mb-2">Weights are automatically assigned from 100 to 20</p>
                         <div className="mt-1.5 space-y-3">
                           {newAttribute.statement.options.map((option, index) => (
                             <div key={index} className="flex gap-3 items-center">
@@ -1054,10 +1072,7 @@ export default function AttributeManagement() {
                                 onChange={(e) => {
                                   const newOptions = [...newAttribute.statement.options];
                                   newOptions[index].text = e.target.value;
-                                  setNewAttribute({
-                                    ...newAttribute,
-                                    statement: { ...newAttribute.statement, options: newOptions }
-                                  });
+                                  updateOptionsWithWeights(newOptions, setNewAttribute, 'newAttribute');
                                 }}
                                 placeholder="Option text"
                                 className="flex-1"
@@ -1065,16 +1080,8 @@ export default function AttributeManagement() {
                               <Input
                                 type="number"
                                 value={option.weight}
-                                onChange={(e) => {
-                                  const newOptions = [...newAttribute.statement.options];
-                                  newOptions[index].weight = parseInt(e.target.value);
-                                  setNewAttribute({
-                                    ...newAttribute,
-                                    statement: { ...newAttribute.statement, options: newOptions }
-                                  });
-                                }}
-                                placeholder="Weight"
-                                className="w-24"
+                                readOnly
+                                className="w-24 bg-gray-100"
                               />
                             </div>
                           ))}
@@ -1184,6 +1191,7 @@ export default function AttributeManagement() {
               {/* Right Box - Options */}
               <div className="border rounded-lg p-4">
                 <h3 className="text-md font-medium mb-3">Options (Default)</h3>
+                <p className="text-xs text-muted-foreground mb-2">Weights are automatically assigned from 100 to 20</p>
                 <div className="space-y-3">
                   {currentStatement.options.map((option, optIndex) => (
                     <div key={optIndex} className="flex items-center gap-2">
@@ -1192,7 +1200,7 @@ export default function AttributeManagement() {
                         onChange={(e) => {
                           const newOptions = [...currentStatement.options];
                           newOptions[optIndex].text = e.target.value;
-                          setCurrentStatement({ ...currentStatement, options: newOptions });
+                          updateOptionsWithWeights(newOptions, setCurrentStatement, 'currentStatement');
                         }}
                         placeholder="Option text"
                         className="flex-1"
@@ -1202,15 +1210,8 @@ export default function AttributeManagement() {
                         inputMode="numeric"
                         pattern="[0-9]*"
                         value={option.weight}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                            const newOptions = [...currentStatement.options];
-                            newOptions[optIndex].weight = value === '' ? 0 : parseFloat(value);
-                            setCurrentStatement({ ...currentStatement, options: newOptions });
-                          }
-                        }}
-                        className="w-24"
+                        readOnly
+                        className="w-24 bg-gray-100"
                         placeholder="Weight (0-100)"
                       />
                       {currentStatement.options.length > 5 && (
@@ -1219,7 +1220,7 @@ export default function AttributeManagement() {
                           size="icon"
                           onClick={() => {
                             const newOptions = currentStatement.options.filter((_, i) => i !== optIndex);
-                            setCurrentStatement({ ...currentStatement, options: newOptions });
+                            updateOptionsWithWeights(newOptions, setCurrentStatement, 'currentStatement');
                           }}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1231,7 +1232,7 @@ export default function AttributeManagement() {
                     variant="outline"
                     onClick={() => {
                       const newOptions = [...currentStatement.options, { text: '', weight: 0 }];
-                      setCurrentStatement({ ...currentStatement, options: newOptions });
+                      updateOptionsWithWeights(newOptions, setCurrentStatement, 'currentStatement');
                     }}
                     className="w-full"
                   >
@@ -1251,7 +1252,7 @@ export default function AttributeManagement() {
                   !currentStatement.text.trim() ||
                   currentStatement.analysisTypes.length === 0 ||
                   currentStatement.options.length === 0 ||
-                  currentStatement.options.some(opt => !opt.text.trim() || opt.weight === undefined || opt.weight === null)
+                  currentStatement.options.some(opt => !opt.text.trim())
                 }
               >
                 Save Statement
@@ -1718,7 +1719,7 @@ export default function AttributeManagement() {
                         <TableCell className="align-top border-r border-gray-300 p-0">
                           {isEditing ? (
                             <div className="divide-y divide-gray-300">
-                              {(editedData[editKey]?.statement?.attribute_statement_options || statement.attribute_statement_options || [])
+                              {sortOptionsByWeight(editedData[editKey]?.statement?.attribute_statement_options || statement.attribute_statement_options || [])
                                 .map((option) => (
                                   <div key={option.id} className="p-2">
                                     <Input
@@ -1757,7 +1758,7 @@ export default function AttributeManagement() {
                             </div>
                           ) : (
                             <div className="divide-y divide-gray-300">
-                              {(statement.attribute_statement_options || [])
+                              {sortOptionsByWeight(statement.attribute_statement_options || [])
                                 .map((option) => (
                                   <div key={option.id} className="text-sm p-2 whitespace-pre-wrap break-words">
                                     {option.option_text}
@@ -1769,7 +1770,7 @@ export default function AttributeManagement() {
                         <TableCell className="align-top border-r border-gray-300 p-0">
                           {isEditing ? (
                             <div className="divide-y divide-gray-300">
-                              {(editedData[editKey]?.statement?.attribute_statement_options || statement.attribute_statement_options || [])
+                              {sortOptionsByWeight(editedData[editKey]?.statement?.attribute_statement_options || statement.attribute_statement_options || [])
                                 .map((option) => (
                                   <div key={option.id} className="p-2">
                                     <Input
@@ -1810,7 +1811,7 @@ export default function AttributeManagement() {
                             </div>
                           ) : (
                             <div className="divide-y divide-gray-300">
-                              {(statement.attribute_statement_options || [])
+                              {sortOptionsByWeight(statement.attribute_statement_options || [])
                                 .map((option) => (
                                   <div key={option.id} className="text-sm p-2 text-center">
                                     {option.weight}
